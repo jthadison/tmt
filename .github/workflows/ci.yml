@@ -1,0 +1,436 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11.8'
+  NODE_VERSION: '20.11.0'
+  RUST_VERSION: '1.75.0'
+
+jobs:
+  # Dependency and security scanning
+  security-scan:
+    name: Security & Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/python
+            p/typescript
+            p/rust
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Python agents testing
+  python-tests:
+    name: Python Agents Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11.8']
+    services:
+      postgres:
+        image: timescale/timescaledb:2.14.2-pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_trading_system
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7.2.4-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,test]
+
+      - name: Lint with Black
+        run: |
+          black --check --diff agents/ shared/python-utils/
+
+      - name: Lint with isort
+        run: |
+          isort --check-only --diff agents/ shared/python-utils/
+
+      - name: Lint with flake8
+        run: |
+          flake8 agents/ shared/python-utils/
+
+      - name: Type check with mypy
+        run: |
+          mypy agents/ shared/python-utils/
+        continue-on-error: true
+
+      - name: Run Python tests with coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_system
+          REDIS_URL: redis://localhost:6379
+          ENVIRONMENT: test
+        run: |
+          pytest agents/ shared/python-utils/ \
+            --cov=agents \
+            --cov=shared.python_utils \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            --junitxml=python-test-results.xml \
+            -v
+
+      - name: Upload Python test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-test-results
+          path: |
+            python-test-results.xml
+            htmlcov/
+            .coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: python
+          name: python-coverage
+          fail_ci_if_error: false
+
+  # TypeScript dashboard testing
+  typescript-tests:
+    name: TypeScript Dashboard Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'dashboard/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint with ESLint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Run tests with coverage
+        run: |
+          npm test -- --coverage --watchAll=false --reporters=default --reporters=jest-junit
+        env:
+          JEST_JUNIT_OUTPUT_FILE: ../typescript-test-results.xml
+
+      - name: Build application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Upload TypeScript test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typescript-test-results
+          path: |
+            typescript-test-results.xml
+            dashboard/coverage/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./dashboard/coverage/lcov.info
+          flags: typescript
+          name: typescript-coverage
+          fail_ci_if_error: false
+
+  # Rust execution engine testing
+  rust-tests:
+    name: Rust Execution Engine Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: execution-engine
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            execution-engine/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('execution-engine/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build Rust project
+        run: cargo build --verbose
+
+      - name: Run Rust tests
+        run: |
+          cargo test --verbose --all-features -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: debug
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/test_trading_system
+          KAFKA_BROKERS: localhost:9092
+
+      - name: Generate test coverage (cargo-tarpaulin)
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          args: '--workspace --out Xml --output-dir execution-engine/'
+        continue-on-error: true
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./execution-engine/cobertura.xml
+          flags: rust
+          name: rust-coverage
+          fail_ci_if_error: false
+
+  # Docker build validation
+  docker-builds:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    needs: [python-tests, typescript-tests, rust-tests]
+    strategy:
+      matrix:
+        service: [dashboard, agents, execution-engine]
+        include:
+          - service: dashboard
+            dockerfile: ./dashboard/Dockerfile.dev
+            context: ./dashboard
+          - service: agents
+            dockerfile: ./agents/Dockerfile
+            context: ./agents
+          - service: execution-engine
+            dockerfile: ./execution-engine/Dockerfile
+            context: ./execution-engine
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ${{ matrix.service }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Test ${{ matrix.service }} health endpoint
+        run: |
+          docker run --rm -d --name ${{ matrix.service }}-test \
+            -p 8080:8080 \
+            ${{ matrix.service }}:test
+          
+          # Wait for container to start
+          sleep 30
+          
+          # Test health endpoint
+          if [ "${{ matrix.service }}" == "dashboard" ]; then
+            curl -f http://localhost:3000/api/health || exit 1
+          else
+            curl -f http://localhost:8080/health || exit 1
+          fi
+          
+          docker stop ${{ matrix.service }}-test
+
+  # Integration tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [docker-builds]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:2.14.2-pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: integration_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7.2.4-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      kafka:
+        image: confluentinc/cp-kafka:7.6.0
+        env:
+          KAFKA_ZOOKEEPER_CONNECT: localhost:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_BROKER_ID: 1
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          docker-compose -f docker-compose.yml up -d
+          sleep 60  # Wait for all services to be ready
+
+      - name: Run integration tests
+        run: |
+          ./scripts/testing/run-integration-tests.sh
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/integration_test_db
+          REDIS_URL: redis://localhost:6379
+          KAFKA_BROKERS: localhost:9092
+
+      - name: Cleanup Docker Compose
+        if: always()
+        run: docker-compose -f docker-compose.yml down
+
+  # Performance tests
+  performance-tests:
+    name: Performance Tests  
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run performance tests
+        run: |
+          k6 run scripts/testing/performance-test.js
+        continue-on-error: true
+
+  # Build summary
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [security-scan, python-tests, typescript-tests, rust-tests, docker-builds]
+    if: always()
+    
+    steps:
+      - name: Check build status
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python Tests | ${{ needs.python-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript Tests | ${{ needs.typescript-tests.result }} |" >> $GITHUB_STEP_SUMMARY  
+          echo "| Rust Tests | ${{ needs.rust-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Builds | ${{ needs.docker-builds.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#trading-system-alerts'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow

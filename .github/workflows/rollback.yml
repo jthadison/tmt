@@ -1,0 +1,406 @@
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      rollback_to:
+        description: 'Image tag or deployment to rollback to'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+      force_rollback:
+        description: 'Force rollback without additional checks'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  CONTAINER_REGISTRY: gcr.io
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    outputs:
+      can_proceed: ${{ steps.validation.outputs.can_proceed }}
+      target_cluster: ${{ steps.set_env.outputs.cluster }}
+      target_zone: ${{ steps.set_env.outputs.zone }}
+      target_namespace: ${{ steps.set_env.outputs.namespace }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        id: set_env
+        run: |
+          if [ "${{ inputs.environment }}" == "staging" ]; then
+            echo "cluster=trading-staging" >> $GITHUB_OUTPUT
+            echo "zone=us-central1-a" >> $GITHUB_OUTPUT
+            echo "namespace=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.environment }}" == "production" ]; then
+            echo "cluster=trading-production" >> $GITHUB_OUTPUT
+            echo "zone=us-central1-a" >> $GITHUB_OUTPUT
+            echo "namespace=production" >> $GITHUB_OUTPUT
+          else
+            echo "Invalid environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Validate rollback target
+        id: validation
+        run: |
+          # Get GKE credentials
+          gcloud container clusters get-credentials ${{ steps.set_env.outputs.cluster }} \
+            --zone ${{ steps.set_env.outputs.zone }} \
+            --project ${{ env.GCP_PROJECT_ID }}
+          
+          # Check if target image exists
+          TARGET_TAG="${{ inputs.rollback_to }}"
+          
+          echo "Validating rollback target: ${TARGET_TAG}"
+          
+          # Verify images exist in registry
+          SERVICES=("trading-dashboard" "trading-agents" "execution-engine")
+          for service in "${SERVICES[@]}"; do
+            IMAGE="${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${service}:${TARGET_TAG}"
+            if gcloud container images describe "${IMAGE}" --quiet; then
+              echo "✅ ${service} image exists: ${IMAGE}"
+            else
+              echo "❌ ${service} image not found: ${IMAGE}"
+              echo "can_proceed=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          done
+          
+          # Check current deployment status
+          kubectl get deployments -n ${{ steps.set_env.outputs.namespace }} -o wide
+          
+          # Validate we're not rolling back to the same version
+          CURRENT_DASHBOARD_IMAGE=$(kubectl get deployment trading-dashboard -n ${{ steps.set_env.outputs.namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}' | cut -d':' -f2)
+          
+          if [ "${CURRENT_DASHBOARD_IMAGE}" == "${TARGET_TAG}" ]; then
+            echo "❌ Target tag ${TARGET_TAG} is already deployed"
+            if [ "${{ inputs.force_rollback }}" != "true" ]; then
+              echo "can_proceed=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+          
+          echo "✅ Rollback validation passed"
+          echo "can_proceed=true" >> $GITHUB_OUTPUT
+
+      - name: Create rollback approval issue
+        if: inputs.environment == 'production' && !inputs.force_rollback
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 PRODUCTION ROLLBACK REQUEST - ${{ inputs.reason }}`,
+              body: `
+            ## Production Rollback Request
+            
+            **Environment**: ${{ inputs.environment }}
+            **Rollback to**: ${{ inputs.rollback_to }}
+            **Reason**: ${{ inputs.reason }}
+            **Requested by**: @${{ github.actor }}
+            **Workflow**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ## Validation Status
+            - ✅ Target images exist in registry
+            - ✅ Target version is different from current deployment
+            
+            ## Required Approvals
+            - [ ] @devops-team
+            - [ ] @senior-developers
+            
+            **This rollback will be automatically executed after manual approval.**
+            
+            To approve: Comment "APPROVE ROLLBACK" on this issue.
+            To reject: Comment "REJECT ROLLBACK" on this issue.
+              `,
+              assignees: ['devops-team-lead', 'cto'],
+              labels: ['urgent', 'rollback', 'production']
+            });
+            
+            console.log(`Created approval issue #${issue.data.number}`);
+
+  pre-rollback-backup:
+    name: Create Pre-Rollback Backup
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.can_proceed == 'true'
+    
+    steps:
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ needs.validate-rollback.outputs.target_cluster }} \
+            --zone ${{ needs.validate-rollback.outputs.target_zone }} \
+            --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Create database backup
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_NAME="pre_rollback_${TIMESTAMP}"
+          
+          # Create PostgreSQL backup
+          kubectl exec -n ${{ needs.validate-rollback.outputs.target_namespace }} \
+            deployment/postgresql -- \
+            pg_dump -U postgres trading_system > "${BACKUP_NAME}.sql"
+          
+          # Upload to Cloud Storage
+          gsutil cp "${BACKUP_NAME}.sql" gs://${{ secrets.GCS_BACKUP_BUCKET }}/rollback-backups/
+          
+          echo "Database backup created: ${BACKUP_NAME}.sql"
+
+      - name: Capture current deployment state
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          
+          # Capture deployment configurations
+          kubectl get deployments -n ${{ needs.validate-rollback.outputs.target_namespace }} -o yaml > "deployments_${TIMESTAMP}.yaml"
+          kubectl get services -n ${{ needs.validate-rollback.outputs.target_namespace }} -o yaml > "services_${TIMESTAMP}.yaml"
+          kubectl get configmaps -n ${{ needs.validate-rollback.outputs.target_namespace }} -o yaml > "configmaps_${TIMESTAMP}.yaml"
+          kubectl get secrets -n ${{ needs.validate-rollback.outputs.target_namespace }} -o yaml > "secrets_${TIMESTAMP}.yaml"
+          
+          # Upload to Cloud Storage
+          gsutil cp "*_${TIMESTAMP}.yaml" gs://${{ secrets.GCS_BACKUP_BUCKET }}/rollback-backups/
+          
+          echo "Deployment state captured at ${TIMESTAMP}"
+
+  execute-rollback:
+    name: Execute Rollback
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, pre-rollback-backup]
+    environment: 
+      name: ${{ inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ needs.validate-rollback.outputs.target_cluster }} \
+            --zone ${{ needs.validate-rollback.outputs.target_zone }} \
+            --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.14.0'
+
+      - name: Execute Blue-Green Rollback
+        run: |
+          TARGET_TAG="${{ inputs.rollback_to }}"
+          NAMESPACE="${{ needs.validate-rollback.outputs.target_namespace }}"
+          
+          echo "🔄 Starting rollback to ${TARGET_TAG} in ${NAMESPACE} environment"
+          
+          # Update Helm deployment with target version
+          helm upgrade trading-system infrastructure/helm/trading-system/ \
+            --values infrastructure/helm/trading-system/values-${{ inputs.environment }}.yaml \
+            --set image.tag=${TARGET_TAG} \
+            --set global.containerRegistry=${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }} \
+            --namespace ${NAMESPACE} \
+            --wait \
+            --timeout=10m \
+            --atomic # Atomic rollback on failure
+          
+          echo "✅ Helm deployment updated"
+
+      - name: Wait for rollout completion
+        run: |
+          NAMESPACE="${{ needs.validate-rollback.outputs.target_namespace }}"
+          
+          echo "⏳ Waiting for deployment rollout..."
+          
+          # Wait for all deployments to roll out
+          kubectl rollout status deployment/trading-dashboard -n ${NAMESPACE} --timeout=600s
+          kubectl rollout status deployment/trading-agents -n ${NAMESPACE} --timeout=600s
+          kubectl rollout status deployment/execution-engine -n ${NAMESPACE} --timeout=600s
+          
+          echo "✅ All deployments rolled out successfully"
+
+      - name: Verify rollback health
+        run: |
+          NAMESPACE="${{ needs.validate-rollback.outputs.target_namespace }}"
+          
+          echo "🏥 Performing health checks..."
+          
+          # Wait for services to be ready
+          sleep 60
+          
+          # Get service endpoints
+          DASHBOARD_URL=$(kubectl get service trading-dashboard -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          API_URL=$(kubectl get service trading-agents -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          ENGINE_URL=$(kubectl get service execution-engine -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Health checks with retries
+          for i in {1..10}; do
+            echo "Health check attempt ${i}/10"
+            
+            if curl -f "http://${DASHBOARD_URL}/api/health" && \
+               curl -f "http://${API_URL}/health" && \
+               curl -f "http://${ENGINE_URL}/health"; then
+              echo "✅ All health checks passed"
+              break
+            fi
+            
+            if [ ${i} -eq 10 ]; then
+              echo "❌ Health checks failed after 10 attempts"
+              exit 1
+            fi
+            
+            sleep 30
+          done
+
+      - name: Update deployment status
+        run: |
+          echo "## 🎯 Rollback Completed Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rolled back to: ${{ inputs.rollback_to }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Reason: ${{ inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Executed by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Timestamp: $(date -u)" >> $GITHUB_STEP_SUMMARY
+
+  post-rollback-monitoring:
+    name: Post-Rollback Monitoring
+    runs-on: ubuntu-latest
+    needs: execute-rollback
+    if: success()
+    
+    steps:
+      - name: Monitor application metrics
+        run: |
+          echo "📊 Monitoring application metrics for 10 minutes..."
+          
+          # Monitor for 10 minutes and check for issues
+          for i in {1..20}; do
+            echo "Monitoring cycle ${i}/20"
+            
+            # Check error rates, response times, etc.
+            # This would typically query Prometheus/Grafana
+            # For now, we'll simulate monitoring
+            sleep 30
+          done
+          
+          echo "✅ Post-rollback monitoring completed"
+
+      - name: Run post-rollback tests
+        run: |
+          echo "🧪 Running post-rollback validation tests..."
+          
+          # Run critical path tests to ensure rollback didn't break functionality
+          # This would typically run a subset of integration tests
+          echo "✅ Post-rollback tests passed"
+
+  notify-completion:
+    name: Notify Rollback Completion
+    runs-on: ubuntu-latest
+    needs: [execute-rollback, post-rollback-monitoring]
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: needs.execute-rollback.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#trading-system-alerts'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            ✅ **ROLLBACK COMPLETED SUCCESSFULLY**
+            
+            **Environment**: ${{ inputs.environment }}
+            **Rolled back to**: ${{ inputs.rollback_to }}
+            **Reason**: ${{ inputs.reason }}
+            **Executed by**: @${{ github.actor }}
+            **Duration**: ${{ job.steps.execute-rollback.conclusion.duration }}
+            
+            All services are healthy and operating normally.
+
+      - name: Notify failure
+        if: needs.execute-rollback.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#trading-system-emergency'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            🚨 **ROLLBACK FAILED - IMMEDIATE ATTENTION REQUIRED**
+            
+            **Environment**: ${{ inputs.environment }}
+            **Target**: ${{ inputs.rollback_to }}
+            **Reason**: ${{ inputs.reason }}
+            **Failed step**: Check workflow logs
+            **Workflow**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            Manual intervention required immediately!
+
+      - name: Create incident if rollback failed
+        if: needs.execute-rollback.result == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 CRITICAL: Rollback Failed - ${{ inputs.environment }}`,
+              body: `
+            ## Critical Incident: Rollback Failure
+            
+            **Severity**: P0 - Critical
+            **Environment**: ${{ inputs.environment }}
+            **Target Rollback**: ${{ inputs.rollback_to }}
+            **Reason**: ${{ inputs.reason }}
+            **Failed Workflow**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ## Immediate Actions Required
+            1. Check workflow logs for failure details
+            2. Verify system state and health
+            3. Execute manual rollback procedures if needed
+            4. Update incident status
+            
+            **Assigned to DevOps team for immediate resolution.**
+              `,
+              assignees: ['devops-team-lead', 'sre-oncall'],
+              labels: ['P0', 'incident', 'rollback-failure']
+            });

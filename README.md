@@ -1,5 +1,14 @@
 # Adaptive Trading System
 
+[![CI Pipeline](https://github.com/jthadison/tmt/workflows/CI%20Pipeline/badge.svg)](https://github.com/jthadison/tmt/actions/workflows/ci.yml)
+[![Staging Deployment](https://github.com/jthadison/tmt/workflows/Staging%20Deployment/badge.svg)](https://github.com/jthadison/tmt/actions/workflows/staging-deploy.yml)
+[![codecov](https://codecov.io/gh/jthadison/tmt/branch/main/graph/badge.svg)](https://codecov.io/gh/jthadison/tmt)
+[![Security Scan](https://img.shields.io/badge/security-semgrep-green)](https://github.com/jthadison/tmt/actions)
+[![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
+[![Python 3.11.8](https://img.shields.io/badge/python-3.11.8-blue.svg)](https://python.org)
+[![TypeScript 5.3.3](https://img.shields.io/badge/typescript-5.3.3-blue.svg)](https://typescriptlang.org)
+[![Rust 1.75.0](https://img.shields.io/badge/rust-1.75.0-orange.svg)](https://rust-lang.org)
+
 A sophisticated AI-powered trading platform using 8 specialized agents to manage multiple prop firm accounts simultaneously, employing Wyckoff methodology with Volume Price Analysis and Smart Money Concepts.
 
 ## 🚀 Quick Start
@@ -123,6 +132,185 @@ docker-compose logs -f
 # API Gateway: http://localhost:8000
 # Grafana: http://localhost:3001
 ```
+
+## 🚀 CI/CD Pipeline
+
+### Pipeline Overview
+
+Our CI/CD pipeline ensures code quality, security, and reliable deployments through automated workflows.
+
+#### **Continuous Integration**
+- **Triggers:** Pull requests and pushes to `main` branch
+- **Multi-language Support:** Python, TypeScript, and Rust testing in parallel
+- **Security Scanning:** Semgrep SAST, Trivy vulnerability scanning
+- **Code Quality:** 80% test coverage requirement, linting, and formatting checks
+- **Build Validation:** Docker image builds for all services
+
+#### **Continuous Deployment**
+- **Staging:** Automatic deployment on merge to `main`
+- **Production:** Manual approval with blue-green deployment
+- **Rollback:** Automated rollback on health check failures
+
+### Workflow Badges
+
+| Workflow | Status | Description |
+|----------|--------|-------------|
+| CI Pipeline | [![CI Pipeline](https://github.com/jthadison/tmt/workflows/CI%20Pipeline/badge.svg)](https://github.com/jthadison/tmt/actions/workflows/ci.yml) | Runs tests, security scans, and builds |
+| Staging Deploy | [![Staging Deployment](https://github.com/jthadison/tmt/workflows/Staging%20Deployment/badge.svg)](https://github.com/jthadison/tmt/actions/workflows/staging-deploy.yml) | Deploys to staging environment |
+| Code Coverage | [![codecov](https://codecov.io/gh/jthadison/tmt/branch/main/graph/badge.svg)](https://codecov.io/gh/jthadison/tmt) | Test coverage reporting |
+
+### Pipeline Stages
+
+#### 1. **Security & Quality Gates**
+```bash
+# Security scanning
+- Semgrep SAST (Static Application Security Testing)
+- Trivy vulnerability scanning
+- Dependency security analysis
+- Secret detection
+
+# Code quality
+- Multi-language linting (Black, ESLint, Clippy)
+- Type checking (mypy, TypeScript, Rust)
+- Test coverage enforcement (80% minimum)
+```
+
+#### 2. **Testing Strategy**
+```bash
+# Unit Tests (parallel execution)
+- Python: pytest with 80% coverage requirement
+- TypeScript: Jest with React Testing Library
+- Rust: Built-in test framework with comprehensive coverage
+
+# Integration Tests
+- End-to-end API testing
+- Database integration tests
+- Message queue integration tests
+- Cross-service communication tests
+
+# Performance Tests
+- k6 load testing (1000 concurrent users)
+- Response time validation (<100ms p95)
+- Resource usage monitoring
+```
+
+#### 3. **Build & Package**
+```bash
+# Docker builds (parallel)
+./scripts/deployment/build-all.sh
+
+# Image security scanning
+- Base image vulnerability assessment
+- Multi-arch builds (linux/amd64)
+- Container optimization and best practices
+```
+
+#### 4. **Deployment Pipeline**
+
+##### **Staging Environment**
+```bash
+# Automatic on main branch merge
+./scripts/deployment/deploy-staging.sh
+
+# Infrastructure provisioning
+- GKE cluster with PostgreSQL + TimescaleDB
+- Redis for caching and real-time state
+- Kafka for event streaming
+- Monitoring stack (Prometheus + Grafana)
+
+# Application deployment
+- Blue-green deployment strategy  
+- Health check validation
+- Smoke tests execution
+- Performance validation
+```
+
+##### **Production Environment**
+```bash
+# Manual approval required
+# Canary deployment with gradual traffic shift
+# Automated rollback on failure
+# Real-time monitoring and alerting
+```
+
+### Deployment Environments
+
+| Environment | URL | Purpose | Auto-Deploy |
+|-------------|-----|---------|-------------|
+| **Development** | `http://localhost:3000` | Local development | Manual |
+| **Staging** | `https://staging.trading-system.com` | Pre-production testing | ✅ On merge to main |
+| **Production** | `https://trading-system.com` | Live trading system | Manual approval |
+
+### Rollback Capabilities
+
+#### **Automated Rollback Triggers**
+- Error rate > 1%
+- Response latency > 500ms
+- Health check failures
+- Circuit breaker activations
+
+#### **Manual Rollback**
+```bash
+# Emergency rollback workflow
+gh workflow run rollback.yml \
+  -f environment=staging \
+  -f rollback_to=previous-stable-tag \
+  -f reason="Critical issue detected"
+
+# Or use deployment script
+./scripts/deployment/rollback.sh --environment=staging --to=v1.2.3
+```
+
+#### **Recovery Time Objectives**
+- **Application Rollback:** <60 seconds
+- **Database Rollback:** <5 minutes  
+- **Full System Recovery:** <15 minutes
+
+### Monitoring & Observability
+
+#### **Build Metrics**
+- Build success rate and duration
+- Test execution time and coverage trends
+- Security vulnerability trends
+- Deployment frequency and lead time
+
+#### **Deployment Health**
+- Real-time application metrics
+- Infrastructure resource utilization
+- Error rates and response times
+- Business metrics (trade execution latency)
+
+### CI/CD Best Practices
+
+#### **Pull Request Workflow**
+1. **Branch Protection:** `main` branch requires PR reviews and status checks
+2. **Automated Checks:** All CI tests must pass before merge
+3. **Security Review:** Automated security scanning on every PR
+4. **Performance Impact:** Automated performance regression detection
+
+#### **Release Management**
+```bash
+# Version tagging
+git tag -a v1.2.3 -m "Release v1.2.3: Add risk management features"
+
+# Release notes generation
+gh release create v1.2.3 --auto-notes --latest
+
+# Deployment validation
+./scripts/deployment/validate-release.sh v1.2.3
+```
+
+#### **Troubleshooting CI/CD Issues**
+
+| Issue | Solution |
+|-------|----------|
+| **Build Failures** | Check workflow logs, validate dependencies |
+| **Test Failures** | Review test output, check for flaky tests |
+| **Security Scan Failures** | Review security report, update dependencies |
+| **Deployment Failures** | Check health endpoints, validate configurations |
+| **Rollback Issues** | Verify backup integrity, check manual procedures |
+
+For detailed troubleshooting, see [CI/CD Troubleshooting Guide](docs/cicd-troubleshooting.md).
 
 ## 🚨 Important Warnings
 

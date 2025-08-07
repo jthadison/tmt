@@ -1,0 +1,323 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if tests fail'
+        required: false
+        default: 'false'
+        type: boolean
+      deployment_tag:
+        description: 'Docker image tag to deploy'
+        required: false
+        default: 'latest'
+        type: string
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: trading-staging
+  GKE_ZONE: us-central1-a
+  DEPLOYMENT_NAME: adaptive-trading-staging
+  CONTAINER_REGISTRY: gcr.io
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    outputs:
+      image_tag: ${{ steps.image_tag.outputs.tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate image tag
+        id: image_tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.deployment_tag }}" != "latest" ]; then
+            echo "tag=${{ inputs.deployment_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./dashboard
+          file: ./dashboard/Dockerfile
+          push: true
+          tags: |
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/trading-dashboard:${{ steps.image_tag.outputs.tag }}
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/trading-dashboard:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push Agents image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./agents
+          file: ./agents/Dockerfile
+          push: true
+          tags: |
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/trading-agents:${{ steps.image_tag.outputs.tag }}
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/trading-agents:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push Execution Engine image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./execution-engine
+          file: ./execution-engine/Dockerfile
+          push: true
+          tags: |
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/execution-engine:${{ steps.image_tag.outputs.tag }}
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/execution-engine:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  deploy-to-staging:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: 
+      name: staging
+      url: https://staging.trading-system.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.14.0'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo update
+
+      - name: Deploy infrastructure services
+        run: |
+          # Deploy PostgreSQL with TimescaleDB
+          helm upgrade --install postgresql bitnami/postgresql \
+            --set auth.postgresPassword=${{ secrets.POSTGRES_PASSWORD }} \
+            --set auth.database=trading_system \
+            --set primary.persistence.size=20Gi \
+            --set metrics.enabled=true \
+            --namespace staging \
+            --create-namespace \
+            --wait
+
+          # Deploy Redis
+          helm upgrade --install redis bitnami/redis \
+            --set auth.password=${{ secrets.REDIS_PASSWORD }} \
+            --set master.persistence.size=8Gi \
+            --set metrics.enabled=true \
+            --namespace staging \
+            --wait
+
+          # Deploy Kafka
+          helm upgrade --install kafka bitnami/kafka \
+            --set persistence.size=10Gi \
+            --set metrics.jmx.enabled=true \
+            --set metrics.kafka.enabled=true \
+            --namespace staging \
+            --wait
+
+      - name: Deploy monitoring stack
+        run: |
+          # Deploy Prometheus
+          helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+            --set grafana.adminPassword=${{ secrets.GRAFANA_PASSWORD }} \
+            --set prometheus.prometheusSpec.retention=7d \
+            --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=20Gi \
+            --namespace monitoring \
+            --create-namespace \
+            --wait
+
+      - name: Create application secrets
+        run: |
+          # Create secret for database connection
+          kubectl create secret generic app-secrets \
+            --from-literal=DATABASE_URL="postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@postgresql:5432/trading_system" \
+            --from-literal=REDIS_URL="redis://:${{ secrets.REDIS_PASSWORD }}@redis-master:6379" \
+            --from-literal=KAFKA_BROKERS="kafka:9092" \
+            --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            --from-literal=ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
+            --namespace staging \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy application services
+        run: |
+          # Update image tags in Helm values
+          sed -i "s|IMAGE_TAG|${{ needs.build-and-push.outputs.image_tag }}|g" infrastructure/helm/trading-system/values-staging.yaml
+          sed -i "s|GCP_PROJECT_ID|${{ env.GCP_PROJECT_ID }}|g" infrastructure/helm/trading-system/values-staging.yaml
+          
+          # Deploy application
+          helm upgrade --install trading-system infrastructure/helm/trading-system/ \
+            --values infrastructure/helm/trading-system/values-staging.yaml \
+            --set image.tag=${{ needs.build-and-push.outputs.image_tag }} \
+            --set global.containerRegistry=${{ env.CONTAINER_REGISTRY }}/${{ env.GCP_PROJECT_ID }} \
+            --namespace staging \
+            --wait \
+            --timeout=10m
+
+      - name: Wait for deployment rollout
+        run: |
+          kubectl rollout status deployment/trading-dashboard -n staging --timeout=300s
+          kubectl rollout status deployment/trading-agents -n staging --timeout=300s
+          kubectl rollout status deployment/execution-engine -n staging --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          # Get service URLs
+          DASHBOARD_URL=$(kubectl get service trading-dashboard -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          API_URL=$(kubectl get service trading-agents -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Wait for load balancers
+          echo "Waiting for load balancers to be ready..."
+          sleep 120
+          
+          # Test health endpoints
+          curl -f "http://${DASHBOARD_URL}/api/health" || exit 1
+          curl -f "http://${API_URL}/health" || exit 1
+          
+          echo "Smoke tests passed!"
+
+      - name: Update deployment status
+        run: |
+          echo "Deployment successful! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "- Image tag: ${{ needs.build-and-push.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: Staging" >> $GITHUB_STEP_SUMMARY
+          echo "- Cluster: ${{ env.GKE_CLUSTER }}" >> $GITHUB_STEP_SUMMARY
+
+  post-deployment-tests:
+    name: Post-Deployment Tests
+    runs-on: ubuntu-latest
+    needs: deploy-to-staging
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Run end-to-end tests
+        run: |
+          # Get staging URLs
+          STAGING_URL=$(kubectl get ingress trading-system-ingress -n staging -o jsonpath='{.spec.rules[0].host}')
+          
+          # Run E2E tests against staging
+          npm run test:e2e -- --baseUrl="https://${STAGING_URL}"
+        env:
+          E2E_USERNAME: ${{ secrets.STAGING_TEST_USER }}
+          E2E_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+        continue-on-error: true
+
+      - name: Run performance tests against staging
+        run: |
+          STAGING_URL=$(kubectl get ingress trading-system-ingress -n staging -o jsonpath='{.spec.rules[0].host}')
+          
+          k6 run scripts/testing/staging-performance-test.js \
+            --env STAGING_URL="https://${STAGING_URL}"
+        continue-on-error: true
+
+  notify:
+    name: Notify Teams
+    runs-on: ubuntu-latest
+    needs: [deploy-to-staging, post-deployment-tests]
+    if: always()
+    
+    steps:
+      - name: Notify Slack on success
+        if: needs.deploy-to-staging.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#trading-system-deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            ✅ Staging deployment successful!
+            - Commit: ${{ github.sha }}
+            - Image tag: ${{ needs.build-and-push.outputs.image_tag }}
+            - Environment: https://staging.trading-system.com
+
+      - name: Notify Slack on failure
+        if: needs.deploy-to-staging.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#trading-system-alerts'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            ❌ Staging deployment failed!
+            - Commit: ${{ github.sha }}
+            - Check workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Create GitHub deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'staging',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: '${{ needs.deploy-to-staging.result }}' === 'success' ? 'success' : 'failure',
+              environment_url: 'https://staging.trading-system.com',
+              description: 'Deployment to staging environment'
+            });
