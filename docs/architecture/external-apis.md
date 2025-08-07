@@ -34,23 +34,46 @@
 
 **Integration Notes:** Backup data source and primary for indices. WebSocket requires subscription management. Implement fallback to OANDA for forex if Polygon fails.
 
-## MetaTrader 4/5 Bridge APIs
+## TradeLocker API
 
-- **Purpose:** Direct trade execution on prop firm accounts, position management, account synchronization
-- **Documentation:** Custom bridge implementation required (no standard API)
-- **Base URL(s):** Local bridge service endpoints (bridge runs on same VPS as MT4/5)
-- **Authentication:** Account credentials + bridge authentication token
-- **Rate Limits:** Platform dependent, typically 10-20 orders/second maximum
+- **Purpose:** Direct trade execution on prop firm accounts, real-time position management, multi-account support
+- **Documentation:** https://docs.tradelocker.com/api/
+- **Base URL(s):** 
+  - Production: `https://api.tradelocker.com/v2`
+  - WebSocket: `wss://api.tradelocker.com/ws`
+- **Authentication:** OAuth2 with JWT tokens, automatic refresh
+- **Rate Limits:** 100 requests/second for REST, unlimited WebSocket connections
 
 **Key Endpoints Used:**
-- `POST /bridge/order/market` - Place market orders
-- `POST /bridge/order/pending` - Place pending orders
-- `PUT /bridge/order/modify` - Modify stop loss/take profit
-- `GET /bridge/account/info` - Account balance and equity
-- `GET /bridge/positions` - Current open positions
-- `WebSocket /bridge/events` - Real-time order events
+- `POST /auth/token` - OAuth2 authentication
+- `POST /orders` - Place market/limit/stop orders
+- `PUT /orders/{id}` - Modify existing orders
+- `DELETE /orders/{id}` - Cancel orders
+- `GET /positions` - Current positions
+- `GET /account/balance` - Account balance and equity
+- `WebSocket /ws` - Real-time price and position updates
 
-**Integration Notes:** Most critical integration for execution. Requires custom bridge development. Implement connection monitoring with auto-reconnect. Handle order rejections and partial fills gracefully.
+**Integration Notes:** Modern REST API with excellent documentation. WebSocket provides real-time updates with <10ms latency. Supports multiple accounts per API key. Implement token refresh 5 minutes before expiration.
+
+## DXtrade API
+
+- **Purpose:** Trade execution via FIX protocol, position management, multi-session support
+- **Documentation:** DXtrade FIX 4.4 Specification (proprietary)
+- **Base URL(s):** 
+  - FIX Gateway: `fix.dxtrade.com:443`
+  - REST API: `https://api.dxtrade.com/v2`
+- **Authentication:** SSL certificate-based for FIX, API key for REST
+- **Rate Limits:** No hard limits on FIX, 50 requests/second for REST
+
+**Key Endpoints Used:**
+- FIX `NewOrderSingle` - Place orders
+- FIX `OrderCancelRequest` - Cancel orders
+- FIX `OrderCancelReplaceRequest` - Modify orders
+- FIX `ExecutionReport` - Order status updates
+- REST `GET /account` - Account information
+- REST `GET /symbols` - Available instruments
+
+**Integration Notes:** FIX 4.4 protocol for trading, REST for account queries. Requires SSL certificates for authentication. Implement sequence number persistence and gap fill. Session times configured per prop firm requirements.
 
 ## Economic Calendar API (Trading Economics)
 
