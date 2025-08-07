@@ -261,7 +261,7 @@ deploy_application() {
     print_header "Deploying Application Services"
     
     # Check if Helm chart exists
-    local helm_chart_path="${PROJECT_ROOT}/infrastructure/helm/trading-system"
+    local helm_chart_path="${PROJECT_ROOT}/src/infrastructure/helm/trading-system"
     if [ ! -d "${helm_chart_path}" ]; then
         print_error "Helm chart not found at ${helm_chart_path}"
         print_info "Creating basic deployment manifests..."

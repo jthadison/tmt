@@ -13,7 +13,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
-      - ./shared/schemas/migrations:/docker-entrypoint-initdb.d
+      - ./src/shared/schemas/migrations:/docker-entrypoint-initdb.d
     networks:
       - trading-network
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_prod_data:/data
-      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./src/infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf
     networks:
       - trading-network
     restart: unless-stopped
@@ -144,7 +144,7 @@ services:
     volumes:
       - vault_prod_data:/vault/data
       - vault_prod_logs:/vault/logs
-      - ./infrastructure/vault/config.hcl:/vault/config/config.hcl
+      - ./src/infrastructure/vault/config.hcl:/vault/config/config.hcl
     environment:
       VAULT_CONFIG_PATH: /vault/config/config.hcl
       VAULT_LOG_LEVEL: INFO
@@ -172,7 +172,7 @@ services:
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./infrastructure/monitoring/prometheus-prod.yml:/etc/prometheus/prometheus.yml
+      - ./src/infrastructure/monitoring/prometheus-prod.yml:/etc/prometheus/prometheus.yml
       - prometheus_prod_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -217,8 +217,8 @@ services:
       GF_SMTP_PASSWORD: ${SMTP_PASSWORD}
     volumes:
       - grafana_prod_data:/var/lib/grafana
-      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./src/infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./src/infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     networks:
       - trading-network
     depends_on:
@@ -238,7 +238,7 @@ services:
   # Dashboard - Production build
   dashboard:
     build:
-      context: ./dashboard
+      context: ./src/dashboard
       dockerfile: Dockerfile
       target: production
     container_name: trading-dashboard-prod
