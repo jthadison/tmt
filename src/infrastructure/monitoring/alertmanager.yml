@@ -1,0 +1,204 @@
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@trading-system.local'
+  
+# Templates for custom formatting
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# The directory from which notification templates are read
+template_files:
+  - '/etc/alertmanager/templates/default.tmpl'
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'trading-system-alerts'
+  routes:
+    # Critical alerts (circuit breaker, system failures)
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 5s
+      repeat_interval: 5m
+      
+    # Trading-specific alerts
+    - match:
+        category: trading_performance
+      receiver: 'trading-alerts'
+      group_interval: 30s
+      repeat_interval: 15m
+      
+    # Security alerts  
+    - match:
+        category: security
+      receiver: 'security-alerts'
+      group_wait: 0s
+      repeat_interval: 1m
+      
+    # Infrastructure alerts
+    - match:
+        category: resources
+      receiver: 'infrastructure-alerts'
+      repeat_interval: 30m
+
+receivers:
+  - name: 'trading-system-alerts'
+    webhook_configs:
+      - url: 'http://dashboard:3000/api/alerts/webhook'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: 'alertmanager'
+            password: 'webhook-secret'
+        title: 'Trading System Alert'
+        text: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ if .Annotations.action }}Action Required: {{ .Annotations.action }}{{ end }}
+          {{ end }}
+
+  - name: 'critical-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#trading-alerts-critical'
+        username: 'TradingSystemAlerts'
+        icon_emoji: ':rotating_light:'
+        color: 'danger'
+        title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.action }}*Action Required:* {{ .Annotations.action }}{{ end }}
+          *Severity:* {{ .Labels.severity }}
+          *Service:* {{ .Labels.job }}
+          {{ end }}
+        send_resolved: true
+        
+    webhook_configs:
+      - url: '${CRITICAL_WEBHOOK_URL}'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: '${WEBHOOK_USERNAME}'
+            password: '${WEBHOOK_PASSWORD}'
+    
+    # Email for critical alerts
+    email_configs:
+      - to: '${CRITICAL_EMAIL_TO}'
+        from: '${EMAIL_FROM}'
+        smarthost: '${SMTP_SMARTHOST}'
+        auth_username: '${SMTP_USERNAME}'
+        auth_password: '${SMTP_PASSWORD}'
+        subject: 'CRITICAL ALERT: Trading System {{ .GroupLabels.alertname }}'
+        body: |
+          Critical alert in Trading System:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ if .Annotations.action }}Action Required: {{ .Annotations.action }}{{ end }}
+          
+          Labels:
+          {{ range .Labels.SortedPairs }}
+          - {{ .Name }}: {{ .Value }}
+          {{ end }}
+          {{ end }}
+
+  - name: 'trading-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#trading-alerts'
+        username: 'TradingSystemAlerts'
+        icon_emoji: ':chart_with_upwards_trend:'
+        color: 'warning'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          {{ end }}
+
+  - name: 'security-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#security-alerts'
+        username: 'SecurityAlerts'
+        icon_emoji: ':shield:'
+        color: 'danger'
+        title: 'SECURITY ALERT: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Security Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.action }}*Action Required:* {{ .Annotations.action }}{{ end }}
+          {{ end }}
+    
+    email_configs:
+      - to: '${SECURITY_EMAIL_TO}'
+        from: '${EMAIL_FROM}'
+        subject: 'SECURITY ALERT: Trading System'
+        body: |
+          Security alert detected in Trading System:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          {{ if .Annotations.action }}Action Required: {{ .Annotations.action }}{{ end }}
+          {{ end }}
+
+  - name: 'infrastructure-alerts'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#infrastructure-alerts'
+        username: 'InfraAlerts'
+        icon_emoji: ':computer:'
+        color: 'warning'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Infrastructure Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Service:* {{ .Labels.job }}
+          {{ end }}
+
+# Inhibit rules to prevent alert spam
+inhibit_rules:
+  # Inhibit any warning-level alerts if the same alert is already critical
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname', 'cluster', 'service']
+    
+  # If a service is down, don't alert on resource usage for that service
+  - source_matchers:
+      - alertname="ServiceDown"
+    target_matchers:
+      - category="resources"
+    equal: ['job']
+    
+  # If system circuit breaker is open, suppress account-level alerts
+  - source_matchers:
+      - alertname="CircuitBreakerSystemOpen"
+    target_matchers:
+      - alertname="CircuitBreakerAccountOpen"
+    equal: ['cluster']
+
+# Global configuration
+global:
+  # How long to initially wait to send a notification for a group of alerts
+  group_wait: 10s
+  # How long to wait before sending an update for a group of alerts
+  group_interval: 10s
+  # How long to wait before re-sending a notification
+  repeat_interval: 1h
+  # Default SMTP settings
+  smtp_smarthost: '${SMTP_SMARTHOST:-localhost:587}'
+  smtp_from: '${EMAIL_FROM:-alerts@trading-system.local}'
