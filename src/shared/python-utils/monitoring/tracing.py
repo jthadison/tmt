@@ -35,6 +35,48 @@ _correlation_id_context: ContextVar[Optional[str]] = ContextVar(
     'correlation_id', default=None
 )
 
+def _validate_endpoint_url(endpoint: str, endpoint_type: str) -> bool:
+    """
+    Validate endpoint URL for security.
+    
+    Args:
+        endpoint: The endpoint URL to validate
+        endpoint_type: Type of endpoint for error messages (e.g., "Jaeger", "OTLP")
+    
+    Returns:
+        True if URL is valid and safe
+        
+    Raises:
+        ValueError: If URL is invalid or potentially malicious
+    """
+    if not endpoint or not isinstance(endpoint, str):
+        raise ValueError(f"Invalid {endpoint_type} endpoint: must be a non-empty string")
+    
+    # Parse URL to validate structure
+    try:
+        parsed = urlparse(endpoint if '://' in endpoint else f'http://{endpoint}')
+    except Exception as e:
+        raise ValueError(f"Invalid {endpoint_type} endpoint URL format: {e}")
+    
+    # Validate scheme
+    if parsed.scheme and parsed.scheme not in ['http', 'https']:
+        raise ValueError(f"Invalid {endpoint_type} endpoint scheme: only http/https allowed")
+    
+    # Validate hostname (prevent localhost bypass attempts and malicious hosts)
+    if parsed.hostname:
+        hostname = parsed.hostname.lower()
+        # Allow localhost, container names, and valid hostnames
+        if not (hostname in ['localhost', '127.0.0.1', '::1'] or 
+                hostname.replace('-', '').replace('.', '').isalnum() or
+                hostname.endswith('.local')):
+            raise ValueError(f"Invalid {endpoint_type} endpoint hostname: {hostname}")
+    
+    # Validate port range
+    if parsed.port and (parsed.port < 1 or parsed.port > 65535):
+        raise ValueError(f"Invalid {endpoint_type} endpoint port: must be 1-65535")
+    
+    return True
+
 class TradingTracerProvider:
     """Custom tracer provider for the trading system."""
     
@@ -96,19 +138,36 @@ class TradingTracerProvider:
         
         # Jaeger exporter
         if jaeger_endpoint:
-            jaeger_exporter = JaegerExporter(
-                agent_host_name=jaeger_endpoint.split(':')[0] if ':' in jaeger_endpoint else jaeger_endpoint,
-                agent_port=int(jaeger_endpoint.split(':')[1]) if ':' in jaeger_endpoint else 14268,
-                collector_endpoint=f"http://{jaeger_endpoint}/api/traces"
-            )
-            jaeger_processor = BatchSpanProcessor(jaeger_exporter)
-            processors.append(jaeger_processor)
+            try:
+                # Validate endpoint URL for security
+                _validate_endpoint_url(jaeger_endpoint, "Jaeger")
+                
+                # Safely parse the endpoint
+                parsed = urlparse(jaeger_endpoint if '://' in jaeger_endpoint else f'http://{jaeger_endpoint}')
+                hostname = parsed.hostname or 'localhost'
+                port = parsed.port or 14268
+                
+                jaeger_exporter = JaegerExporter(
+                    agent_host_name=hostname,
+                    agent_port=port,
+                    collector_endpoint=f"{parsed.scheme or 'http'}://{hostname}:{port}/api/traces"
+                )
+                jaeger_processor = BatchSpanProcessor(jaeger_exporter)
+                processors.append(jaeger_processor)
+            except ValueError as e:
+                logging.warning(f"Invalid Jaeger endpoint configuration: {e}. Skipping Jaeger export.")
         
         # OTLP exporter (preferred for production)
         if otlp_endpoint:
-            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
-            otlp_processor = BatchSpanProcessor(otlp_exporter)
-            processors.append(otlp_processor)
+            try:
+                # Validate endpoint URL for security
+                _validate_endpoint_url(otlp_endpoint, "OTLP")
+                
+                otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+                otlp_processor = BatchSpanProcessor(otlp_exporter)
+                processors.append(otlp_processor)
+            except ValueError as e:
+                logging.warning(f"Invalid OTLP endpoint configuration: {e}. Skipping OTLP export.")
         
         # Add processors to provider
         for processor in processors:

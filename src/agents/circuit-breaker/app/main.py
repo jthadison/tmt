@@ -40,6 +40,9 @@ except ImportError:
     HealthChecker = None
     setup_health_endpoint = lambda app, checker: None
 
+# Initialize logger first
+logger = structlog.get_logger(__name__)
+
 # Import monitoring utilities
 try:
     import sys
@@ -59,8 +62,6 @@ except ImportError as e:
     get_registry = lambda: None
     CorrelationIDMiddleware = None
     trace_circuit_breaker_operation = lambda *args, **kwargs: lambda f: f
-
-logger = structlog.get_logger(__name__)
 
 
 class WebSocketConnectionManager:

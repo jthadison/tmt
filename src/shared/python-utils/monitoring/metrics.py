@@ -28,13 +28,32 @@ from prometheus_client import (
 import psutil
 
 class TradingMetricsRegistry:
-    """Central registry for all trading system metrics."""
+    """Central registry for all trading system metrics (thread-safe singleton)."""
+    
+    _instance: Optional['TradingMetricsRegistry'] = None
+    _lock = threading.Lock()
+    
+    def __new__(cls) -> 'TradingMetricsRegistry':
+        """Thread-safe singleton implementation."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
     
     def __init__(self):
+        # Prevent re-initialization of singleton
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+            
         self.registry = CollectorRegistry()
         self._metrics: Dict[str, Any] = {}
         self._initialized = False
         self._http_server_port: Optional[int] = None
+        
+        # Thread safety locks
+        self._metrics_lock = threading.RLock()  # Reentrant lock for nested calls
+        self._config_lock = threading.Lock()   # Configuration lock
         
         # Core business metrics
         self._trading_metrics: Dict[str, Any] = {}
@@ -44,6 +63,15 @@ class TradingMetricsRegistry:
         # Background metrics collection
         self._metrics_thread: Optional[threading.Thread] = None
         self._shutdown_event = threading.Event()
+        self._singleton_initialized = True
+    
+    def __del__(self):
+        """Cleanup resources when object is garbage collected."""
+        try:
+            self.shutdown()
+        except Exception:
+            # Ignore exceptions during cleanup to prevent issues during garbage collection
+            pass
     
     def configure(
         self,
@@ -65,35 +93,36 @@ class TradingMetricsRegistry:
             enable_auto_metrics: Enable automatic infrastructure metrics collection
             collection_interval: Metrics collection interval in seconds
         """
-        if self._initialized:
-            return
-        
-        self._service_name = service_name
-        self._service_version = service_version
-        self._environment = environment
-        
-        # Initialize core metrics
-        self._init_trading_metrics()
-        self._init_agent_metrics()
-        self._init_infrastructure_metrics()
-        
-        # Start HTTP server for metrics endpoint
-        try:
-            start_http_server(metrics_port, registry=self.registry)
-            self._http_server_port = metrics_port
-        except Exception as e:
-            print(f"Warning: Failed to start metrics HTTP server on port {metrics_port}: {e}")
-        
-        # Start automatic infrastructure metrics collection
-        if enable_auto_metrics:
-            self._start_auto_metrics_collection(collection_interval)
-        
-        self._initialized = True
+        with self._config_lock:
+            if self._initialized:
+                return
+            
+            self._service_name = service_name
+            self._service_version = service_version
+            self._environment = environment
+            
+            # Initialize core metrics
+            self._init_trading_metrics()
+            self._init_agent_metrics()
+            self._init_infrastructure_metrics()
+            
+            # Start HTTP server for metrics endpoint
+            try:
+                start_http_server(metrics_port, registry=self.registry)
+                self._http_server_port = metrics_port
+            except Exception as e:
+                print(f"Warning: Failed to start metrics HTTP server on port {metrics_port}: {e}")
+            
+            # Start automatic infrastructure metrics collection
+            if enable_auto_metrics:
+                self._start_auto_metrics_collection(collection_interval)
+            
+            self._initialized = True
     
     def _init_trading_metrics(self) -> None:
         """Initialize core trading business metrics."""
-        
-        # Trade execution metrics
+        with self._metrics_lock:
+            # Trade execution metrics
         self._trading_metrics["trades_total"] = Counter(
             "trading_trades_total",
             "Total number of trades executed",
@@ -337,12 +366,37 @@ class TradingMetricsRegistry:
     
     def shutdown(self) -> None:
         """Shutdown metrics collection."""
-        if self._metrics_thread:
-            self._shutdown_event.set()
-            self._metrics_thread.join()
+        with self._config_lock:
+            if self._metrics_thread and self._metrics_thread.is_alive():
+                self._shutdown_event.set()
+                # Use timeout to prevent hanging during shutdown
+                self._metrics_thread.join(timeout=5.0)
+                if self._metrics_thread.is_alive():
+                    print("Warning: Metrics collection thread did not shutdown gracefully")
+                self._metrics_thread = None
+            self._shutdown_event.clear()
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        self.shutdown()
+        return False
 
-# Global metrics registry
-_metrics_registry = TradingMetricsRegistry()
+# Global metrics registry with thread safety
+_global_registry_lock = threading.Lock()
+_metrics_registry: Optional[TradingMetricsRegistry] = None
+
+def get_metrics_registry() -> TradingMetricsRegistry:
+    """Get the global metrics registry (thread-safe)."""
+    global _metrics_registry
+    if _metrics_registry is None:
+        with _global_registry_lock:
+            if _metrics_registry is None:
+                _metrics_registry = TradingMetricsRegistry()
+    return _metrics_registry
 
 def configure_metrics(
     service_name: str,
@@ -366,7 +420,8 @@ def configure_metrics(
     environment = environment or os.getenv("TRADING_ENVIRONMENT", "development")
     metrics_port = metrics_port or int(os.getenv("METRICS_PORT", "8000"))
     
-    _metrics_registry.configure(
+    registry = get_metrics_registry()
+    registry.configure(
         service_name=service_name,
         service_version=service_version,
         environment=environment,
@@ -377,7 +432,8 @@ def configure_metrics(
 
 def get_registry() -> CollectorRegistry:
     """Get the global metrics registry."""
-    return _metrics_registry.get_registry()
+    registry = get_metrics_registry()
+    return registry.get_registry()
 
 # Convenience functions for creating metrics
 def create_counter(name: str, description: str, labels: List[str] = None) -> Counter:
