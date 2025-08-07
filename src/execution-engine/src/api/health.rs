@@ -6,7 +6,7 @@
  */
 
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH, Instant};
+use std::time::{SystemTime, Instant};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -213,7 +213,7 @@ impl HealthChecker {
         
         CheckResult {
             status: "passed".to_string(),
-            message: format!("CPU normal, {} cores available", cpu_count),
+            message: format!("CPU normal, {cpu_count} cores available"),
             response_time: start_time.elapsed().as_millis() as u64,
             details: Some(serde_json::json!({
                 "cpu_count": cpu_count,
