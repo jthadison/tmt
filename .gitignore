@@ -168,3 +168,45 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Docker
+*.env.docker
+docker-compose.override.yml
+.dockerignore
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+*.tfvars
+!terraform.tfvars.example
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Helm
+charts/*.tgz
+
+# Infrastructure
+*.tfplan
+*.tfstate.backup
+.terraform.tfstate.lock.info
+
+# Monitoring
+prometheus_data/
+grafana_data/
+
+# Message Queues
+kafka_data/
+
+# Claude Code
+.claude/settings.local.json
