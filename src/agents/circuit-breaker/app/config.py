@@ -7,11 +7,11 @@ variable support and validation.
 
 import os
 from typing import List, Optional, Dict, Any
-from pydantic import BaseSettings, Field, validator
-from pydantic_settings import BaseSettings as PydanticBaseSettings
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 
-class CircuitBreakerConfig(PydanticBaseSettings):
+class CircuitBreakerConfig(BaseSettings):
     """Circuit Breaker Agent Configuration"""
     
     # Service Information

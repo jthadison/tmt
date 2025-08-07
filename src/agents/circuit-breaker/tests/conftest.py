@@ -3,18 +3,83 @@ Pytest configuration and fixtures for circuit breaker agent tests.
 """
 
 import asyncio
+import sys
+import os
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, MagicMock
 import httpx
 
-# Import test dependencies
-from ..app.config import CircuitBreakerConfig
-from ..app.models import SystemHealth, BreakerLevel, BreakerState, TriggerReason
-from ..app.breaker_logic import CircuitBreakerManager
-from ..app.emergency_stop import EmergencyStopManager
-from ..app.health_monitor import HealthMonitor
-from ..app.kafka_events import KafkaEventManager
+# Add the src directory to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
+# Import test dependencies using absolute imports
+try:
+    # Try importing as a package first
+    from agents.circuit_breaker.app.config import CircuitBreakerConfig
+    from agents.circuit_breaker.app.models import SystemHealth, BreakerLevel, BreakerState, TriggerReason
+    from agents.circuit_breaker.app.breaker_logic import CircuitBreakerManager
+    from agents.circuit_breaker.app.emergency_stop import EmergencyStopManager
+    from agents.circuit_breaker.app.health_monitor import HealthMonitor
+    from agents.circuit_breaker.app.kafka_events import KafkaEventManager
+except ImportError:
+    # Fallback to relative imports for local testing
+    import importlib.util
+    import os
+    
+    # Import modules directly
+    spec = importlib.util.spec_from_file_location(
+        "config", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "config.py")
+    )
+    config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(config_module)
+    CircuitBreakerConfig = config_module.CircuitBreakerConfig
+    
+    # Import models
+    spec = importlib.util.spec_from_file_location(
+        "models", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "models.py")
+    )
+    models_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(models_module)
+    SystemHealth = models_module.SystemHealth
+    BreakerLevel = models_module.BreakerLevel
+    BreakerState = models_module.BreakerState
+    TriggerReason = models_module.TriggerReason
+    
+    # Import other modules
+    spec = importlib.util.spec_from_file_location(
+        "breaker_logic", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "breaker_logic.py")
+    )
+    breaker_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(breaker_module)
+    CircuitBreakerManager = breaker_module.CircuitBreakerManager
+    
+    spec = importlib.util.spec_from_file_location(
+        "emergency_stop", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "emergency_stop.py")
+    )
+    emergency_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(emergency_module)
+    EmergencyStopManager = emergency_module.EmergencyStopManager
+    
+    spec = importlib.util.spec_from_file_location(
+        "health_monitor", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "health_monitor.py")
+    )
+    health_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(health_module)
+    HealthMonitor = health_module.HealthMonitor
+    
+    spec = importlib.util.spec_from_file_location(
+        "kafka_events", 
+        os.path.join(os.path.dirname(__file__), "..", "app", "kafka_events.py")
+    )
+    kafka_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(kafka_module)
+    KafkaEventManager = kafka_module.KafkaEventManager
 
 
 @pytest.fixture

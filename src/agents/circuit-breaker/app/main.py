@@ -30,13 +30,10 @@ from .emergency_stop import EmergencyStopManager
 from .health_monitor import HealthMonitor
 from .kafka_events import KafkaEventManager
 
-# Import shared health utilities
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
-
+# Import shared health utilities (fallback for development)
 try:
-    from shared.health import HealthChecker, setup_health_endpoint
+    # Try proper package import first
+    from agents.shared.health import HealthChecker, setup_health_endpoint
 except ImportError:
     # Fallback if shared module not available yet
     HealthChecker = None
