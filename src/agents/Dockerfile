@@ -26,9 +26,9 @@ FROM python-base as deps
 WORKDIR /app
 
 # Copy dependency files
-COPY shared/python-utils/pyproject.toml shared/python-utils/
-COPY agents/requirements.txt agents/
-COPY pyproject.toml .
+COPY ../shared/python-utils/pyproject.toml ../shared/python-utils/
+COPY requirements.txt agents/
+COPY ../../pyproject.toml .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -50,8 +50,8 @@ COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.
 COPY --from=deps /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY agents/ agents/
-COPY shared/python-utils/ shared/python-utils/
+COPY . agents/
+COPY ../shared/python-utils/ shared/python-utils/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data && \

@@ -14,7 +14,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./shared/schemas/migrations:/docker-entrypoint-initdb.d
+      - ./src/shared/schemas/migrations:/docker-entrypoint-initdb.d
     networks:
       - trading-network
     healthcheck:
@@ -110,7 +110,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./src/infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -140,8 +140,8 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./src/infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./src/infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     networks:
       - trading-network
     depends_on:
@@ -155,14 +155,14 @@ services:
   # Dashboard (Next.js) - Development mode
   dashboard:
     build:
-      context: ./dashboard
+      context: ./src/dashboard
       dockerfile: Dockerfile.dev
       target: development
     container_name: trading-dashboard
     ports:
       - "3000:3000"
     volumes:
-      - ./dashboard:/app
+      - ./src/dashboard:/app
       - /app/node_modules
       - /app/.next
     environment:
@@ -180,13 +180,13 @@ services:
     develop:
       watch:
         - action: sync
-          path: ./dashboard
+          path: ./src/dashboard
           target: /app
           ignore:
             - node_modules/
             - .next/
         - action: rebuild
-          path: ./dashboard/package.json
+          path: ./src/dashboard/package.json
 
 networks:
   trading-network:

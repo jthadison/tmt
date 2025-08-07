@@ -65,12 +65,12 @@ check_prerequisites() {
     local missing_files=()
     
     # Check Dockerfiles
-    if [ ! -f "${PROJECT_ROOT}/dashboard/Dockerfile" ] && [ ! -f "${PROJECT_ROOT}/dashboard/Dockerfile.dev" ]; then
-        missing_files+=("dashboard/Dockerfile or dashboard/Dockerfile.dev")
+    if [ ! -f "${PROJECT_ROOT}/src/dashboard/Dockerfile" ] && [ ! -f "${PROJECT_ROOT}/src/dashboard/Dockerfile.dev" ]; then
+        missing_files+=("src/dashboard/Dockerfile or src/dashboard/Dockerfile.dev")
     fi
     
-    if [ ! -f "${PROJECT_ROOT}/execution-engine/Dockerfile" ]; then
-        missing_files+=("execution-engine/Dockerfile")
+    if [ ! -f "${PROJECT_ROOT}/src/execution-engine/Dockerfile" ]; then
+        missing_files+=("src/execution-engine/Dockerfile")
     fi
     
     # Check if we're in a git repository
@@ -290,14 +290,14 @@ main() {
     local build_failed=false
     
     # Build Dashboard
-    if [ -f "dashboard/Dockerfile" ]; then
-        build_service "dashboard" "./dashboard" "./dashboard/Dockerfile" || build_failed=true
-    elif [ -f "dashboard/Dockerfile.dev" ]; then
-        build_service "dashboard" "./dashboard" "./dashboard/Dockerfile.dev" || build_failed=true
+    if [ -f "src/dashboard/Dockerfile" ]; then
+        build_service "dashboard" "./dashboard" "./src/dashboard/Dockerfile" || build_failed=true
+    elif [ -f "src/dashboard/Dockerfile.dev" ]; then
+        build_service "dashboard" "./dashboard" "./src/dashboard/Dockerfile.dev" || build_failed=true
     fi
     
     # Build Execution Engine
-    build_service "execution-engine" "./execution-engine" "./execution-engine/Dockerfile" || build_failed=true
+    build_service "execution-engine" "./execution-engine" "./src/execution-engine/Dockerfile" || build_failed=true
     
     # Check if any builds failed
     if [ "${build_failed}" = true ]; then
