@@ -1,0 +1,105 @@
+# Prometheus configuration for Trading Management System
+# This configuration defines scrape targets for all trading system components
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    system: 'trading-management-system'
+    environment: 'development'
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Circuit Breaker Agent
+  - job_name: 'circuit-breaker-agent'
+    static_configs:
+      - targets: ['circuit-breaker:8000']
+    metrics_path: /metrics
+    scrape_interval: 5s  # High frequency for critical safety system
+    scrape_timeout: 3s
+
+  # Market Analysis Agent
+  - job_name: 'market-analysis-agent'
+    static_configs:
+      - targets: ['market-analysis:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Risk Management Agent (ARIA)
+  - job_name: 'risk-management-agent'
+    static_configs:
+      - targets: ['risk-management:8000']
+    metrics_path: /metrics
+    scrape_interval: 5s  # High frequency for risk monitoring
+
+  # Personality Engine Agent
+  - job_name: 'personality-engine-agent'
+    static_configs:
+      - targets: ['personality-engine:8000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Learning Agent
+  - job_name: 'learning-agent'
+    static_configs:
+      - targets: ['learning:8000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Execution Engine (Rust)
+  - job_name: 'execution-engine'
+    static_configs:
+      - targets: ['execution-engine:8001']
+    metrics_path: /metrics
+    scrape_interval: 1s  # Ultra-high frequency for execution monitoring
+    scrape_timeout: 500ms
+
+  # Dashboard API
+  - job_name: 'dashboard-api'
+    static_configs:
+      - targets: ['dashboard:3000']
+    metrics_path: /api/metrics
+    scrape_interval: 10s
+
+  # Infrastructure components
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:9187']  # postgres_exporter
+    scrape_interval: 15s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:9121']  # redis_exporter
+    scrape_interval: 15s
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9308']  # kafka_exporter
+    scrape_interval: 10s
+
+  # Node exporter for system metrics (if deployed)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 15s
+
+# Remote write configuration for long-term storage (optional)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint"
+#     queue_config:
+#       max_samples_per_send: 1000
+#       max_shards: 200
+#       capacity: 2500

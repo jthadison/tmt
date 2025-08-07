@@ -14,10 +14,11 @@ from uuid import uuid4
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import structlog
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 # Import agent modules
 from .config import config
@@ -38,6 +39,26 @@ except ImportError:
     # Fallback if shared module not available yet
     HealthChecker = None
     setup_health_endpoint = lambda app, checker: None
+
+# Import monitoring utilities
+try:
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'shared', 'python-utils'))
+    
+    from monitoring import configure_tracing, configure_metrics, get_registry
+    from monitoring.middleware import CorrelationIDMiddleware, trace_circuit_breaker_operation
+    from monitoring.config import ServiceConfigs
+    
+    MONITORING_AVAILABLE = True
+except ImportError as e:
+    logger.warning("Monitoring utilities not available", error=str(e))
+    MONITORING_AVAILABLE = False
+    configure_tracing = lambda *args, **kwargs: None
+    configure_metrics = lambda *args, **kwargs: None
+    get_registry = lambda: None
+    CorrelationIDMiddleware = None
+    trace_circuit_breaker_operation = lambda *args, **kwargs: lambda f: f
 
 logger = structlog.get_logger(__name__)
 
@@ -96,6 +117,29 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Circuit Breaker Agent", version=config.version)
     
     try:
+        # Initialize observability stack
+        if MONITORING_AVAILABLE:
+            observability_config = ServiceConfigs.circuit_breaker_agent()
+            
+            # Configure tracing
+            configure_tracing(
+                service_name="circuit-breaker-agent",
+                service_version=config.version,
+                environment=observability_config.tracing.environment.value,
+                sampling_rate=observability_config.tracing.sampling_rate,
+                jaeger_endpoint=observability_config.tracing.jaeger_endpoint
+            )
+            
+            # Configure metrics
+            configure_metrics(
+                service_name="circuit-breaker-agent", 
+                service_version=config.version,
+                environment=observability_config.metrics.environment.value,
+                metrics_port=config.metrics_port if hasattr(config, 'metrics_port') else 8000
+            )
+            
+            logger.info("Observability stack initialized successfully")
+        
         # Initialize components
         breaker_manager = CircuitBreakerManager()
         emergency_stop_manager = EmergencyStopManager(breaker_manager)
@@ -173,6 +217,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add correlation ID middleware for distributed tracing
+if MONITORING_AVAILABLE and CorrelationIDMiddleware:
+    app.add_middleware(CorrelationIDMiddleware)
+
 if config.is_production:
     app.add_middleware(
         TrustedHostMiddleware,
@@ -229,6 +277,17 @@ def get_correlation_id() -> str:
 
 # REST API Endpoints
 
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Prometheus metrics endpoint"""
+    if MONITORING_AVAILABLE and get_registry():
+        return Response(
+            generate_latest(get_registry()),
+            media_type=CONTENT_TYPE_LATEST
+        )
+    else:
+        return Response("# Metrics not available\n", media_type="text/plain")
+
 @app.get("/api/v1/breaker/status", response_model=StandardAPIResponse)
 async def get_breaker_status():
     """Get current circuit breaker status for all levels"""
@@ -283,6 +342,7 @@ async def get_breaker_status():
 
 
 @app.post("/api/v1/breaker/trigger", response_model=StandardAPIResponse)
+@trace_circuit_breaker_operation("manual_trigger", "api_request")
 async def trigger_emergency_stop(
     request: EmergencyStopRequest,
     background_tasks: BackgroundTasks
