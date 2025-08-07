@@ -1,0 +1,17 @@
+# Circuit Breaker Agent Dependencies
+# Inherits from parent agents requirements with additional specific dependencies
+
+# Additional performance monitoring
+psutil>=5.9.8,<6.0.0
+
+# Enhanced WebSocket support for real-time monitoring
+websockets>=12.0,<13.0
+
+# Time-based calculations for circuit breaker logic
+python-dateutil>=2.8.2,<3.0.0
+
+# For mathematical calculations in risk management
+numpy>=1.26.3,<2.0.0
+
+# Enhanced async support
+asyncio-throttle>=1.0.2,<2.0.0
