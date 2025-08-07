@@ -6,11 +6,14 @@ including correlation ID propagation, custom spans for critical trading operatio
 and configurable sampling for performance optimization.
 """
 
+import logging
 import os
+import re
 import uuid
 from contextlib import contextmanager
 from typing import Optional, Dict, Any, Iterator
 from contextvars import ContextVar
+from urllib.parse import urlparse
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -62,14 +65,33 @@ def _validate_endpoint_url(endpoint: str, endpoint_type: str) -> bool:
     if parsed.scheme and parsed.scheme not in ['http', 'https']:
         raise ValueError(f"Invalid {endpoint_type} endpoint scheme: only http/https allowed")
     
-    # Validate hostname (prevent localhost bypass attempts and malicious hosts)
+    # Validate hostname with strict security checks
     if parsed.hostname:
         hostname = parsed.hostname.lower()
-        # Allow localhost, container names, and valid hostnames
-        if not (hostname in ['localhost', '127.0.0.1', '::1'] or 
-                hostname.replace('-', '').replace('.', '').isalnum() or
-                hostname.endswith('.local')):
-            raise ValueError(f"Invalid {endpoint_type} endpoint hostname: {hostname}")
+        
+        # Allow localhost and local development
+        if hostname in ['localhost', '127.0.0.1', '::1']:
+            pass
+        # Allow .local domain for development
+        elif hostname.endswith('.local'):
+            # Validate .local domain format
+            if not re.match(r'^[a-z0-9][a-z0-9\-]{0,62}\.local$', hostname):
+                raise ValueError(f"Invalid .local domain format: {hostname}")
+        # Allow container service names (alphanumeric + hyphens, no dots except for FQDN)
+        elif '.' not in hostname:
+            # Simple service names (e.g., "jaeger", "prometheus")
+            if not re.match(r'^[a-z0-9][a-z0-9\-]{0,62}$', hostname):
+                raise ValueError(f"Invalid service name format: {hostname}")
+        else:
+            # For FQDN, use strict validation (production hostnames)
+            # Only allow alphanumeric, hyphens, and dots in proper positions
+            if not re.match(r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*$', hostname):
+                raise ValueError(f"Invalid hostname format: {hostname}")
+            # Prevent suspicious patterns that could indicate security issues
+            if '..' in hostname or hostname.startswith('-') or hostname.endswith('-'):
+                raise ValueError(f"Invalid hostname pattern: {hostname}")
+    else:
+        raise ValueError(f"Missing hostname in {endpoint_type} endpoint")
     
     # Validate port range
     if parsed.port and (parsed.port < 1 or parsed.port > 65535):
@@ -202,9 +224,14 @@ class TradingTracerProvider:
             # Kafka instrumentation for message processing
             KafkaInstrumentor().instrument()
             
+        except ImportError as e:
+            # Expected when some libraries are not available
+            logging.info(f"Some instrumentation libraries not available: {e}")
         except Exception as e:
-            # Log error but don't fail initialization
-            print(f"Warning: Auto-instrumentation failed for some libraries: {e}")
+            # Unexpected errors should be logged as warnings
+            logging.warning(f"Auto-instrumentation failed unexpectedly: {e}")
+            # In production, we might want to track this metric
+            # self._instrumentation_failures += 1
     
     def get_tracer(self, name: str = TRADING_TRACER_NAME) -> trace.Tracer:
         """Get a tracer instance."""

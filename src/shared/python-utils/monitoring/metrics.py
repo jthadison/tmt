@@ -6,6 +6,7 @@ business metrics, infrastructure metrics, and custom metrics for circuit breaker
 activations and message latency.
 """
 
+import logging
 import os
 import time
 import threading
@@ -110,8 +111,10 @@ class TradingMetricsRegistry:
             try:
                 start_http_server(metrics_port, registry=self.registry)
                 self._http_server_port = metrics_port
+            except OSError as e:
+                logging.warning(f"Failed to start metrics HTTP server on port {metrics_port} (port may be in use): {e}")
             except Exception as e:
-                print(f"Warning: Failed to start metrics HTTP server on port {metrics_port}: {e}")
+                logging.error(f"Unexpected error starting metrics HTTP server: {e}")
             
             # Start automatic infrastructure metrics collection
             if enable_auto_metrics:
@@ -321,8 +324,11 @@ class TradingMetricsRegistry:
             while not self._shutdown_event.wait(interval):
                 try:
                     self._collect_system_metrics()
+                except (OSError, PermissionError) as e:
+                    logging.warning(f"Permission or OS error collecting system metrics: {e}")
                 except Exception as e:
-                    print(f"Error collecting system metrics: {e}")
+                    logging.error(f"Unexpected error collecting system metrics: {e}")
+                    # In production, consider implementing circuit breaker for metrics collection
         
         self._metrics_thread = threading.Thread(target=collect_metrics, daemon=True)
         self._metrics_thread.start()
@@ -372,7 +378,7 @@ class TradingMetricsRegistry:
                 # Use timeout to prevent hanging during shutdown
                 self._metrics_thread.join(timeout=5.0)
                 if self._metrics_thread.is_alive():
-                    print("Warning: Metrics collection thread did not shutdown gracefully")
+                    logging.warning("Metrics collection thread did not shutdown gracefully")
                 self._metrics_thread = None
             self._shutdown_event.clear()
     
