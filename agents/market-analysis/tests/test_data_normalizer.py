@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from agents.market_analysis.app.market_data.data_normalizer import (
+from app.market_data.data_normalizer import (
     DataNormalizer,
     MarketTick
 )

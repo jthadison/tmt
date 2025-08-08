@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.market_analysis.app.market_data.data_normalizer import MarketTick
+from app.market_data.data_normalizer import MarketTick
 
 
 @pytest.fixture(scope="session")

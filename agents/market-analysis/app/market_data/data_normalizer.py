@@ -53,7 +53,12 @@ class MarketTick:
             raise ValueError("Timestamp must be datetime object")
             
         # Check if timestamp is reasonable (not too far in past/future)
-        now = datetime.now()
+        # Handle timezone-aware vs timezone-naive comparison
+        if self.timestamp.tzinfo is not None:
+            now = datetime.now(self.timestamp.tzinfo)
+        else:
+            now = datetime.now()
+            
         if self.timestamp.year < 2000 or self.timestamp > now:
             logger.warning(f"Unusual timestamp {self.timestamp} for {self.symbol}")
             

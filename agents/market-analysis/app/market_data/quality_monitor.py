@@ -10,7 +10,7 @@ from enum import Enum
 
 import numpy as np
 
-from agents.market_analysis.app.market_data.data_normalizer import MarketTick
+from .data_normalizer import MarketTick
 
 logger = logging.getLogger(__name__)
 

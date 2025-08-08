@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from asyncpg import Pool, Connection
 
-from agents.market_analysis.app.market_data.data_normalizer import MarketTick
+from ..market_data.data_normalizer import MarketTick
 
 logger = logging.getLogger(__name__)
 

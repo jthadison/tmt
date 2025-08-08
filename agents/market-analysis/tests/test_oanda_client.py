@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from agents.market_analysis.app.market_data.oanda_client import OANDAClient, FOREX_PAIRS
+from app.market_data.oanda_client import OANDAClient, FOREX_PAIRS
 
 
 @pytest.fixture

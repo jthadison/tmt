@@ -9,7 +9,7 @@ import aiohttp
 import pytest
 import websockets
 
-from agents.market_analysis.app.market_data.polygon_client import (
+from app.market_data.polygon_client import (
     PolygonClient,
     MAJOR_INDICES
 )
