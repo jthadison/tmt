@@ -8,7 +8,8 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
+from datetime import datetime
 import uvicorn
 
 from .models import (
@@ -17,7 +18,7 @@ from .models import (
 )
 from .rules_engine import RulesEngine, ComplianceMonitor
 from .prop_firm_configs import PropFirm, get_all_prop_firms
-from ...shared.health import HealthChecker
+from ..shared.health import HealthChecker
 from .config import get_settings
 
 
@@ -56,7 +57,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["http://localhost:3000", "http://localhost:8080"],  # Restrict origins for security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +77,38 @@ def get_compliance_monitor() -> ComplianceMonitor:
 def get_health_checker() -> HealthChecker:
     """Get health checker dependency"""
     return app.state.health_checker
+
+
+async def _get_account_from_database(account_id: str) -> Optional[TradingAccount]:
+    """
+    Mock function to simulate database account lookup
+    TODO: Replace with actual database implementation
+    """
+    # Mock account data - in production this would be a database query
+    mock_accounts = {
+        "test_account_1": TradingAccount(
+            account_id=account_id,
+            prop_firm=PropFirm.DNA_FUNDED,
+            account_phase="funded",
+            initial_balance=50000,
+            current_balance=51000,
+            platform="tradelocker",
+            status="compliant",
+            created_at=datetime.utcnow()
+        ),
+        "funding_pips_account": TradingAccount(
+            account_id=account_id,
+            prop_firm=PropFirm.FUNDING_PIPS,
+            account_phase="funded",
+            initial_balance=25000,
+            current_balance=25500,
+            platform="dxtrade",
+            status="compliant",
+            created_at=datetime.utcnow()
+        )
+    }
+    
+    return mock_accounts.get(account_id)
 
 
 @app.get("/")
@@ -108,17 +141,11 @@ async def validate_trade(
     detailed validation results.
     """
     try:
+        # TODO: Replace with actual database lookup
         # In a real implementation, we would fetch the account from database
-        # For now, create a mock account based on request
-        account = TradingAccount(
-            account_id=request.account_id,
-            prop_firm=PropFirm.DNA_FUNDED,  # Would be fetched from database
-            account_phase="funded",
-            initial_balance=50000,  # Would be fetched from database
-            current_balance=51000,  # Would be fetched from database
-            platform="tradelocker",
-            status="compliant"
-        )
+        account = await _get_account_from_database(request.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail=f"Account {request.account_id} not found")
         
         result = await rules_engine.validate_trade(
             account=account,

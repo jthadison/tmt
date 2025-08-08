@@ -76,7 +76,9 @@ class RulesEngine:
             
             # Determine overall compliance status
             if violations:
-                if any(v in [ViolationType.DAILY_LOSS_EXCEEDED, ViolationType.MAX_DRAWDOWN_EXCEEDED] for v in violations):
+                # Critical violations result in suspension
+                critical_violations = {ViolationType.DAILY_LOSS_EXCEEDED, ViolationType.MAX_DRAWDOWN_EXCEEDED}
+                if any(v in critical_violations for v in violations):
                     status = ComplianceStatus.SUSPENDED
                 else:
                     status = ComplianceStatus.VIOLATION
@@ -124,7 +126,9 @@ class RulesEngine:
         daily_limit = account.initial_balance * config.daily_loss_limit_pct
         
         # Calculate potential P&L impact (simplified - would need real price data)
-        potential_loss = abs(trade_order.quantity) * Decimal("50")  # Estimated risk
+        # This should use real market data for actual price impact calculation
+        estimated_risk_per_lot = Decimal("50")  # Configurable risk estimate per lot
+        potential_loss = abs(trade_order.quantity) * estimated_risk_per_lot
         projected_daily_pnl = account.daily_pnl - potential_loss
         
         details.update({
@@ -140,6 +144,84 @@ class RulesEngine:
             warnings.append(f"Trade may exceed daily loss limit")
         elif account.daily_pnl <= -daily_limit * Decimal("0.8"):
             warnings.append(f"Approaching daily loss limit (80% used)")
+
+
+class ComplianceMonitor:
+    """Real-time compliance monitoring for account P&L and risk management"""
+    
+    def __init__(self, rules_engine: RulesEngine):
+        self.rules_engine = rules_engine
+        self.logger = logger
+    
+    async def update_account_pnl(
+        self, 
+        account: TradingAccount, 
+        realized_pnl: float, 
+        unrealized_pnl: float
+    ) -> bool:
+        """
+        Update account P&L and check compliance
+        
+        Returns:
+            bool: True if account remains compliant, False if violations occurred
+        """
+        try:
+            # Update account P&L
+            account.daily_pnl += Decimal(str(realized_pnl))
+            total_pnl = Decimal(str(realized_pnl)) + Decimal(str(unrealized_pnl))
+            account.current_balance = account.initial_balance + total_pnl
+            
+            # Calculate current drawdown
+            if account.current_balance < account.initial_balance:
+                account.total_drawdown = account.initial_balance - account.current_balance
+                account.max_drawdown_reached = max(account.max_drawdown_reached, account.total_drawdown)
+            
+            # Check compliance status
+            config = get_prop_firm_config(account.prop_firm)
+            daily_limit = account.initial_balance * config.daily_loss_limit_pct
+            max_drawdown_limit = account.initial_balance * config.max_drawdown_pct
+            
+            # Check violations
+            violations = []
+            if account.daily_pnl <= -daily_limit:
+                violations.append("Daily loss limit exceeded")
+                account.status = ComplianceStatus.SUSPENDED
+            elif account.total_drawdown >= max_drawdown_limit:
+                violations.append("Maximum drawdown exceeded")
+                account.status = ComplianceStatus.SUSPENDED
+            elif account.daily_pnl <= -daily_limit * Decimal("0.9"):
+                account.status = ComplianceStatus.WARNING
+            else:
+                account.status = ComplianceStatus.COMPLIANT
+            
+            # Log violations
+            if violations:
+                self.logger.warning(f"Account {account.account_id} violations: {violations}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error updating P&L for account {account.account_id}: {e}")
+            return False
+    
+    async def reset_daily_pnl(self, account: TradingAccount):
+        """Reset daily P&L tracking at market close"""
+        try:
+            account.daily_pnl = Decimal("0.0")
+            account.trading_days_completed += 1
+            account.last_reset_date = datetime.utcnow()
+            account.total_positions_today = 0
+            
+            # Reset status if only in warning state
+            if account.status == ComplianceStatus.WARNING:
+                account.status = ComplianceStatus.COMPLIANT
+            
+            self.logger.info(f"Daily reset completed for account {account.account_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error resetting daily P&L for account {account.account_id}: {e}")
+            raise
     
     async def _validate_max_drawdown(
         self,
