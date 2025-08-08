@@ -7,6 +7,7 @@ Verifies all acceptance criteria and requirements are met.
 import asyncio
 import sys
 import os
+import random
 from pathlib import Path
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -20,7 +21,7 @@ try:
     from sqlalchemy.orm import sessionmaker
     
     from app.models import (
-        Base, TradePerformance, PeriodType, TradeStatus,
+        Base, TradePerformance, PerformanceSnapshot, PeriodType, TradeStatus,
         ExportRequest, PerformanceMetricsData
     )
     from app.pnl_tracker import PnLCalculationEngine, RealTimePnLTracker
@@ -130,6 +131,36 @@ async def setup_test_database():
                 status=TradeStatus.CLOSED.value
             )
             db.add(trade)
+        
+        # Create performance snapshots for equity curve (needed for Sharpe ratio)
+        starting_balance = Decimal('10000.0')
+        current_equity = starting_balance
+        
+        for day in range(30):  # 30 days of snapshots
+            snapshot_time = base_time + timedelta(days=day)
+            
+            # Simulate daily equity changes based on performance
+            if i == 0:  # Good performer
+                daily_change = Decimal(str(random.uniform(-20, 50)))
+            elif i == 1:  # Average performer  
+                daily_change = Decimal(str(random.uniform(-30, 30)))
+            else:  # Poor performer
+                daily_change = Decimal(str(random.uniform(-50, 20)))
+                
+            current_equity += daily_change
+            current_equity = max(current_equity, Decimal('5000'))  # Prevent going too low
+            
+            snapshot = PerformanceSnapshot(
+                account_id=account_id,
+                snapshot_time=snapshot_time,
+                balance=current_equity,
+                equity=current_equity,
+                margin_used=Decimal('500.0'),
+                free_margin=current_equity - Decimal('500.0'),
+                open_positions=random.randint(0, 3),
+                daily_pnl=daily_change
+            )
+            db.add(snapshot)
     
     db.commit()
     return db, account_ids
@@ -190,10 +221,10 @@ async def validate_pnl_tracking(db, account_id, results: ValidationResults):
         current_price = Decimal("1.1050")  # 50 pip profit
         unrealized_pnl = engine.calculate_unrealized_pnl(position, current_price)
         
-        if unrealized_pnl == Decimal("50.0"):
+        if unrealized_pnl == Decimal("500.0"):  # 1.0 lot * 50 pips * $10/pip = $500
             results.pass_test("AC1: Unrealized P&L calculation")
         else:
-            results.fail_test("AC1: Unrealized P&L calculation", f"Expected 50.0, got {unrealized_pnl}")
+            results.fail_test("AC1: Unrealized P&L calculation", f"Expected 500.0, got {unrealized_pnl}")
         
         # Test realized P&L calculation
         trade = db.query(TradePerformance).filter(
@@ -207,9 +238,15 @@ async def validate_pnl_tracking(db, account_id, results: ValidationResults):
             else:
                 results.fail_test("AC1: Realized P&L calculation", "Failed to calculate realized P&L")
         
-        # Test PnL tracker integration
-        market_feed = SimulatedMarketDataFeed()
-        tracker = RealTimePnLTracker(db, market_feed)
+        # Test PnL tracker integration  
+        from app.market_data import MarketDataConfig, SimulatedMarketDataFeed
+        config = MarketDataConfig(
+            feed_type='simulation',
+            symbols=['EURUSD', 'GBPUSD'],
+            update_frequency=1.0
+        )
+        market_feed = SimulatedMarketDataFeed(config)
+        tracker = RealTimePnLTracker(db)
         
         # This would test the full integration but requires async setup
         results.pass_test("AC1: P&L tracking system integration")

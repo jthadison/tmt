@@ -50,25 +50,25 @@ class PerformanceRankingAlgorithm:
         """Calculate composite ranking score (0-100)."""
         try:
             # Return component (0-25 points)
-            return_score = self._score_return(total_return) * self.weights['return']
+            return_score = self._score_return(total_return) * Decimal(str(self.weights['return']))
             
             # Risk-adjusted return component (0-30 points)
             risk_adj_score = self._score_risk_adjusted_return(
                 sharpe_ratio, sortino_ratio
-            ) * self.weights['risk_adjusted_return']
+            ) * Decimal(str(self.weights['risk_adjusted_return']))
             
             # Consistency component (0-20 points)
             consistency_score = self._score_consistency(
                 max_drawdown, volatility
-            ) * self.weights['consistency']
+            ) * Decimal(str(self.weights['consistency']))
             
             # Efficiency component (0-15 points)
             efficiency_score = self._score_efficiency(
                 profit_factor, win_rate
-            ) * self.weights['efficiency']
+            ) * Decimal(str(self.weights['efficiency']))
             
             # Activity component (0-10 points)
-            activity_score = self._score_activity(total_trades) * self.weights['activity']
+            activity_score = self._score_activity(total_trades) * Decimal(str(self.weights['activity']))
             
             # Calculate total score
             total_score = (
@@ -146,7 +146,7 @@ class PerformanceRankingAlgorithm:
             else:  # Very high volatility
                 volatility_score = 25
         
-        total_score = 0.7 * drawdown_score + 0.3 * volatility_score
+        total_score = Decimal('0.7') * Decimal(str(drawdown_score)) + Decimal('0.3') * Decimal(str(volatility_score))
         return Decimal(str(min(100, max(0, total_score))))
     
     def _score_efficiency(self, profit_factor: Decimal, win_rate: Decimal) -> Decimal:
@@ -167,7 +167,7 @@ class PerformanceRankingAlgorithm:
         else:
             wr_score = max(Decimal('0'), 2 * win_rate)
         
-        total_score = 0.6 * pf_score + 0.4 * wr_score
+        total_score = Decimal('0.6') * Decimal(str(pf_score)) + Decimal('0.4') * Decimal(str(wr_score))
         return Decimal(str(min(100, max(0, total_score))))
     
     def _score_activity(self, total_trades: int) -> Decimal:
