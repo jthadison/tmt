@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-01-08",
+  "prop_firm": "Funding Pips",
+  "enabled": true,
+  "feature_flags": {
+    "enforce_daily_loss": true,
+    "enforce_max_drawdown": true,
+    "enforce_stop_loss": true,
+    "enforce_weekend_closure": true,
+    "enforce_min_hold_time": true,
+    "test_mode": false
+  },
+  "risk_management": {
+    "daily_loss_limit": 0.04,
+    "daily_loss_warning_levels": [0.032, 0.036, 0.038],
+    "max_drawdown": 0.08,
+    "max_drawdown_type": "static",
+    "max_risk_per_trade": 0.02,
+    "emergency_stop_buffer": 0.001
+  },
+  "position_management": {
+    "mandatory_stop_loss": true,
+    "min_hold_time_seconds": 60,
+    "weekend_closure_required": true,
+    "weekend_closure_time": "16:50",
+    "weekend_closure_timezone": "America/New_York",
+    "weekend_closure_grace_period_minutes": 5,
+    "partial_fill_handling": "close_all"
+  },
+  "trading_restrictions": {
+    "news_trading": "allowed_with_monitoring",
+    "max_leverage": {
+      "forex": 30,
+      "indices": 20,
+      "commodities": 10,
+      "crypto": 5
+    },
+    "prohibited_strategies": [
+      "copy_trading",
+      "tick_scalping",
+      "latency_arbitrage",
+      "high_frequency_trading",
+      "martingale"
+    ],
+    "allowed_instruments": {
+      "forex": ["majors", "minors", "exotics"],
+      "indices": ["US", "EU", "ASIA"],
+      "commodities": ["gold", "silver", "oil"],
+      "crypto": ["BTC", "ETH"]
+    }
+  },
+  "account_management": {
+    "profit_split": 0.85,
+    "first_payout_days": 14,
+    "payout_frequency": "weekly",
+    "min_trading_days": 3,
+    "evaluation_profit_target": 0.08,
+    "evaluation_max_days": 30,
+    "scaling_available": true,
+    "scaling_increment": 0.25
+  },
+  "monitoring": {
+    "update_frequency_ms": 100,
+    "alert_channels": ["dashboard", "email", "webhook"],
+    "log_level": "INFO",
+    "audit_retention_days": 2555
+  },
+  "enforcement_priority": [
+    "max_drawdown",
+    "daily_loss_limit",
+    "mandatory_stop_loss",
+    "min_hold_time",
+    "weekend_closure"
+  ]
+}
