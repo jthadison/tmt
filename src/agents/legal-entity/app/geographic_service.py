@@ -3,6 +3,7 @@
 import ipaddress
 from datetime import datetime, time
 from typing import Dict, List, Optional, Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session

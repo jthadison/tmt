@@ -265,14 +265,16 @@ class EntityManager:
         
         previous_hash = previous_log.signature if previous_log else "genesis"
         
-        # Create log entry
+        # Create log entry with explicit timestamp
+        current_time = datetime.utcnow()
         log_entry = EntityAuditLog(
             entity_id=entity_id,
             account_id=account_id,
             action_type=action_type.value,
             action_details=action_details,
             decision_rationale=decision_rationale,
-            previous_hash=previous_hash
+            previous_hash=previous_hash,
+            created_at=current_time
         )
         
         # Generate cryptographic signature
@@ -280,7 +282,7 @@ class EntityManager:
             "entity_id": str(entity_id),
             "action_type": action_type.value,
             "action_details": action_details,
-            "timestamp": log_entry.created_at.isoformat(),
+            "timestamp": current_time.isoformat(),
             "previous_hash": previous_hash
         }
         

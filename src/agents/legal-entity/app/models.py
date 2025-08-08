@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, IPvAnyAddress
 from sqlalchemy import Column, String, DateTime, Date, Text, JSON, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, INET
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -58,8 +58,8 @@ class LegalEntity(Base):
     status = Column(String(20), default=EntityStatus.ACTIVE.value)
     tos_accepted_version = Column(String(20))
     tos_accepted_date = Column(DateTime(timezone=True))
-    tos_accepted_ip = Column(INET)
-    metadata = Column(JSON, default={})
+    tos_accepted_ip = Column(String(45))  # Support both IPv4 and IPv6
+    entity_metadata = Column(JSON, default={})
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -129,7 +129,7 @@ class ToSAcceptance(Base):
     entity_id = Column(PGUUID(as_uuid=True), ForeignKey('legal_entities.entity_id'), nullable=False)
     version = Column(String(20), nullable=False)
     accepted_date = Column(DateTime(timezone=True), nullable=False)
-    ip_address = Column(INET, nullable=False)
+    ip_address = Column(String(45), nullable=False)  # Support both IPv4 and IPv6
     user_agent = Column(Text)
     device_fingerprint = Column(String(256))
     acceptance_method = Column(String(50))
