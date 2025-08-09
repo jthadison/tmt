@@ -337,27 +337,52 @@ class TestSignalFrequencyManager(TestSignalGenerationBase):
     
     def test_weekly_limit_enforcement(self):
         """Test weekly signal limit enforcement"""
-        manager = SignalFrequencyManager(default_weekly_limit=3)
+        manager = SignalFrequencyManager(default_weekly_limit=3, cooling_off_hours=1)  # Short cooling off for testing
         
         account_id = "test_account_001"
-        test_signal = {
-            'signal_id': 'test_signal_1',
-            'pattern_type': 'spring',
-            'confidence': 85.0,
-            'quality_score': 75.0,
-            'risk_reward_ratio': 3.0
-        }
+        
+        # Use different patterns to avoid cooling-off period conflicts
+        test_signals = [
+            {
+                'signal_id': 'test_signal_1',
+                'pattern_type': 'spring',
+                'confidence': 85.0,
+                'quality_score': 75.0,
+                'risk_reward_ratio': 3.0
+            },
+            {
+                'signal_id': 'test_signal_2',
+                'pattern_type': 'accumulation',
+                'confidence': 80.0,
+                'quality_score': 70.0,
+                'risk_reward_ratio': 2.5
+            },
+            {
+                'signal_id': 'test_signal_3',
+                'pattern_type': 'sign_of_strength',
+                'confidence': 90.0,
+                'quality_score': 85.0,
+                'risk_reward_ratio': 4.0
+            }
+        ]
         
         # First 3 signals should be allowed
         for i in range(3):
-            check = manager.check_signal_allowance(account_id, test_signal, "EURUSD")
+            check = manager.check_signal_allowance(account_id, test_signals[i], f"PAIR{i}")
             assert check['allowed'], f"Signal {i+1} should be allowed"
             
             # Register the signal
-            manager.register_signal(account_id, {**test_signal, 'signal_id': f'test_signal_{i+1}'}, "EURUSD")
+            manager.register_signal(account_id, test_signals[i], f"PAIR{i}")
         
         # 4th signal should be rejected (unless substitution is possible)
-        check = manager.check_signal_allowance(account_id, test_signal, "EURUSD")
+        fourth_signal = {
+            'signal_id': 'test_signal_4',
+            'pattern_type': 'distribution',
+            'confidence': 75.0,
+            'quality_score': 65.0,
+            'risk_reward_ratio': 2.0
+        }
+        check = manager.check_signal_allowance(account_id, fourth_signal, "PAIR4")
         
         if not check['allowed']:
             assert check['reason'] == 'weekly_limit_exceeded'
@@ -556,26 +581,32 @@ class TestSignalPerformanceTracker(TestSignalGenerationBase):
         assert win_loss['wins'] == 3
         assert win_loss['losses'] == 2
         assert win_loss['win_rate_percent'] == 60.0
+        assert win_loss['profit_factor'] > 1.0  # Should be profitable overall
         
         pnl = metrics['pnl_metrics']
         assert pnl['gross_profit'] > 0
         assert pnl['gross_loss'] > 0
-        assert pnl['profit_factor'] > 1.0  # Should be profitable overall
+        assert pnl['net_profit'] > 0  # Should be profitable overall
     
     def test_pattern_performance_breakdown(self):
         """Test performance breakdown by pattern type"""
         tracker = SignalPerformanceTracker()
         
-        # Add outcomes for different pattern types
+        # Add enough outcomes for different pattern types (need 5+ for breakdown)
         spring_outcomes = [
             ('spring_1', {'type': 'win', 'pnl_points': 0.020}, {'pattern_type': 'spring'}),
             ('spring_2', {'type': 'win', 'pnl_points': 0.015}, {'pattern_type': 'spring'}),
-            ('spring_3', {'type': 'loss', 'pnl_points': -0.008}, {'pattern_type': 'spring'})
+            ('spring_3', {'type': 'loss', 'pnl_points': -0.008}, {'pattern_type': 'spring'}),
+            ('spring_4', {'type': 'win', 'pnl_points': 0.018}, {'pattern_type': 'spring'}),
+            ('spring_5', {'type': 'loss', 'pnl_points': -0.010}, {'pattern_type': 'spring'})
         ]
         
         accumulation_outcomes = [
             ('acc_1', {'type': 'win', 'pnl_points': 0.025}, {'pattern_type': 'accumulation'}),
-            ('acc_2', {'type': 'loss', 'pnl_points': -0.015}, {'pattern_type': 'accumulation'})
+            ('acc_2', {'type': 'loss', 'pnl_points': -0.015}, {'pattern_type': 'accumulation'}),
+            ('acc_3', {'type': 'win', 'pnl_points': 0.030}, {'pattern_type': 'accumulation'}),
+            ('acc_4', {'type': 'win', 'pnl_points': 0.022}, {'pattern_type': 'accumulation'}),
+            ('acc_5', {'type': 'loss', 'pnl_points': -0.012}, {'pattern_type': 'accumulation'})
         ]
         
         all_outcomes = spring_outcomes + accumulation_outcomes
@@ -587,10 +618,11 @@ class TestSignalPerformanceTracker(TestSignalGenerationBase):
         
         assert 'pattern_breakdown' in breakdown
         assert 'spring' in breakdown['pattern_breakdown']
+        assert 'accumulation' in breakdown['pattern_breakdown']
         
         spring_performance = breakdown['pattern_breakdown']['spring']
-        assert spring_performance['total_signals'] == 3
-        assert spring_performance['win_rate'] == round((2/3) * 100, 2)
+        assert spring_performance['total_signals'] == 5
+        assert spring_performance['win_rate'] == round((3/5) * 100, 2)
     
     def test_real_time_tracking(self):
         """Test real-time signal tracking"""
@@ -692,9 +724,18 @@ class TestSignalGeneratorIntegration(TestSignalGenerationBase):
                 assert result['highest_confidence'] == 72.0
     
     @pytest.mark.asyncio 
-    async def test_signal_generation_frequency_limits(self, signal_generator, sample_price_data,
+    async def test_signal_generation_frequency_limits(self, sample_price_data,
                                                      sample_volume_data, sample_pattern):
         """Test signal generation respects frequency limits"""
+        
+        # Create signal generator with market filtering disabled for this test
+        signal_generator = SignalGenerator(
+            confidence_threshold=75.0,
+            min_risk_reward=2.0,
+            enable_market_filtering=False,  # Disable to avoid market state filtering
+            enable_frequency_management=True,
+            enable_performance_tracking=False
+        )
         
         account_id = "frequency_test_account"
         

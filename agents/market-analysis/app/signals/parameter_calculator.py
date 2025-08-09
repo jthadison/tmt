@@ -606,6 +606,21 @@ class SignalParameterCalculator:
                 capped_tp1 = entry - (risk * self.max_risk_reward)
             optimized_params['take_profit_1'] = Decimal(str(round(capped_tp1, 5)))
         
+        # Recalculate final risk-reward ratio after optimization
+        final_entry = float(optimized_params['entry_price'])
+        final_stop = float(optimized_params['stop_loss'])
+        final_tp1 = float(optimized_params['take_profit_1'])
+        
+        if optimized_params['signal_type'] == 'long':
+            final_risk = final_entry - final_stop
+            final_reward = final_tp1 - final_entry
+        else:
+            final_risk = final_stop - final_entry
+            final_reward = final_entry - final_tp1
+        
+        final_rr = final_reward / final_risk if final_risk > 0 else 0
+        optimized_params['risk_reward_ratio'] = round(final_rr, 2)
+        
         return optimized_params
     
     def _estimate_timing_parameters(self, pattern: Dict, market_context: Dict) -> Dict:

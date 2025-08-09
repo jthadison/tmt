@@ -389,16 +389,19 @@ class SignalGenerator:
             invalidation_level=pattern.get('invalidation_level', 0)
         )
         
-        # Extract entry confirmation
-        entry_confirmation_data = optimized_params.get('entry_confirmation', {})
-        entry_confirmation = EntryConfirmation(
-            volume_spike_required=entry_confirmation_data.get('volume_spike_required', True),
-            volume_threshold_multiplier=entry_confirmation_data.get('volume_threshold_multiplier', 2.0),
-            momentum_threshold=entry_confirmation_data.get('momentum_threshold', 0.3),
-            timeout_minutes=entry_confirmation_data.get('timeout_minutes', 60),
-            price_confirmation_required=entry_confirmation_data.get('price_confirmation_required', True),
-            min_candle_close_percentage=entry_confirmation_data.get('min_candle_close_percentage', 0.7)
-        )
+        # Extract entry confirmation (already an EntryConfirmation object from parameter calculator)
+        entry_confirmation = optimized_params.get('entry_confirmation')
+        if not isinstance(entry_confirmation, EntryConfirmation):
+            # Fallback if we get a dict instead
+            entry_confirmation_data = entry_confirmation or {}
+            entry_confirmation = EntryConfirmation(
+                volume_spike_required=entry_confirmation_data.get('volume_spike_required', True),
+                volume_threshold_multiplier=entry_confirmation_data.get('volume_threshold_multiplier', 2.0),
+                momentum_threshold=entry_confirmation_data.get('momentum_threshold', 0.3),
+                timeout_minutes=entry_confirmation_data.get('timeout_minutes', 60),
+                price_confirmation_required=entry_confirmation_data.get('price_confirmation_required', True),
+                min_candle_close_percentage=entry_confirmation_data.get('min_candle_close_percentage', 0.7)
+            )
         
         # Extract timing estimates
         timing_estimates = optimized_params.get('timing_estimates', {})

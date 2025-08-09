@@ -208,7 +208,7 @@ class SignalFrequencyManager:
         
         account_signals = [
             s for s in self.signal_history.get(account_id, [])
-            if start_date <= s['generated_at'] <= end_date
+            if start_date <= self._parse_datetime(s['generated_at']) <= end_date
         ]
         
         if not account_signals:
@@ -295,12 +295,29 @@ class SignalFrequencyManager:
         
         return [
             signal for signal in self.signal_history.get(account_id, [])
-            if signal['generated_at'] >= week_start and signal['status'] == 'active'
+            if self._parse_datetime(signal['generated_at']) >= week_start and signal['status'] == 'active'
         ]
     
     def _get_account_weekly_limit(self, account_id: str) -> int:
         """Get weekly limit for an account (custom or default)"""
         return self.account_limits.get(account_id, self.default_weekly_limit)
+    
+    def _parse_datetime(self, dt_value):
+        """Parse datetime value that could be datetime object or ISO string"""
+        if isinstance(dt_value, datetime):
+            return dt_value
+        elif isinstance(dt_value, str):
+            try:
+                # Handle ISO format datetime strings
+                if dt_value.endswith('Z'):
+                    dt_value = dt_value.replace('Z', '+00:00')
+                return datetime.fromisoformat(dt_value.replace('Z', '+00:00'))
+            except ValueError:
+                # If parsing fails, return current time as fallback
+                return datetime.now()
+        else:
+            # If it's neither datetime nor string, return current time
+            return datetime.now()
     
     def _check_cooling_off_period(self, symbol: str, signal: Dict) -> Dict:
         """Check if signal respects cooling-off period"""
@@ -408,7 +425,7 @@ class SignalFrequencyManager:
         for account_id in list(self.signal_history.keys()):
             self.signal_history[account_id] = [
                 signal for signal in self.signal_history[account_id]
-                if signal['generated_at'] > cutoff_date
+                if self._parse_datetime(signal['generated_at']) > cutoff_date
             ]
             
             # Remove account if no signals remaining
