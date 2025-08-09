@@ -13,6 +13,7 @@ use super::{
 };
 use crate::monitoring::metrics::{TRADELOCKER_REQUEST_DURATION, TRADELOCKER_REQUEST_COUNT};
 
+#[derive(Debug)]
 pub struct TradeLockerClient {
     client: Client,
     auth: Arc<TradeLockerAuth>,
@@ -67,7 +68,7 @@ impl TradeLockerClient {
                     let status = response.status();
                     let elapsed = start.elapsed().as_millis() as f64;
                     
-                    TRADELOCKER_REQUEST_DURATION.record(elapsed);
+                    TRADELOCKER_REQUEST_DURATION.observe(elapsed);
                     TRADELOCKER_REQUEST_COUNT.with_label_values(&[
                         &status.as_u16().to_string()
                     ]).inc();
@@ -134,7 +135,7 @@ impl TradeLockerClient {
         let response = self.execute_request::<OrderResponse>(account_id, request).await?;
         let elapsed = start.elapsed().as_millis();
 
-        if elapsed > self.config.order_execution_timeout_ms {
+        if elapsed > self.config.order_execution_timeout_ms as u128 {
             warn!("Order execution took {}ms, exceeding target of {}ms", 
                 elapsed, self.config.order_execution_timeout_ms);
         }

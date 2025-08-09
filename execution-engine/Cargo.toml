@@ -50,14 +50,21 @@ lazy_static = "1.4"
 config = "0.13"
 dotenv = "0.15"
 
-# Kafka
-rdkafka = { version = "0.36", features = ["cmake-build"] }
+# Kafka - made optional to avoid CMake dependency in dev environments  
+rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
 
 [dev-dependencies]
 mockito = "1.2"
 proptest = "1.4"
 criterion = "0.5"
+tokio-test = "0.4"
+wiremock = "0.5"
+pretty_assertions = "1.4"
 
-[[bench]]
-name = "execution_bench"
-harness = false
+[features]
+default = []
+kafka = ["rdkafka"]
+
+# [[bench]]
+# name = "execution_bench"
+# harness = false

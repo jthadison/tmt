@@ -42,6 +42,7 @@ pub enum WebSocketEvent {
     Disconnected,
 }
 
+#[derive(Debug)]
 pub struct TradeLockerWebSocket {
     auth: Arc<TradeLockerAuth>,
     config: TradeLockerConfig,
@@ -259,7 +260,7 @@ impl TradeLockerWebSocket {
 
         // Send subscribe message
         let msg = WebSocketMessage::Subscribe { channels };
-        let json = serde_json::to_string(&msg)?;
+        let _json = serde_json::to_string(&msg)?;
         
         // Note: In production, we'd send this through the write stream
         // For now, we'll assume it's handled by the connection
@@ -279,7 +280,7 @@ impl TradeLockerWebSocket {
 
         // Send unsubscribe message
         let msg = WebSocketMessage::Unsubscribe { channels };
-        let json = serde_json::to_string(&msg)?;
+        let _json = serde_json::to_string(&msg)?;
         
         Ok(())
     }

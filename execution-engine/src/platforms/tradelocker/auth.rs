@@ -43,6 +43,7 @@ struct TokenResponse {
     token_type: String,
 }
 
+#[derive(Debug)]
 pub struct TradeLockerAuth {
     credentials: Arc<RwLock<Vec<TradeLockerCredentials>>>,
     tokens: Arc<RwLock<Vec<(String, AuthToken)>>>,  // (account_id, token)

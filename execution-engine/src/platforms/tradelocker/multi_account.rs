@@ -68,7 +68,7 @@ impl MultiAccountManager {
         drop(sessions);
 
         // Authenticate and create new session
-        let token = self.auth.authenticate(account_id).await?;
+        let _token = self.auth.authenticate(account_id).await?;
 
         // Create client
         let client = Arc::new(TradeLockerClient::new(
@@ -128,7 +128,7 @@ impl MultiAccountManager {
     pub async fn close_session(&self, account_id: &str) -> Result<()> {
         let mut sessions = self.sessions.write().await;
         
-        if let Some(mut session) = sessions.get_mut(account_id) {
+        if let Some(session) = sessions.get_mut(account_id) {
             session.is_active = false;
             session.websocket.disconnect().await;
             info!("Session closed for account: {}", account_id);

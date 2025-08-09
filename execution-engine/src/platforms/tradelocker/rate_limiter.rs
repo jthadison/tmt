@@ -49,7 +49,7 @@ impl RateLimiter {
         }
     }
 
-    pub async fn acquire(&self) -> Result<RateLimitGuard> {
+    pub async fn acquire(&self) -> Result<RateLimitGuard<'_>> {
         // Check circuit breaker first
         self.check_circuit_breaker().await?;
 
@@ -206,12 +206,13 @@ impl Clone for RateLimiter {
     }
 }
 
-pub struct RateLimitGuard {
-    _permit: tokio::sync::SemaphorePermit<'static>,
+#[derive(Debug)]
+pub struct RateLimitGuard<'a> {
+    _permit: tokio::sync::SemaphorePermit<'a>,
     limiter: RateLimiter,
 }
 
-impl Drop for RateLimitGuard {
+impl<'a> Drop for RateLimitGuard<'a> {
     fn drop(&mut self) {
         // Permit is automatically released when dropped
     }

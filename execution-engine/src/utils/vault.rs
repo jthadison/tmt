@@ -17,6 +17,7 @@ pub enum VaultError {
     PermissionDenied(String),
 }
 
+#[derive(Debug)]
 pub struct VaultClient {
     // Implementation details would go here
     endpoint: String,
@@ -27,12 +28,12 @@ impl VaultClient {
         Ok(Self { endpoint })
     }
 
-    pub async fn list_secrets(&self, path: &str) -> Result<HashMap<String, Value>, VaultError> {
+    pub async fn list_secrets(&self, _path: &str) -> Result<HashMap<String, Value>, VaultError> {
         // Stub implementation - would connect to actual Vault
         Ok(HashMap::new())
     }
 
-    pub async fn store_secret(&self, key: &str, value: Value) -> Result<(), VaultError> {
+    pub async fn store_secret(&self, _key: &str, _value: Value) -> Result<(), VaultError> {
         // Stub implementation
         Ok(())
     }
@@ -42,7 +43,7 @@ impl VaultClient {
         Err(VaultError::NotFound(key.to_string()))
     }
 
-    pub async fn delete_secret(&self, key: &str) -> Result<(), VaultError> {
+    pub async fn delete_secret(&self, _key: &str) -> Result<(), VaultError> {
         // Stub implementation
         Ok(())
     }

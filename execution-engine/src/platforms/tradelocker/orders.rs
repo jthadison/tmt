@@ -132,7 +132,7 @@ impl OrderManager {
     }
 
     async fn execute_order(&self, account_id: &str, order: OrderRequest) -> Result<OrderResponse> {
-        info!("Placing {} order for {}: {:?}", order.order_type, order.symbol, order.side);
+        info!("Placing {:?} order for {}: {:?}", order.order_type, order.symbol, order.side);
         
         let response = self.client.place_order(account_id, order).await?;
         
