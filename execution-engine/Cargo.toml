@@ -53,6 +53,28 @@ dotenv = "0.15"
 # Kafka - made optional to avoid CMake dependency in dev environments  
 rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
 
+# FIX Protocol for DXtrade - using native TLS for SSL connections
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+
+# SSL/TLS support
+rustls = "0.21"
+rustls-native-certs = "0.6"
+
+# Binary data handling for FIX
+bytes = "1.5"
+byteorder = "1.4"
+
+# Encryption for sensitive data
+aes-gcm = "0.10"
+base64 = "0.21"
+
+# Secure memory handling
+zeroize = { version = "1.7", features = ["std", "zeroize_derive"] }
+
+# Cryptographically secure random number generation
+rand = "0.8"
+
 [dev-dependencies]
 mockito = "1.2"
 proptest = "1.4"
@@ -60,6 +82,7 @@ criterion = "0.5"
 tokio-test = "0.4"
 wiremock = "0.5"
 pretty_assertions = "1.4"
+tempfile = "3.8"
 
 [features]
 default = []

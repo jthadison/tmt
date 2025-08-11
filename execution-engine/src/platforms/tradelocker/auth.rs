@@ -6,7 +6,7 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use crate::utils::vault::VaultClient;
-use super::{TradeLockerCredentials, TradeLockerEnvironment, TradeLockerError, Result};
+use super::{TradeLockerCredentials, TradeLockerError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthToken {

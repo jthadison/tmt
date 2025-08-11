@@ -1,4 +1,5 @@
 pub mod tradelocker;
+pub mod dxtrade;
 
 use serde::{Deserialize, Serialize};
 

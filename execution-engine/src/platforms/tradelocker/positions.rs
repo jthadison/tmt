@@ -2,11 +2,10 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use rust_decimal::Decimal;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 
 use super::{
-    TradeLockerClient, Position, PositionSide,
-    TradeLockerError, Result
+    TradeLockerClient, Position, PositionSide, Result
 };
 
 #[derive(Debug, Clone)]

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
 use super::{
-    TradeLockerError, Result, MultiAccountManager, AccountSession,
-    OrderResponse, OrderStatus, Position,
+    TradeLockerError, Result, MultiAccountManager,
+    OrderResponse, Position,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
