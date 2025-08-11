@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Shared types
+risk-types = { workspace = true }
+
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
 tokio-tungstenite = "0.21"
@@ -49,6 +52,7 @@ lazy_static = "1.4"
 # Configuration
 config = "0.13"
 dotenv = "0.15"
+toml = "0.8"
 
 # Kafka - made optional to avoid CMake dependency in dev environments  
 rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
@@ -77,6 +81,9 @@ rand = "0.8"
 
 # Async traits
 async-trait = "0.1"
+
+# Concurrent data structures
+dashmap = "5.5"
 
 [dev-dependencies]
 mockito = "1.2"

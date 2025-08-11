@@ -11,11 +11,11 @@ pub mod connection_pool;
 pub mod resilient_adapter;
 pub mod integration_tests;
 
-pub use interfaces::*;
+pub use interfaces::{ITradingPlatform, ITradingPlatformFactory};
 pub use models::*;
 pub use factory::*;
 pub use adapters::*;
-pub use events::*;
+pub use events::{PlatformEvent, EventSubscription};
 pub use errors::*;
 pub use capabilities::*;
 pub use performance::*;

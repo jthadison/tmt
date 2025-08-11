@@ -5,11 +5,12 @@ use tokio::sync::mpsc;
 use super::{
     ITradingPlatform, PlatformError, CircuitBreaker, ConnectionPool, 
     UnifiedOrder, UnifiedOrderResponse, UnifiedPosition, UnifiedAccountInfo,
-    UnifiedMarketData, OrderModification, OrderFilter, EventFilter, PlatformEvent,
+    UnifiedMarketData, OrderModification, OrderFilter, PlatformEvent,
     HealthStatus, DiagnosticsInfo, PlatformCapabilities, MarginInfo,
     PlatformConfig, ConnectionPoolConfig, CircuitBreakerConfig,
     ConnectionPoolStats, CircuitBreakerStats, CircuitBreakerState
 };
+use super::interfaces::EventFilter;
 use crate::platforms::PlatformType;
 
 /// Resilient adapter that combines circuit breaker and connection pooling
