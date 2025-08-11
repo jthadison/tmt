@@ -203,7 +203,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn disconnect(&mut self) -> Result<(), PlatformError> {
+    async fn disconnect(&mut self) -> std::result::Result<(), PlatformError> {
         self.base.increment_operation_count();
         
         // TradeLocker client doesn't have explicit disconnect, but we can mark as disconnected
@@ -226,7 +226,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         self.base.is_connected()
     }
 
-    async fn ping(&self) -> Result<u64, PlatformError> {
+    async fn ping(&self) -> std::result::Result<u64, PlatformError> {
         self.base.increment_operation_count();
         
         let start = std::time::Instant::now();
@@ -247,7 +247,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn place_order(&self, order: UnifiedOrder) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn place_order(&self, order: UnifiedOrder) -> std::result::Result<UnifiedOrderResponse, PlatformError> {
         self.base.increment_operation_count();
         
         let tl_order = self.convert_unified_order_request(order)?;
@@ -286,7 +286,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn modify_order(&self, order_id: &str, modifications: OrderModification) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn modify_order(&self, order_id: &str, modifications: OrderModification) -> std::result::Result<UnifiedOrderResponse, PlatformError> {
         self.base.increment_operation_count();
         
         // TradeLocker modify order implementation would go here
@@ -296,7 +296,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         })
     }
 
-    async fn cancel_order(&self, order_id: &str) -> Result<(), PlatformError> {
+    async fn cancel_order(&self, order_id: &str) -> std::result::Result<(), PlatformError> {
         self.base.increment_operation_count();
         
         let result = self.base.retry_handler().execute_with_retry(|| async {
@@ -344,7 +344,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn get_order(&self, order_id: &str) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn get_order(&self, order_id: &str) -> std::result::Result<UnifiedOrderResponse, PlatformError> {
         self.base.increment_operation_count();
         
         // TradeLocker get specific order implementation would go here
@@ -353,7 +353,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         })
     }
 
-    async fn get_orders(&self, _filter: Option<OrderFilter>) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
+    async fn get_orders(&self, _filter: Option<OrderFilter>) -> std::result::Result<Vec<UnifiedOrderResponse>, PlatformError> {
         self.base.increment_operation_count();
         
         let result = self.base.retry_handler().execute_with_retry(|| async {
@@ -376,7 +376,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn get_positions(&self) -> Result<Vec<UnifiedPosition>, PlatformError> {
+    async fn get_positions(&self) -> std::result::Result<Vec<UnifiedPosition>, PlatformError> {
         self.base.increment_operation_count();
         
         let result = self.base.retry_handler().execute_with_retry(|| async {
@@ -399,12 +399,12 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn get_position(&self, symbol: &str) -> Result<Option<UnifiedPosition>, PlatformError> {
+    async fn get_position(&self, symbol: &str) -> std::result::Result<Option<UnifiedPosition>, PlatformError> {
         let positions = self.get_positions().await?;
         Ok(positions.into_iter().find(|p| p.symbol == symbol))
     }
 
-    async fn close_position(&self, symbol: &str, quantity: Option<rust_decimal::Decimal>) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn close_position(&self, symbol: &str, quantity: Option<rust_decimal::Decimal>) -> std::result::Result<UnifiedOrderResponse, PlatformError> {
         self.base.increment_operation_count();
         
         // Get current position to determine close parameters
@@ -441,7 +441,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         self.place_order(close_order).await
     }
 
-    async fn get_account_info(&self) -> Result<UnifiedAccountInfo, PlatformError> {
+    async fn get_account_info(&self) -> std::result::Result<UnifiedAccountInfo, PlatformError> {
         self.base.increment_operation_count();
         
         let result = self.base.retry_handler().execute_with_retry(|| async {
@@ -459,12 +459,12 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn get_balance(&self) -> Result<rust_decimal::Decimal, PlatformError> {
+    async fn get_balance(&self) -> std::result::Result<rust_decimal::Decimal, PlatformError> {
         let account = self.get_account_info().await?;
         Ok(account.balance)
     }
 
-    async fn get_margin_info(&self) -> Result<MarginInfo, PlatformError> {
+    async fn get_margin_info(&self) -> std::result::Result<MarginInfo, PlatformError> {
         let account = self.get_account_info().await?;
         Ok(MarginInfo {
             initial_margin: account.margin_used,
@@ -475,7 +475,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         })
     }
 
-    async fn get_market_data(&self, symbol: &str) -> Result<UnifiedMarketData, PlatformError> {
+    async fn get_market_data(&self, symbol: &str) -> std::result::Result<UnifiedMarketData, PlatformError> {
         self.base.increment_operation_count();
         
         let result = self.base.retry_handler().execute_with_retry(|| async {
@@ -493,14 +493,14 @@ impl ITradingPlatform for TradeLockerAdapter {
         }
     }
 
-    async fn subscribe_market_data(&self, _symbols: Vec<String>) -> Result<mpsc::Receiver<UnifiedMarketData>, PlatformError> {
+    async fn subscribe_market_data(&self, _symbols: Vec<String>) -> std::result::Result<mpsc::Receiver<UnifiedMarketData>, PlatformError> {
         // TradeLocker WebSocket subscription would go here
         Err(PlatformError::FeatureNotSupported {
             feature: "Market data subscription".to_string()
         })
     }
 
-    async fn unsubscribe_market_data(&self, _symbols: Vec<String>) -> Result<(), PlatformError> {
+    async fn unsubscribe_market_data(&self, _symbols: Vec<String>) -> std::result::Result<(), PlatformError> {
         Ok(())
     }
 
@@ -508,19 +508,19 @@ impl ITradingPlatform for TradeLockerAdapter {
         self.capabilities.clone()
     }
 
-    async fn subscribe_events(&self) -> Result<mpsc::Receiver<PlatformEvent>, PlatformError> {
+    async fn subscribe_events(&self) -> std::result::Result<mpsc::Receiver<PlatformEvent>, PlatformError> {
         let (tx, rx) = mpsc::unbounded_channel();
         // Store the sender for event emission
         // Note: This is simplified - in a real implementation, you'd need interior mutability
         Ok(rx)
     }
 
-    async fn get_event_history(&self, _filter: crate::platforms::abstraction::interfaces::EventFilter) -> Result<Vec<PlatformEvent>, PlatformError> {
+    async fn get_event_history(&self, _filter: crate::platforms::abstraction::interfaces::EventFilter) -> std::result::Result<Vec<PlatformEvent>, PlatformError> {
         // Event history retrieval would be implemented here
         Ok(Vec::new())
     }
 
-    async fn health_check(&self) -> Result<HealthStatus, PlatformError> {
+    async fn health_check(&self) -> std::result::Result<HealthStatus, PlatformError> {
         let is_connected = self.is_connected().await;
         let error_rate = self.base.get_error_rate();
         let uptime = self.base.uptime_seconds();
@@ -547,7 +547,7 @@ impl ITradingPlatform for TradeLockerAdapter {
         })
     }
 
-    async fn get_diagnostics(&self) -> Result<DiagnosticsInfo, PlatformError> {
+    async fn get_diagnostics(&self) -> std::result::Result<DiagnosticsInfo, PlatformError> {
         let mut performance_metrics = HashMap::new();
         performance_metrics.insert("operation_count".to_string(), serde_json::Value::Number(self.base.get_operation_count().into()));
         performance_metrics.insert("error_count".to_string(), serde_json::Value::Number(self.base.get_error_count().into()));
@@ -566,15 +566,15 @@ impl ITradingPlatform for TradeLockerAdapter {
 
 #[async_trait]
 impl PlatformAdapter for TradeLockerAdapter {
-    async fn initialize(&mut self) -> Result<(), PlatformError> {
+    async fn initialize(&mut self) -> std::result::Result<(), PlatformError> {
         self.connect().await
     }
 
-    async fn cleanup(&mut self) -> Result<(), PlatformError> {
+    async fn cleanup(&mut self) -> std::result::Result<(), PlatformError> {
         self.disconnect().await
     }
 
-    async fn reset_connection(&mut self) -> Result<(), PlatformError> {
+    async fn reset_connection(&mut self) -> std::result::Result<(), PlatformError> {
         self.disconnect().await?;
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         self.connect().await

@@ -4,6 +4,7 @@ mod integration_tests {
     use tokio::time::{sleep, Duration};
     use std::sync::Arc;
     use std::collections::HashMap;
+    use crate::platforms::{PlatformType, ITradingPlatform, PlatformError, UnifiedOrderResponse, UnifiedPosition, UnifiedPositionSide};
 
     // Mock implementations for testing
     struct MockTradeLockerClient {

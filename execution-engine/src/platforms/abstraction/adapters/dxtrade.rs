@@ -128,7 +128,7 @@ impl DXTradeAdapter {
         }
     }
 
-    fn convert_unified_order_request(&self, order: UnifiedOrder) -> Result<DXTradeOrderRequest, PlatformError> {
+    fn convert_unified_order_request(&self, order: UnifiedOrder) -> std::result::Result<DXTradeOrderRequest, PlatformError> {
         let order_type = convert_to_dx_order_type(order.order_type)
             .ok_or_else(|| PlatformError::FeatureNotSupported {
                 feature: format!("Order type {:?}", order.order_type)
@@ -610,15 +610,15 @@ impl ITradingPlatform for DXTradeAdapter {
 
 #[async_trait]
 impl PlatformAdapter for DXTradeAdapter {
-    async fn initialize(&mut self) -> Result<(), PlatformError> {
+    async fn initialize(&mut self) -> std::result::Result<(), PlatformError> {
         self.connect().await
     }
 
-    async fn cleanup(&mut self) -> Result<(), PlatformError> {
+    async fn cleanup(&mut self) -> std::result::Result<(), PlatformError> {
         self.disconnect().await
     }
 
-    async fn reset_connection(&mut self) -> Result<(), PlatformError> {
+    async fn reset_connection(&mut self) -> std::result::Result<(), PlatformError> {
         self.disconnect().await?;
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await; // Longer delay for FIX
         self.connect().await
