@@ -1,3 +1,6 @@
+pub mod encryption;
+pub mod audit;
+
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -72,7 +75,7 @@ pub struct DrawdownMetrics {
     pub last_updated: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrawdownData {
     pub amount: Decimal,
     pub percentage: Decimal,
@@ -80,6 +83,32 @@ pub struct DrawdownData {
     pub current_equity: Decimal,
     pub start_time: DateTime<Utc>,
     pub duration: chrono::Duration,
+}
+
+impl Default for DrawdownData {
+    fn default() -> Self {
+        Self {
+            amount: Decimal::ZERO,
+            percentage: Decimal::ZERO,
+            peak_equity: Decimal::ZERO,
+            current_equity: Decimal::ZERO,
+            start_time: Utc::now(),
+            duration: chrono::Duration::zero(),
+        }
+    }
+}
+
+impl Default for DrawdownMetrics {
+    fn default() -> Self {
+        Self {
+            daily_drawdown: DrawdownData::default(),
+            weekly_drawdown: DrawdownData::default(),
+            maximum_drawdown: DrawdownData::default(),
+            current_underwater_period: chrono::Duration::zero(),
+            recovery_factor: Decimal::ZERO,
+            last_updated: Utc::now(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +189,7 @@ pub struct MarginThresholds {
     pub warning_level: Decimal,
     pub critical_level: Decimal,
     pub stop_out_level: Decimal,
+    pub monitoring_interval_secs: u64,
 }
 
 impl Default for MarginThresholds {
@@ -168,6 +198,7 @@ impl Default for MarginThresholds {
             warning_level: Decimal::from(150),
             critical_level: Decimal::from(120),
             stop_out_level: Decimal::from(100),
+            monitoring_interval_secs: 30,
         }
     }
 }
@@ -286,3 +317,25 @@ pub struct RiskUpdate {
     pub threshold_status: String,
     pub timestamp: DateTime<Utc>,
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum RiskCalculationError {
+    #[error("Invalid entry price: cannot be zero or negative")]
+    InvalidEntryPrice,
+    #[error("Invalid position size: cannot be zero")]
+    InvalidPositionSize,
+    #[error("Currency conversion failed for {from} to {to}: {reason}")]
+    CurrencyConversionFailed { from: String, to: String, reason: String },
+    #[error("Position data inconsistent: {details}")]
+    InconsistentPositionData { details: String },
+    #[error("Market data unavailable for symbol: {symbol}")]
+    MarketDataUnavailable { symbol: String },
+    #[error("Insufficient data points for calculation: {required} required, {available} available")]
+    InsufficientData { required: usize, available: usize },
+    #[error("Mathematical operation failed: {operation}")]
+    MathematicalError { operation: String },
+}
+
+// Re-export modules
+pub use encryption::*;
+pub use audit::*;

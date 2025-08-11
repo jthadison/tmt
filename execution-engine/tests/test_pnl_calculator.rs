@@ -4,7 +4,7 @@ use rust_decimal_macros::dec;
 use uuid::Uuid;
 use execution_engine::risk::{
     RealTimePnLCalculator, Position, PositionType, MarketTick, 
-    PositionTracker, MarketDataStream, WebSocketPublisher, KafkaProducer
+    PositionTracker, MarketDataStream, WebSocketPublisher, KafkaProducer, CurrencyConverter
 };
 use std::sync::Arc;
 
@@ -15,11 +15,13 @@ async fn test_pnl_calculation_long_position() {
     let websocket_publisher = Arc::new(WebSocketPublisher::new());
     let kafka_producer = Arc::new(KafkaProducer);
     
+    let currency_converter = Arc::new(CurrencyConverter::new());
     let calculator = RealTimePnLCalculator::new(
         position_tracker.clone(),
         market_data_stream.clone(),
         websocket_publisher,
         kafka_producer,
+        currency_converter,
     );
     
     let position = Position {
@@ -61,11 +63,13 @@ async fn test_pnl_calculation_short_position() {
     let websocket_publisher = Arc::new(WebSocketPublisher::new());
     let kafka_producer = Arc::new(KafkaProducer);
     
+    let currency_converter = Arc::new(CurrencyConverter::new());
     let calculator = RealTimePnLCalculator::new(
         position_tracker.clone(),
         market_data_stream.clone(),
         websocket_publisher,
         kafka_producer,
+        currency_converter,
     );
     
     let position = Position {
@@ -107,11 +111,13 @@ async fn test_max_favorable_adverse_excursion() {
     let websocket_publisher = Arc::new(WebSocketPublisher::new());
     let kafka_producer = Arc::new(KafkaProducer);
     
+    let currency_converter = Arc::new(CurrencyConverter::new());
     let calculator = RealTimePnLCalculator::new(
         position_tracker.clone(),
         market_data_stream.clone(),
         websocket_publisher,
         kafka_producer,
+        currency_converter,
     );
     
     let mut position = Position {

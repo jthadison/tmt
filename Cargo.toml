@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "execution-engine",
+    "risk-engine", 
+    "shared/risk-types",
+]
+
+resolver = "2"
+
+[workspace.dependencies]
+risk-types = { path = "shared/risk-types" }
+chrono = { version = "0.4.31", features = ["serde"] }
+rust_decimal = { version = "1.32", features = ["serde-float", "serde-str", "serde-arbitrary-precision"] }
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+dashmap = "5.5"

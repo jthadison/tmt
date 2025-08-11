@@ -5,6 +5,9 @@ edition = "2021"
 description = "Standalone risk monitoring system for financial trading"
 
 [dependencies]
+# Shared types
+risk-types = { workspace = true }
+
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
 
@@ -37,6 +40,7 @@ toml = "0.8"
 [dev-dependencies]
 tokio-test = "0.4"
 pretty_assertions = "1.4"
+rand = "0.8"
 
 [features]
 default = []

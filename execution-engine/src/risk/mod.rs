@@ -4,7 +4,7 @@ pub mod exposure_monitor;
 pub mod risk_reward_tracker;
 pub mod margin_monitor;
 pub mod risk_response;
-pub mod types;
+pub mod standalone_types; // Keep for conversion functions
 pub mod config;
 
 pub use pnl_calculator::RealTimePnLCalculator;
@@ -14,4 +14,4 @@ pub use risk_reward_tracker::RiskRewardTracker;
 pub use margin_monitor::MarginMonitor;
 pub use risk_response::RiskResponseSystem;
 pub use config::{RiskConfig, load_config};
-pub use types::*;
+// Re-export shared types\npub use risk_types::*;

@@ -1,4 +1,4 @@
-use crate::risk::types::*;
+use risk_types::*;
 use crate::risk::config::MarginThresholds;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -80,10 +80,12 @@ impl MarginMonitor {
             .sum::<Decimal>();
         
         let free_margin = account_equity - used_margin;
-        let margin_level = if used_margin != dec!(0) {
+        let margin_level = if used_margin > dec!(0) {
             (account_equity / used_margin) * dec!(100)
         } else {
-            dec!(999999)
+            // No margin used - account has infinite margin level (safe state)
+            // Using MAX value to represent infinite margin level
+            Decimal::MAX
         };
         
         Ok(MarginInfo {

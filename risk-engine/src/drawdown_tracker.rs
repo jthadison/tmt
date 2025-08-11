@@ -1,4 +1,4 @@
-use crate::types::*;
+use risk_types::*;
 use crate::config::DrawdownThresholds;
 use anyhow::Result;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -291,31 +291,6 @@ impl DrawdownTracker {
     }
 }
 
-impl Default for DrawdownMetrics {
-    fn default() -> Self {
-        Self {
-            daily_drawdown: DrawdownData::default(),
-            weekly_drawdown: DrawdownData::default(),
-            maximum_drawdown: DrawdownData::default(),
-            current_underwater_period: Duration::zero(),
-            recovery_factor: dec!(0),
-            last_updated: Utc::now(),
-        }
-    }
-}
-
-impl Default for DrawdownData {
-    fn default() -> Self {
-        Self {
-            amount: dec!(0),
-            percentage: dec!(0),
-            peak_equity: dec!(0),
-            current_equity: dec!(0),
-            start_time: Utc::now(),
-            duration: Duration::zero(),
-        }
-    }
-}
 
 pub struct EquityHistoryManager {
     history: Arc<DashMap<AccountId, Vec<EquityPoint>>>,

@@ -1,5 +1,6 @@
 pub mod config;
-pub mod types;
+// Use shared types instead of local types
+pub use risk_types;
 pub mod pnl_calculator;
 pub mod drawdown_tracker;
 pub mod exposure_monitor;
@@ -8,7 +9,7 @@ pub mod margin_monitor;
 pub mod risk_response;
 
 pub use config::{RiskConfig, load_config, DrawdownThresholds, MarginThresholds, ExposureLimits, RiskResponseConfig};
-pub use types::{AccountId, PositionId, Position, PositionType, MarketTick, PnLSnapshot, PnLUpdate, DrawdownMetrics, DrawdownData, EquityPoint, ExposureReport, ExposureData, RiskEvent, RiskSeverity, ResponseAction, ResponseExecutionResult, MarginInfo, AlertLevel, MarginAlert, RiskUpdate, RiskRewardMetrics};
+pub use risk_types::*;
 pub use pnl_calculator::{RealTimePnLCalculator, PositionTracker, MarketDataStream, WebSocketPublisher, KafkaProducer, AccountPnL};
 pub use drawdown_tracker::{DrawdownTracker, EquityHistoryManager, DrawdownAlertManager, DrawdownAlert, DrawdownAlertType};
 pub use exposure_monitor::{ExposureMonitor, CurrencyExposureCalculator, ExposureAlertManager, AccountExposure, RebalanceRecommendation, RebalanceAction, RebalancePriority};

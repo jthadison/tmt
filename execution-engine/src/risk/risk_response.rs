@@ -1,4 +1,4 @@
-use crate::risk::types::*;
+use risk_types::*;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;

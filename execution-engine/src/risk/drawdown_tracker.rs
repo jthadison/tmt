@@ -1,4 +1,4 @@
-use crate::risk::types::*;
+use risk_types::*;
 use crate::risk::config::DrawdownThresholds;
 use anyhow::Result;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -30,6 +30,14 @@ impl DrawdownTracker {
     }
     
     pub async fn calculate_drawdowns(&self, account_id: AccountId) -> Result<DrawdownMetrics> {
+        // Check cache first for performance
+        if let Some(cached_metrics) = self.drawdown_cache.get(&account_id) {
+            let cache_age = Utc::now() - cached_metrics.last_updated;
+            if cache_age < Duration::minutes(5) { // Cache valid for 5 minutes
+                return Ok(cached_metrics.clone());
+            }
+        }
+        
         let equity_history = self.equity_history
             .get_history(account_id, Duration::days(30))
             .await?;
@@ -38,24 +46,162 @@ impl DrawdownTracker {
             return Ok(DrawdownMetrics::default());
         }
         
-        let daily_drawdown = self.calculate_daily_drawdown(&equity_history).await?;
-        let weekly_drawdown = self.calculate_weekly_drawdown(&equity_history).await?;
-        let max_drawdown = self.calculate_maximum_drawdown(&equity_history).await?;
-        
-        let metrics = DrawdownMetrics {
-            daily_drawdown,
-            weekly_drawdown,
-            maximum_drawdown: max_drawdown,
-            current_underwater_period: self.calculate_underwater_period(&equity_history).await?,
-            recovery_factor: self.calculate_recovery_factor(&equity_history).await?,
-            last_updated: Utc::now(),
-        };
+        // Optimize: Calculate all metrics in single pass for better performance
+        let metrics = self.calculate_all_drawdown_metrics(&equity_history).await?;
         
         self.drawdown_cache.insert(account_id, metrics.clone());
         
         self.check_drawdown_alerts(account_id, &metrics).await?;
         
         Ok(metrics)
+    }
+    
+    /// Optimized single-pass calculation of all drawdown metrics
+    async fn calculate_all_drawdown_metrics(&self, equity_history: &[EquityPoint]) -> Result<DrawdownMetrics> {
+        let now = Utc::now();
+        let today = now.date_naive();
+        let one_week_ago = now - Duration::days(7);
+        
+        let mut daily_peak = dec!(0);
+        let mut daily_current = dec!(0);
+        let mut daily_start_time = now;
+        
+        let mut weekly_peak = dec!(0);
+        let mut weekly_current = dec!(0);
+        let mut weekly_start_time = now;
+        
+        let mut max_drawdown_amount = dec!(0);
+        let mut max_drawdown_peak = dec!(0);
+        let mut max_drawdown_pct = dec!(0);
+        let mut max_drawdown_start: Option<DateTime<Utc>> = None;
+        let mut max_drawdown_duration = Duration::zero();
+        
+        let mut global_peak = dec!(0);
+        let mut underwater_start: Option<DateTime<Utc>> = None;
+        let mut is_daily_set = false;
+        let mut is_weekly_set = false;
+        
+        // Single pass through data for optimal performance
+        for point in equity_history {
+            let equity = point.equity;
+            let timestamp = point.timestamp;
+            
+            // Daily calculations
+            if timestamp.date_naive() == today {
+                if !is_daily_set {
+                    daily_current = equity;
+                    daily_peak = equity;
+                    daily_start_time = timestamp;
+                    is_daily_set = true;
+                } else {
+                    daily_current = equity;
+                    if equity > daily_peak {
+                        daily_peak = equity;
+                    }
+                }
+            }
+            
+            // Weekly calculations
+            if timestamp >= one_week_ago {
+                if !is_weekly_set {
+                    weekly_current = equity;
+                    weekly_peak = equity;
+                    weekly_start_time = timestamp;
+                    is_weekly_set = true;
+                } else {
+                    weekly_current = equity;
+                    if equity > weekly_peak {
+                        weekly_peak = equity;
+                    }
+                }
+            }
+            
+            // Maximum drawdown calculations
+            if equity > global_peak {
+                global_peak = equity;
+                underwater_start = None;
+            } else {
+                if underwater_start.is_none() {
+                    underwater_start = Some(timestamp);
+                }
+                
+                let current_drawdown = global_peak - equity;
+                if current_drawdown > max_drawdown_amount {
+                    max_drawdown_amount = current_drawdown;
+                    max_drawdown_peak = global_peak;
+                    max_drawdown_pct = if global_peak > dec!(0) {
+                        (current_drawdown / global_peak) * dec!(100)
+                    } else {
+                        dec!(0)
+                    };
+                    
+                    if let Some(start_time) = underwater_start {
+                        max_drawdown_duration = timestamp - start_time;
+                        max_drawdown_start = Some(start_time);
+                    }
+                }
+            }
+        }
+        
+        // Calculate recovery factor
+        let initial_equity = equity_history.first().map(|p| p.equity).unwrap_or(dec!(0));
+        let current_equity = equity_history.last().map(|p| p.equity).unwrap_or(dec!(0));
+        let recovery_factor = if max_drawdown_amount > dec!(0) {
+            let profit = current_equity - initial_equity;
+            profit / max_drawdown_amount
+        } else {
+            let profit = current_equity - initial_equity;
+            if profit > dec!(0) {
+                Decimal::MAX
+            } else {
+                dec!(0)
+            }
+        };
+        
+        // Calculate current underwater period
+        let current_underwater_period = if let Some(start) = underwater_start {
+            now - start
+        } else {
+            Duration::zero()
+        };
+        
+        Ok(DrawdownMetrics {
+            daily_drawdown: DrawdownData {
+                amount: daily_peak - daily_current,
+                percentage: if daily_peak > dec!(0) {
+                    ((daily_peak - daily_current) / daily_peak) * dec!(100)
+                } else {
+                    dec!(0)
+                },
+                peak_equity: daily_peak,
+                current_equity: daily_current,
+                start_time: daily_start_time,
+                duration: now - daily_start_time,
+            },
+            weekly_drawdown: DrawdownData {
+                amount: weekly_peak - weekly_current,
+                percentage: if weekly_peak > dec!(0) {
+                    ((weekly_peak - weekly_current) / weekly_peak) * dec!(100)
+                } else {
+                    dec!(0)
+                },
+                peak_equity: weekly_peak,
+                current_equity: weekly_current,
+                start_time: weekly_start_time,
+                duration: now - weekly_start_time,
+            },
+            maximum_drawdown: DrawdownData {
+                amount: max_drawdown_amount,
+                percentage: max_drawdown_pct,
+                peak_equity: max_drawdown_peak,
+                current_equity: current_equity,
+                start_time: max_drawdown_start.unwrap_or(now),
+                duration: max_drawdown_duration,
+            },
+            current_underwater_period,
+            recovery_factor,
+            last_updated: now,
+        })
     }
     
     async fn calculate_daily_drawdown(&self, equity_history: &[EquityPoint]) -> Result<DrawdownData> {
@@ -213,8 +359,15 @@ impl DrawdownTracker {
         let current_equity = equity_history.last().unwrap().equity;
         let max_drawdown = self.calculate_maximum_drawdown(equity_history).await?.amount;
         
-        if max_drawdown == dec!(0) {
-            return Ok(dec!(0));
+        // Proper handling of division by zero - no magic numbers
+        if max_drawdown <= dec!(0) {
+            // If there was no drawdown and we have profit, recovery is infinite (represented as max value)
+            let profit = current_equity - initial_equity;
+            if profit > dec!(0) {
+                return Ok(Decimal::MAX); // Infinite recovery (no drawdown but profit exists)
+            } else {
+                return Ok(dec!(0)); // No drawdown, no profit = no recovery factor
+            }
         }
         
         let profit = current_equity - initial_equity;
