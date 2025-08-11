@@ -1,5 +1,5 @@
 use super::config::DXTradeConfig;
-use super::error::{DXTradeError, Result};
+use super::error::Result;
 use super::fix_client::FIXClient;
 use super::rest_client::RestClient;
 use crate::platforms::{PlatformType, TradingPlatform};

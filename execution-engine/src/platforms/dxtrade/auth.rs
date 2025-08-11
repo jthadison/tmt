@@ -1,6 +1,6 @@
 use super::config::DXTradeConfig;
 use super::error::{DXTradeError, Result};
-use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce, KeyInit};
 use aes_gcm::aead::Aead;
 use base64::{Engine as _, engine::general_purpose};
 use chrono::{DateTime, Utc};
@@ -43,7 +43,7 @@ impl Zeroize for EncryptedCredentials {
             target_sub.zeroize();
         }
         // Manually zeroize HashMap contents
-        for (key, value) in self.additional_fields.iter_mut() {
+        for (_key, value) in self.additional_fields.iter_mut() {
             value.zeroize();
         }
         self.additional_fields.clear();
@@ -385,22 +385,10 @@ impl DXTradeAuth {
     }
     
     pub fn generate_encryption_key() -> [u8; 32] {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use rand::Rng;
         
-        let mut hasher = DefaultHasher::new();
-        Utc::now().timestamp().hash(&mut hasher);
-        std::process::id().hash(&mut hasher);
-        
-        let hash = hasher.finish();
         let mut key = [0u8; 32];
-        for (i, byte) in hash.to_le_bytes().iter().enumerate() {
-            key[i % 32] ^= byte;
-            key[(i + 8) % 32] ^= byte;
-            key[(i + 16) % 32] ^= byte;
-            key[(i + 24) % 32] ^= byte;
-        }
-        
+        rand::thread_rng().fill(&mut key);
         key
     }
 }
@@ -488,9 +476,13 @@ mod tests {
         let key1 = DXTradeAuth::generate_encryption_key();
         let key2 = DXTradeAuth::generate_encryption_key();
         
-        // Keys should be different (very high probability)
+        // Keys should be different (cryptographically random)
         assert_ne!(key1, key2);
         assert_eq!(key1.len(), 32);
         assert_eq!(key2.len(), 32);
+        
+        // Verify keys are not all zeros (properly generated)
+        assert!(key1.iter().any(|&b| b != 0));
+        assert!(key2.iter().any(|&b| b != 0));
     }
 }

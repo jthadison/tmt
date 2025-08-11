@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use reqwest::{Client, RequestBuilder, Response};
-use serde::{Deserialize, Serialize};
+use reqwest::{Client, RequestBuilder};
+use serde::Deserialize;
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use tokio::sync::Semaphore;
 
 use super::{

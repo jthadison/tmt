@@ -4,7 +4,6 @@ use native_tls::{Certificate, Identity, TlsConnector};
 use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs;
 use std::fs;
-use std::io::BufReader;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsStream;
@@ -136,7 +135,7 @@ impl SslHandler {
                 format!("Failed to read certificate file: {}", e)
             ))?;
             
-        let cert = Certificate::from_pem(cert_pem.as_bytes())
+        let _cert = Certificate::from_pem(cert_pem.as_bytes())
             .map_err(|e| DXTradeError::SslAuthenticationFailed(
                 format!("Failed to parse certificate: {}", e)
             ))?;
@@ -146,7 +145,7 @@ impl SslHandler {
     }
     
     pub fn get_certificate_info(&self) -> Result<CertificateInfo> {
-        let cert_pem = fs::read_to_string(&self.config.cert_file_path)
+        let _cert_pem = fs::read_to_string(&self.config.cert_file_path)
             .map_err(|e| DXTradeError::SslAuthenticationFailed(
                 format!("Failed to read certificate file: {}", e)
             ))?;

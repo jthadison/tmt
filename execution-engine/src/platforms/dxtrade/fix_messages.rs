@@ -76,7 +76,6 @@ impl FIXMessageBuilder {
         self.fields.insert(8, "FIX.4.4".to_string()); // BeginString
         self.fields.insert(35, msg_type.to_string()); // MsgType
         
-        let mut message = String::new();
         let mut sorted_fields: Vec<(u32, String)> = self.fields.into_iter().collect();
         sorted_fields.sort_by_key(|&(tag, _)| tag);
         
@@ -109,7 +108,7 @@ impl FIXMessageBuilder {
         let checksum = Self::calculate_checksum(&message_without_checksum);
         let checksum_field = format!("10={:03}{}", checksum, SOH);
         
-        message = format!("{}{}", message_without_checksum, checksum_field);
+        let message = format!("{}{}", message_without_checksum, checksum_field);
         
         Ok(FIXMessage {
             msg_type,
@@ -120,6 +119,10 @@ impl FIXMessageBuilder {
     
     fn calculate_checksum(message: &str) -> u32 {
         message.as_bytes().iter().map(|&b| b as u32).sum::<u32>() % 256
+    }
+    
+    pub fn calculate_checksum_static(message: &str) -> u32 {
+        Self::calculate_checksum(message)
     }
 }
 
@@ -261,6 +264,13 @@ impl FIXMessage {
             }
         }
         false
+    }
+    
+    pub fn calculate_checksum(&self) -> u32 {
+        self.raw_message.as_bytes()
+            .iter()
+            .map(|&b| b as u32)
+            .sum::<u32>() % 256
     }
     
     pub fn is_admin_message(&self) -> bool {

@@ -1,9 +1,9 @@
 use super::config::DXTradeConfig;
 use super::error::{DXTradeError, Result};
 use super::fix_session::{FIXSession, SessionState};
-use super::fix_messages::{FIXMessage, MessageType};
+use super::fix_messages::FIXMessage;
 use super::ssl_handler::SslHandler;
-use super::auth::{DXTradeAuth, AuthContext};
+use super::auth::DXTradeAuth;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

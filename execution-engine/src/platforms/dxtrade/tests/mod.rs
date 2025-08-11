@@ -8,5 +8,7 @@ mod fix_messages_tests;
 mod fix_session_tests;
 #[cfg(test)]
 mod integration_tests;
+#[cfg(test)]
+mod performance_tests;
 
 use super::*;

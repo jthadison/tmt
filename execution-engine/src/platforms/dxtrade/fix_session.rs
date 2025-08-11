@@ -2,7 +2,7 @@ use super::config::DXTradeConfig;
 use super::error::{DXTradeError, Result};
 use super::fix_messages::{FIXMessage, MessageType};
 use super::ssl_handler::SslHandler;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
@@ -210,7 +210,7 @@ impl FIXSession {
                 }
                 Ok(0) => {
                     tracing::warn!("Connection closed by remote");
-                    self.handle_disconnect().await;
+                    let _ = self.handle_disconnect().await;
                     break;
                 }
                 Ok(_) => {
@@ -219,7 +219,7 @@ impl FIXSession {
                 }
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
-                    self.handle_disconnect().await;
+                    let _ = self.handle_disconnect().await;
                     break;
                 }
             }
@@ -271,7 +271,7 @@ impl FIXSession {
         Ok(())
     }
     
-    async fn handle_logon_response(&self, message: &FIXMessage) -> Result<()> {
+    async fn handle_logon_response(&self, _message: &FIXMessage) -> Result<()> {
         tracing::info!("Received logon response");
         
         {
@@ -282,7 +282,7 @@ impl FIXSession {
         Ok(())
     }
     
-    async fn handle_logout(&self, message: &FIXMessage) -> Result<()> {
+    async fn handle_logout(&self, _message: &FIXMessage) -> Result<()> {
         tracing::info!("Received logout message");
         
         let seq_num = self.next_seq_num_out.fetch_add(1, Ordering::SeqCst);
@@ -294,7 +294,7 @@ impl FIXSession {
         )?;
         
         self.send_message(logout_response).await?;
-        self.handle_disconnect().await;
+        let _ = self.handle_disconnect().await;
         
         Ok(())
     }
@@ -307,7 +307,7 @@ impl FIXSession {
     async fn handle_test_request(&self, message: &FIXMessage) -> Result<()> {
         tracing::debug!("Received test request");
         
-        let test_req_id = message.get_field(112).cloned().unwrap_or_default();
+        let _test_req_id = message.get_field(112).cloned().unwrap_or_default();
         let seq_num = self.next_seq_num_out.fetch_add(1, Ordering::SeqCst);
         
         let heartbeat = FIXMessage::create_heartbeat(
@@ -535,9 +535,9 @@ impl SessionHandles {
             .ok_or_else(|| DXTradeError::FixSessionError("Session was dropped".to_string()))?;
         let connection = self.connection.upgrade()
             .ok_or_else(|| DXTradeError::FixSessionError("Session was dropped".to_string()))?;
-        let next_seq_num_in = self.next_seq_num_in.upgrade()
+        let _next_seq_num_in = self.next_seq_num_in.upgrade()
             .ok_or_else(|| DXTradeError::FixSessionError("Session was dropped".to_string()))?;
-        let last_heartbeat_received = self.last_heartbeat_received.upgrade()
+        let _last_heartbeat_received = self.last_heartbeat_received.upgrade()
             .ok_or_else(|| DXTradeError::FixSessionError("Session was dropped".to_string()))?;
             
         let mut buffer = vec![0u8; 8192];
@@ -588,7 +588,7 @@ impl SessionHandles {
                 }
                 Ok(0) => {
                     tracing::warn!("Connection closed by remote");
-                    self.handle_disconnect().await;
+                    let _ = self.handle_disconnect().await;
                     break;
                 }
                 Ok(_) => {
@@ -596,7 +596,7 @@ impl SessionHandles {
                 }
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
-                    self.handle_disconnect().await;
+                    let _ = self.handle_disconnect().await;
                     break;
                 }
             }

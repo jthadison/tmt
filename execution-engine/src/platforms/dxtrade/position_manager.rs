@@ -1,4 +1,4 @@
-use super::error::{DXTradeError, Result};
+use super::error::Result;
 use super::DXTradePosition;
 
 pub struct PositionManager {

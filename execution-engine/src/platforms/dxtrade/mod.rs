@@ -30,7 +30,6 @@ use crate::platforms::{PlatformType, TradingPlatform};
 use serde::{Deserialize, Serialize};
 use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DXTradeCredentials {

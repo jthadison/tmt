@@ -2,12 +2,10 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use super::{
-    TradeLockerClient, OrderRequest, OrderResponse, OrderStatus,
-    TradeLockerError, Result
+    TradeLockerClient, OrderRequest, OrderResponse, OrderStatus, Result
 };
 
 #[derive(Debug, Clone)]
