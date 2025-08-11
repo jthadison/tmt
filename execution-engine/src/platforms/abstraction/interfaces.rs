@@ -106,12 +106,14 @@ pub trait IPlatformEvents: Send + Sync {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderFilter {
-    pub status: Option<UnifiedOrderStatus>,
+    pub order_id: Option<String>,
     pub symbol: Option<String>,
+    pub status: Option<UnifiedOrderStatus>,
     pub side: Option<UnifiedOrderSide>,
     pub order_type: Option<UnifiedOrderType>,
-    pub from_time: Option<chrono::DateTime<chrono::Utc>>,
-    pub to_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub from: Option<chrono::DateTime<chrono::Utc>>,
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

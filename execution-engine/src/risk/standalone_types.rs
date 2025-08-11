@@ -51,15 +51,15 @@ pub struct StandaloneMarketTick {
 }
 
 // Convert from platform types to standalone types
-impl From<crate::risk::types::Position> for StandalonePosition {
-    fn from(pos: crate::risk::types::Position) -> Self {
+impl From<risk_types::Position> for StandalonePosition {
+    fn from(pos: risk_types::Position) -> Self {
         Self {
             id: pos.id,
             account_id: pos.account_id,
             symbol: pos.symbol,
             position_type: match pos.position_type {
-                crate::risk::types::PositionType::Long => StandalonePositionType::Long,
-                crate::risk::types::PositionType::Short => StandalonePositionType::Short,
+                risk_types::PositionType::Long => StandalonePositionType::Long,
+                risk_types::PositionType::Short => StandalonePositionType::Short,
             },
             size: pos.size,
             entry_price: pos.entry_price,
@@ -74,15 +74,15 @@ impl From<crate::risk::types::Position> for StandalonePosition {
     }
 }
 
-impl From<StandalonePosition> for crate::risk::types::Position {
+impl From<StandalonePosition> for risk_types::Position {
     fn from(pos: StandalonePosition) -> Self {
         Self {
             id: pos.id,
             account_id: pos.account_id,
             symbol: pos.symbol,
             position_type: match pos.position_type {
-                StandalonePositionType::Long => crate::risk::types::PositionType::Long,
-                StandalonePositionType::Short => crate::risk::types::PositionType::Short,
+                StandalonePositionType::Long => risk_types::PositionType::Long,
+                StandalonePositionType::Short => risk_types::PositionType::Short,
             },
             size: pos.size,
             entry_price: pos.entry_price,
@@ -97,8 +97,8 @@ impl From<StandalonePosition> for crate::risk::types::Position {
     }
 }
 
-impl From<crate::risk::types::MarketTick> for StandaloneMarketTick {
-    fn from(tick: crate::risk::types::MarketTick) -> Self {
+impl From<risk_types::MarketTick> for StandaloneMarketTick {
+    fn from(tick: risk_types::MarketTick) -> Self {
         Self {
             symbol: tick.symbol,
             bid: tick.bid,
@@ -110,7 +110,7 @@ impl From<crate::risk::types::MarketTick> for StandaloneMarketTick {
     }
 }
 
-impl From<StandaloneMarketTick> for crate::risk::types::MarketTick {
+impl From<StandaloneMarketTick> for risk_types::MarketTick {
     fn from(tick: StandaloneMarketTick) -> Self {
         Self {
             symbol: tick.symbol,
