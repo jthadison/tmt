@@ -31,7 +31,7 @@ class DrawdownTracker:
         # For now, simulate realistic drawdown data
         
         if account_id not in self._account_data:
-            # Initialize with no drawdown
+            # Initialize with no drawdown only if account doesn't exist
             self._account_data[account_id] = {
                 'peak_equity': Decimal('10000.00'),
                 'current_equity': Decimal('10000.00'),
@@ -59,8 +59,11 @@ class DrawdownTracker:
     async def update_equity(self, account_id: UUID, new_equity: Decimal):
         """Update account equity and recalculate peak if needed."""
         if account_id not in self._account_data:
+            # Initialize account with a default starting balance of 10,000
+            # This ensures we have a reasonable peak to calculate drawdown from
+            default_peak = max(new_equity, Decimal('10000.00'))
             self._account_data[account_id] = {
-                'peak_equity': new_equity,
+                'peak_equity': default_peak,
                 'current_equity': new_equity,
                 'last_updated': datetime.datetime.utcnow()
             }
@@ -173,9 +176,9 @@ class DrawdownAdjuster:
             return DrawdownLevel.MINIMAL
         elif drawdown_float < 3.0:
             return DrawdownLevel.SMALL
-        elif drawdown_float < 5.0:
+        elif drawdown_float <= 5.0:  # Include 5.0% in MODERATE
             return DrawdownLevel.MODERATE
-        elif drawdown_float < 8.0:
+        elif drawdown_float <= 8.0:  # Include 8.0% in LARGE
             return DrawdownLevel.LARGE
         else:
             return DrawdownLevel.EXTREME

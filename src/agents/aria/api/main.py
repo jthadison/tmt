@@ -9,7 +9,7 @@ risk management, and portfolio analysis functionality.
 import logging
 import time
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -105,7 +105,7 @@ class AccountLimitsResponse(BaseModel):
     """API response for account limits information."""
     account_id: str
     prop_firm: str
-    limits: Dict[str, any]
+    limits: Dict[str, Any]
 
 
 class HealthResponse(BaseModel):
@@ -154,30 +154,28 @@ def get_position_calculator() -> PositionSizeCalculator:
     return _position_calculator
 
 
+# Create FastAPI app instance first
+app = FastAPI(
+    title="ARIA - Adaptive Risk Intelligence Agent",
+    description="Position sizing and risk management API for intelligent trading systems",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 def create_aria_app() -> FastAPI:
     """Create and configure the ARIA FastAPI application."""
-    app = FastAPI(
-        title="ARIA - Adaptive Risk Intelligence Agent",
-        description="Position sizing and risk management API for intelligent trading systems",
-        version="1.0.0",
-        docs_url="/docs",
-        redoc_url="/redoc"
-    )
-    
-    # Add CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
     return app
-
-
-# Create FastAPI app instance
-app = create_aria_app()
 
 
 @app.get("/health", response_model=HealthResponse)
