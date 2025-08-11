@@ -478,7 +478,7 @@ impl EventDeduplicator {
                 )
             }
             _ => format!("{}:{}:{}", 
-                event.event_type as u8, 
+                format!("{:?}", event.event_type), 
                 event.account_id, 
                 event.timestamp.timestamp_millis() / 5000 // 5-second window for other events
             ),

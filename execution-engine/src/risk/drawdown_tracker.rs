@@ -43,7 +43,35 @@ impl DrawdownTracker {
             .await?;
         
         if equity_history.is_empty() {
-            return Ok(DrawdownMetrics::default());
+            return Ok(DrawdownMetrics {
+                daily_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                weekly_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                maximum_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                current_underwater_period: Duration::zero(),
+                recovery_factor: dec!(0),
+                last_updated: Utc::now(),
+            });
         }
         
         // Optimize: Calculate all metrics in single pass for better performance
@@ -211,7 +239,14 @@ impl DrawdownTracker {
             .collect();
         
         if today_points.is_empty() {
-            return Ok(DrawdownData::default());
+            return Ok(DrawdownData {
+                amount: dec!(0),
+                percentage: dec!(0),
+                peak_equity: dec!(0),
+                current_equity: dec!(0),
+                start_time: Utc::now(),
+                duration: Duration::zero(),
+            });
         }
         
         let starting_equity = today_points[0].equity;
@@ -245,7 +280,14 @@ impl DrawdownTracker {
             .collect();
         
         if week_points.is_empty() {
-            return Ok(DrawdownData::default());
+            return Ok(DrawdownData {
+                amount: dec!(0),
+                percentage: dec!(0),
+                peak_equity: dec!(0),
+                current_equity: dec!(0),
+                start_time: Utc::now(),
+                duration: Duration::zero(),
+            });
         }
         
         let peak_equity = week_points.iter()
@@ -426,7 +468,35 @@ impl DrawdownTracker {
     pub async fn trigger_drawdown_based_position_sizing(&self, account_id: AccountId) -> Result<Decimal> {
         let metrics = self.drawdown_cache.get(&account_id)
             .map(|m| m.clone())
-            .unwrap_or_default();
+            .unwrap_or_else(|| DrawdownMetrics {
+                daily_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                weekly_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                maximum_drawdown: DrawdownData {
+                    amount: dec!(0),
+                    percentage: dec!(0),
+                    peak_equity: dec!(0),
+                    current_equity: dec!(0),
+                    start_time: Utc::now(),
+                    duration: Duration::zero(),
+                },
+                current_underwater_period: Duration::zero(),
+                recovery_factor: dec!(0),
+                last_updated: Utc::now(),
+            });
         
         let base_risk = dec!(2);
         
@@ -444,31 +514,8 @@ impl DrawdownTracker {
     }
 }
 
-impl Default for DrawdownMetrics {
-    fn default() -> Self {
-        Self {
-            daily_drawdown: DrawdownData::default(),
-            weekly_drawdown: DrawdownData::default(),
-            maximum_drawdown: DrawdownData::default(),
-            current_underwater_period: Duration::zero(),
-            recovery_factor: dec!(0),
-            last_updated: Utc::now(),
-        }
-    }
-}
-
-impl Default for DrawdownData {
-    fn default() -> Self {
-        Self {
-            amount: dec!(0),
-            percentage: dec!(0),
-            peak_equity: dec!(0),
-            current_equity: dec!(0),
-            start_time: Utc::now(),
-            duration: Duration::zero(),
-        }
-    }
-}
+// Removed Default implementations for external types (DrawdownMetrics, DrawdownData)
+// These should be defined in the risk_types crate where the types are declared
 
 pub struct EquityHistoryManager {
     history: Arc<DashMap<AccountId, Vec<EquityPoint>>>,

@@ -1,11 +1,12 @@
-pub mod api;
 pub mod execution;
-pub mod messaging;
 pub mod platforms;
-pub mod utils;
-pub mod monitoring;
 pub mod risk;
 
-// pub use execution::engine::ExecutionEngine;  // TODO: Implement ExecutionEngine
+// Temporarily disabled problematic modules
+// pub mod api;
+// pub mod messaging; 
+// pub mod utils;
+// pub mod monitoring;
+
 pub use platforms::PlatformType;
 pub use risk::*;

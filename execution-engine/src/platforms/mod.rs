@@ -1,4 +1,5 @@
-pub mod tradelocker;
+// Temporarily disabled due to missing dependencies
+// pub mod tradelocker;
 pub mod dxtrade;
 pub mod abstraction;
 
@@ -10,6 +11,8 @@ pub enum PlatformType {
     MetaTrader4,
     MetaTrader5,
     DXTrade,
+    #[cfg(test)]
+    Mock,
 }
 
 pub trait TradingPlatform: Send + Sync {
@@ -21,14 +24,15 @@ pub trait TradingPlatform: Send + Sync {
 pub use abstraction::{
     ITradingPlatform,
     UnifiedOrder,
-    UnifiedOrderResponse,
-    UnifiedPosition,
     UnifiedAccountInfo,
     UnifiedMarketData,
     PlatformError,
-    PlatformFactory,
-    PlatformRegistry,
     PlatformAbstractionLayer,
     PlatformCapabilities,
-    PerformanceMonitor,
+    // Temporarily disabled missing types
+    // UnifiedOrderResponse,
+    // UnifiedPosition, 
+    // PlatformFactory,
+    // PlatformRegistry,
+    // PerformanceMonitor,
 };

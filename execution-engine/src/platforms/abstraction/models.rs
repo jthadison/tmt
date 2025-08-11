@@ -27,7 +27,7 @@ pub enum UnifiedOrderSide {
     Sell,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum UnifiedOrderType {
     Market,
@@ -39,7 +39,7 @@ pub enum UnifiedOrderType {
     Oco, // One-Cancels-Other
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum UnifiedTimeInForce {
     Day,

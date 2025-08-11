@@ -48,6 +48,9 @@ pub enum PlatformError {
     #[error("Market data unavailable: {reason}")]
     MarketDataUnavailable { reason: String },
     
+    #[error("Market closed for symbol: {symbol}")]
+    MarketClosed { symbol: String },
+    
     #[error("Subscription failed: {reason}")]
     SubscriptionFailed { reason: String },
     
@@ -171,7 +174,8 @@ impl PlatformError {
             PlatformError::PositionCloseFailed { .. } => "E203".to_string(),
             PlatformError::SymbolNotFound { .. } => "E301".to_string(),
             PlatformError::MarketDataUnavailable { .. } => "E302".to_string(),
-            PlatformError::SubscriptionFailed { .. } => "E303".to_string(),
+            PlatformError::MarketClosed { .. } => "E303".to_string(),
+            PlatformError::SubscriptionFailed { .. } => "E304".to_string(),
             PlatformError::AccountNotFound { .. } => "E401".to_string(),
             PlatformError::InsufficientFunds { .. } => "E402".to_string(),
             PlatformError::TradingNotAllowed { .. } => "E403".to_string(),
