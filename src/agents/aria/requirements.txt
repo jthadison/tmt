@@ -1,0 +1,58 @@
+# ARIA - Adaptive Risk Intelligence Agent Requirements
+# Position sizing and risk management dependencies
+
+# Core web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Data validation and parsing
+pydantic>=2.5.0
+
+# HTTP client for external API calls
+httpx>=0.25.0
+
+# Database and data persistence
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0  # PostgreSQL async driver
+psycopg2-binary>=2.9.0  # PostgreSQL sync driver
+
+# Data analysis and numerical computing
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.11.0
+
+# Time series and financial calculations
+TA-Lib>=0.4.25  # Technical analysis library
+yfinance>=0.2.0  # Market data (for testing/development)
+
+# Async and concurrency
+asyncio-mqtt>=0.13.0  # For message queue integration
+aioredis>=2.0.0  # Redis async client
+
+# Logging and monitoring
+structlog>=23.2.0
+prometheus-client>=0.19.0
+
+# Configuration management
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# Security and encryption
+cryptography>=41.0.0
+passlib[bcrypt]>=1.7.4
+
+# Testing dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.12.0
+httpx>=0.25.0  # For API testing
+
+# Development dependencies
+black>=23.0.0  # Code formatting
+isort>=5.12.0  # Import sorting
+flake8>=6.0.0  # Code linting
+mypy>=1.7.0    # Type checking
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.4.0
