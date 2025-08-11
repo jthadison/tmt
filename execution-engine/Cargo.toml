@@ -75,6 +75,9 @@ zeroize = { version = "1.7", features = ["std", "zeroize_derive"] }
 # Cryptographically secure random number generation
 rand = "0.8"
 
+# Async traits
+async-trait = "0.1"
+
 [dev-dependencies]
 mockito = "1.2"
 proptest = "1.4"
