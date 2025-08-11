@@ -69,7 +69,7 @@ impl ITradingPlatform for MockTradingPlatform {
 
     async fn connect(&mut self) -> Result<(), PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::ConnectionFailed("Mock connection failure".to_string()));
+            return Err(PlatformError::ConnectionFailed { reason: "Mock connection failure".to_string() });
         }
         Ok(())
     }
@@ -84,14 +84,14 @@ impl ITradingPlatform for MockTradingPlatform {
 
     async fn ping(&self) -> Result<u64, PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::NetworkError("Mock ping failure".to_string()));
+            return Err(PlatformError::NetworkError { reason: "Mock ping failure".to_string() });
         }
         Ok(self.execution_delay_ms)
     }
 
     async fn place_order(&self, mut order: UnifiedOrder) -> Result<UnifiedOrderResponse, PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::OrderFailed("Mock order failure".to_string()));
+            return Err(PlatformError::OrderRejected { reason: "Mock order failure".to_string(), platform_code: None });
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(self.execution_delay_ms)).await;
@@ -127,7 +127,7 @@ impl ITradingPlatform for MockTradingPlatform {
         _modifications: crate::platforms::abstraction::models::OrderModification,
     ) -> Result<UnifiedOrderResponse, PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::OrderFailed("Mock modify failure".to_string()));
+            return Err(PlatformError::OrderModificationFailed { reason: "Mock modify failure".to_string() });
         }
 
         // Return a mock modified order
@@ -153,7 +153,7 @@ impl ITradingPlatform for MockTradingPlatform {
 
     async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::OrderFailed("Mock cancel failure".to_string()));
+            return Err(PlatformError::InternalError { reason: "Mock cancel failure".to_string() });
         }
         Ok(())
     }
@@ -163,7 +163,7 @@ impl ITradingPlatform for MockTradingPlatform {
         orders.iter()
             .find(|o| o.platform_order_id == order_id || o.client_order_id == order_id)
             .cloned()
-            .ok_or_else(|| PlatformError::OrderNotFound(order_id.to_string()))
+            .ok_or_else(|| PlatformError::OrderNotFound { order_id: order_id.to_string() })
     }
 
     async fn get_orders(&self, filter: Option<OrderFilter>) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
@@ -208,7 +208,7 @@ impl ITradingPlatform for MockTradingPlatform {
 
     async fn close_position(&self, _symbol: &str, _quantity: Option<Decimal>) -> Result<UnifiedOrderResponse, PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::OrderFailed("Mock close position failure".to_string()));
+            return Err(PlatformError::PositionCloseFailed { reason: "Mock close position failure".to_string() });
         }
 
         Ok(UnifiedOrderResponse {
@@ -233,17 +233,21 @@ impl ITradingPlatform for MockTradingPlatform {
 
     async fn get_account_info(&self) -> Result<UnifiedAccountInfo, PlatformError> {
         if self.should_fail {
-            return Err(PlatformError::AccountError("Mock account info failure".to_string()));
+            return Err(PlatformError::InternalError { reason: "Mock account info failure".to_string() });
         }
 
         Ok(UnifiedAccountInfo {
             account_id: self.name.clone(),
+            account_name: Some("Mock Demo Account".to_string()),
+            currency: "USD".to_string(),
             balance: self.account_balance,
             equity: self.account_balance,
-            margin: Decimal::ZERO,
-            free_margin: self.account_balance,
-            margin_level: Decimal::ZERO,
-            currency: "USD".to_string(),
+            margin_used: Decimal::ZERO,
+            margin_available: self.account_balance,
+            buying_power: self.account_balance,
+            unrealized_pnl: Decimal::ZERO,
+            realized_pnl: Decimal::ZERO,
+            margin_level: Some(Decimal::ZERO),
             account_type: AccountType::Demo,
             last_updated: Utc::now(),
             platform_specific: HashMap::new(),
