@@ -1,8 +1,8 @@
+pub mod capabilities;
+pub mod errors;
+pub mod events;
 pub mod interfaces;
 pub mod models;
-pub mod events;
-pub mod errors;
-pub mod capabilities;
 
 // Temporarily disabled problematic modules
 // pub mod factory;
@@ -13,18 +13,18 @@ pub mod capabilities;
 // pub mod resilient_adapter;
 // pub mod integration_tests;
 
+pub use capabilities::*;
+pub use errors::*;
+pub use events::{PlatformEvent, UnifiedEventBus};
 pub use interfaces::{
-    ITradingPlatform, OrderFilter, HealthStatus, DiagnosticsInfo,
-    IOrderManager, IPositionManager, IAccountManager, IMarketDataProvider, IPlatformEvents
+    DiagnosticsInfo, HealthStatus, IAccountManager, IMarketDataProvider, IOrderManager,
+    IPlatformEvents, IPositionManager, ITradingPlatform, OrderFilter,
 };
 pub use models::*;
-pub use events::{PlatformEvent, UnifiedEventBus};
-pub use errors::*;
-pub use capabilities::*;
 
 // Temporarily disabled re-exports
 // pub use factory::*;
-// pub use adapters::*; 
+// pub use adapters::*;
 // pub use performance::*;
 // pub use circuit_breaker::*;
 // pub use connection_pool::*;
@@ -56,20 +56,32 @@ impl PlatformAbstractionLayer {
         }
     }
 
-    pub async fn register_platform(&self, account_id: String, platform: Box<dyn ITradingPlatform + Send + Sync>) -> Result<(), PlatformError> {
+    pub async fn register_platform(
+        &self,
+        account_id: String,
+        platform: Box<dyn ITradingPlatform + Send + Sync>,
+    ) -> Result<(), PlatformError> {
         let mut platforms = self.platforms.write().await;
         platforms.insert(account_id, platform);
         Ok(())
     }
 
-    pub async fn get_platform(&self, account_id: &str) -> Result<&Box<dyn ITradingPlatform + Send + Sync>, PlatformError> {
-        Err(PlatformError::PlatformNotFound { platform_id: account_id.to_string() })
+    pub async fn get_platform(
+        &self,
+        account_id: &str,
+    ) -> Result<&Box<dyn ITradingPlatform + Send + Sync>, PlatformError> {
+        Err(PlatformError::PlatformNotFound {
+            platform_id: account_id.to_string(),
+        })
     }
 
     pub async fn remove_platform(&self, account_id: &str) -> Result<(), PlatformError> {
         let mut platforms = self.platforms.write().await;
-        platforms.remove(account_id)
-            .ok_or_else(|| PlatformError::PlatformNotFound { platform_id: account_id.to_string() })?;
+        platforms
+            .remove(account_id)
+            .ok_or_else(|| PlatformError::PlatformNotFound {
+                platform_id: account_id.to_string(),
+            })?;
         Ok(())
     }
 

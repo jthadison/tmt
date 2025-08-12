@@ -11,8 +11,10 @@ impl RestClient {
         let client = reqwest::Client::builder()
             .timeout(config.connect_timeout())
             .build()
-            .map_err(|e| DXTradeError::RestApiError(format!("Failed to create HTTP client: {}", e)))?;
-            
+            .map_err(|e| {
+                DXTradeError::RestApiError(format!("Failed to create HTTP client: {}", e))
+            })?;
+
         Ok(Self { config, client })
     }
 }

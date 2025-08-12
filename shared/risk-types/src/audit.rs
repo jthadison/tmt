@@ -1,9 +1,9 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use anyhow::Result;
 
 /// Comprehensive audit logging for risk management decisions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ pub struct AccountStatusSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketConditionsSnapshot {
     pub volatility_index: Decimal,
-    pub market_session: String, // Asian, European, American
+    pub market_session: String,     // Asian, European, American
     pub news_impact_score: Decimal, // High impact news events
     pub liquidity_score: Decimal,
     pub correlation_environment: String, // High, Normal, Low correlation
@@ -157,25 +157,25 @@ pub struct ThresholdBreach {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum BreachSeverity {
-    Minor,      // 0-10% over threshold
-    Moderate,   // 10-25% over threshold
-    Severe,     // 25-50% over threshold
-    Critical,   // 50%+ over threshold
+    Minor,    // 0-10% over threshold
+    Moderate, // 10-25% over threshold
+    Severe,   // 25-50% over threshold
+    Critical, // 50%+ over threshold
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UrgencyLevel {
-    Low,        // Can be delayed
-    Normal,     // Process normally
-    High,       // Process quickly
-    Critical,   // Process immediately
+    Low,      // Can be delayed
+    Normal,   // Process normally
+    High,     // Process quickly
+    Critical, // Process immediately
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DecisionMode {
-    Automated,  // Made by AI/system
-    SemiAuto,   // AI recommendation, human approval
-    Manual,     // Human decision
+    Automated, // Made by AI/system
+    SemiAuto,  // AI recommendation, human approval
+    Manual,    // Human decision
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,6 +282,7 @@ impl RiskAuditLogger {
     }
 
     /// Log a position size adjustment decision
+    #[allow(clippy::too_many_arguments)]
     pub fn log_position_adjustment(
         &mut self,
         account_id: Uuid,
@@ -363,17 +364,15 @@ impl RiskAuditLogger {
     pub fn get_decisions_by_type(&self, decision_type: &str) -> Vec<&RiskAuditLog> {
         self.log_entries
             .iter()
-            .filter(|entry| {
-                match &entry.decision_type {
-                    RiskDecisionType::PositionSizeAdjustment { .. } => decision_type == "position_size",
-                    RiskDecisionType::PositionClosure { .. } => decision_type == "position_closure",
-                    RiskDecisionType::EmergencyStop { .. } => decision_type == "emergency_stop",
-                    RiskDecisionType::RiskLimitChange { .. } => decision_type == "risk_limit",
-                    RiskDecisionType::MarginCallResponse { .. } => decision_type == "margin_call",
-                    RiskDecisionType::DrawdownResponse { .. } => decision_type == "drawdown",
-                    RiskDecisionType::ExposureViolation { .. } => decision_type == "exposure",
-                    RiskDecisionType::CorrelationAdjustment { .. } => decision_type == "correlation",
-                }
+            .filter(|entry| match &entry.decision_type {
+                RiskDecisionType::PositionSizeAdjustment { .. } => decision_type == "position_size",
+                RiskDecisionType::PositionClosure { .. } => decision_type == "position_closure",
+                RiskDecisionType::EmergencyStop { .. } => decision_type == "emergency_stop",
+                RiskDecisionType::RiskLimitChange { .. } => decision_type == "risk_limit",
+                RiskDecisionType::MarginCallResponse { .. } => decision_type == "margin_call",
+                RiskDecisionType::DrawdownResponse { .. } => decision_type == "drawdown",
+                RiskDecisionType::ExposureViolation { .. } => decision_type == "exposure",
+                RiskDecisionType::CorrelationAdjustment { .. } => decision_type == "correlation",
             })
             .collect()
     }
@@ -429,10 +428,10 @@ impl RiskAuditLogger {
                         | RiskDecisionType::MarginCallResponse { .. }
                         | RiskDecisionType::DrawdownResponse { .. }
                 )
-            },
+            }
             AuditLogLevel::Critical => {
                 matches!(entry.decision_type, RiskDecisionType::EmergencyStop { .. })
-            },
+            }
         }
     }
 }
@@ -492,7 +491,9 @@ impl AuditReport {
             }
 
             // Count triggers
-            *trigger_counts.entry(entry.decision_context.trigger_event.clone()).or_insert(0) += 1;
+            *trigger_counts
+                .entry(entry.decision_context.trigger_event.clone())
+                .or_insert(0) += 1;
         }
 
         let execution_success_rate = if entries.is_empty() {
@@ -592,15 +593,17 @@ mod tests {
             decision_mode: DecisionMode::Automated,
         };
 
-        logger.log_position_adjustment(
-            account_id,
-            position_id,
-            Decimal::from(100000),
-            Decimal::from(75000),
-            "Reduce exposure".to_string(),
-            context,
-            None,
-        ).unwrap();
+        logger
+            .log_position_adjustment(
+                account_id,
+                position_id,
+                Decimal::from(100000),
+                Decimal::from(75000),
+                "Reduce exposure".to_string(),
+                context,
+                None,
+            )
+            .unwrap();
 
         assert_eq!(logger.log_entries.len(), 1);
         assert_eq!(logger.log_entries[0].account_id, account_id);
@@ -610,7 +613,7 @@ mod tests {
     fn test_audit_report_generation() {
         let logger = RiskAuditLogger::new(AuditConfig::default());
         let report = logger.generate_audit_report(None);
-        
+
         assert_eq!(report.total_decisions, 0);
         assert!(report.decisions_by_type.is_empty());
     }
@@ -619,7 +622,7 @@ mod tests {
     fn test_compliance_export() {
         let logger = RiskAuditLogger::new(AuditConfig::default());
         let export = logger.export_for_compliance().unwrap();
-        
+
         // Should be valid JSON
         let _: Vec<RiskAuditLog> = serde_json::from_str(&export).unwrap();
     }

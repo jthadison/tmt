@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 // Import only the types we need for testing the risk calculations
 use execution_engine::risk::types::{
-    Position, PositionType, MarketTick, PnLSnapshot, DrawdownMetrics, 
-    DrawdownData, EquityPoint, AccountId, PositionId
+    AccountId, DrawdownData, DrawdownMetrics, EquityPoint, MarketTick, PnLSnapshot, Position,
+    PositionId, PositionType,
 };
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn test_pnl_snapshot_creation() {
 #[tokio::test]
 async fn test_drawdown_data_default() {
     let drawdown_data = DrawdownData::default();
-    
+
     assert_eq!(drawdown_data.amount, dec!(0));
     assert_eq!(drawdown_data.percentage, dec!(0));
     assert_eq!(drawdown_data.peak_equity, dec!(0));
@@ -98,18 +98,18 @@ fn test_position_type_serialization() {
     let short_pos = PositionType::Short;
 
     assert_ne!(long_pos, short_pos);
-    
+
     // Test JSON serialization
     let long_json = serde_json::to_string(&long_pos).unwrap();
     let short_json = serde_json::to_string(&short_pos).unwrap();
-    
+
     assert_eq!(long_json, "\"Long\"");
     assert_eq!(short_json, "\"Short\"");
-    
+
     // Test deserialization
     let deserialized_long: PositionType = serde_json::from_str(&long_json).unwrap();
     let deserialized_short: PositionType = serde_json::from_str(&short_json).unwrap();
-    
+
     assert_eq!(deserialized_long, PositionType::Long);
     assert_eq!(deserialized_short, PositionType::Short);
 }

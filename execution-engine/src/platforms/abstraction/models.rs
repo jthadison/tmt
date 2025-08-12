@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Unified order model that works across all platforms
@@ -43,10 +43,10 @@ pub enum UnifiedOrderType {
 #[serde(rename_all = "UPPERCASE")]
 pub enum UnifiedTimeInForce {
     Day,
-    Gtc,  // Good Till Canceled
-    Ioc,  // Immediate or Cancel
-    Fok,  // Fill or Kill
-    Gtd,  // Good Till Date
+    Gtc, // Good Till Canceled
+    Ioc, // Immediate or Cancel
+    Fok, // Fill or Kill
+    Gtd, // Good Till Date
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -347,15 +347,15 @@ pub struct Tick {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Timeframe {
-    M1,   // 1 minute
-    M5,   // 5 minutes
-    M15,  // 15 minutes
-    M30,  // 30 minutes
-    H1,   // 1 hour
-    H4,   // 4 hours
-    D1,   // 1 day
-    W1,   // 1 week
-    MN1,  // 1 month
+    M1,  // 1 minute
+    M5,  // 5 minutes
+    M15, // 15 minutes
+    M30, // 30 minutes
+    H1,  // 1 hour
+    H4,  // 4 hours
+    D1,  // 1 day
+    W1,  // 1 week
+    MN1, // 1 month
 }
 
 /// Position snapshot for history

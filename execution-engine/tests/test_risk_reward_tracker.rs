@@ -1,26 +1,24 @@
 use chrono::Utc;
-use rust_decimal_macros::dec;
-use uuid::Uuid;
 use execution_engine::risk::{
-    RiskRewardTracker, Position, PositionType, PositionTracker,
-    MarketDataProvider, RiskRewardAlertManager
+    MarketDataProvider, Position, PositionTracker, PositionType, RiskRewardAlertManager,
+    RiskRewardTracker,
 };
+use rust_decimal_macros::dec;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_risk_reward_calculation_with_targets() {
     let position_tracker = Arc::new(PositionTracker::new());
     let market_data = Arc::new(MarketDataProvider::new());
     let alert_manager = Arc::new(RiskRewardAlertManager::new());
-    
-    let tracker = RiskRewardTracker::new(
-        position_tracker,
-        market_data.clone(),
-        alert_manager,
-    );
-    
-    market_data.update_price("EURUSD".to_string(), dec!(1.1020)).await;
-    
+
+    let tracker = RiskRewardTracker::new(position_tracker, market_data.clone(), alert_manager);
+
+    market_data
+        .update_price("EURUSD".to_string(), dec!(1.1020))
+        .await;
+
     let position = Position {
         id: Uuid::new_v4(),
         account_id: Uuid::new_v4(),
@@ -36,9 +34,9 @@ async fn test_risk_reward_calculation_with_targets() {
         take_profit: Some(dec!(1.1100)),
         opened_at: Utc::now() - chrono::Duration::hours(2),
     };
-    
+
     let metrics = tracker.calculate_risk_reward(&position).await.unwrap();
-    
+
     assert_eq!(metrics.distance_to_stop, dec!(0.0050));
     assert_eq!(metrics.distance_to_target, dec!(0.0100));
     assert_eq!(metrics.current_rr_ratio, dec!(2));
@@ -50,15 +48,13 @@ async fn test_risk_reward_without_targets() {
     let position_tracker = Arc::new(PositionTracker::new());
     let market_data = Arc::new(MarketDataProvider::new());
     let alert_manager = Arc::new(RiskRewardAlertManager::new());
-    
-    let tracker = RiskRewardTracker::new(
-        position_tracker,
-        market_data.clone(),
-        alert_manager,
-    );
-    
-    market_data.update_price("GBPUSD".to_string(), dec!(1.3020)).await;
-    
+
+    let tracker = RiskRewardTracker::new(position_tracker, market_data.clone(), alert_manager);
+
+    market_data
+        .update_price("GBPUSD".to_string(), dec!(1.3020))
+        .await;
+
     let position = Position {
         id: Uuid::new_v4(),
         account_id: Uuid::new_v4(),
@@ -74,9 +70,9 @@ async fn test_risk_reward_without_targets() {
         take_profit: None,
         opened_at: Utc::now() - chrono::Duration::hours(1),
     };
-    
+
     let metrics = tracker.calculate_risk_reward(&position).await.unwrap();
-    
+
     assert_eq!(metrics.distance_to_stop, dec!(0.0260));
     assert_eq!(metrics.distance_to_target, dec!(0.0520));
     assert_eq!(metrics.current_rr_ratio, dec!(2));
@@ -87,15 +83,13 @@ async fn test_performance_score_calculation() {
     let position_tracker = Arc::new(PositionTracker::new());
     let market_data = Arc::new(MarketDataProvider::new());
     let alert_manager = Arc::new(RiskRewardAlertManager::new());
-    
-    let tracker = RiskRewardTracker::new(
-        position_tracker,
-        market_data.clone(),
-        alert_manager,
-    );
-    
-    market_data.update_price("USDJPY".to_string(), dec!(110.50)).await;
-    
+
+    let tracker = RiskRewardTracker::new(position_tracker, market_data.clone(), alert_manager);
+
+    market_data
+        .update_price("USDJPY".to_string(), dec!(110.50))
+        .await;
+
     let position = Position {
         id: Uuid::new_v4(),
         account_id: Uuid::new_v4(),
@@ -111,9 +105,9 @@ async fn test_performance_score_calculation() {
         take_profit: Some(dec!(111.00)),
         opened_at: Utc::now() - chrono::Duration::hours(10),
     };
-    
+
     let metrics = tracker.calculate_risk_reward(&position).await.unwrap();
-    
+
     assert!(metrics.performance_score > dec!(0));
     assert!(metrics.performance_score <= dec!(100));
 }
@@ -123,15 +117,13 @@ async fn test_recommendation_generation() {
     let position_tracker = Arc::new(PositionTracker::new());
     let market_data = Arc::new(MarketDataProvider::new());
     let alert_manager = Arc::new(RiskRewardAlertManager::new());
-    
-    let tracker = RiskRewardTracker::new(
-        position_tracker,
-        market_data.clone(),
-        alert_manager,
-    );
-    
-    market_data.update_price("EURUSD".to_string(), dec!(1.1025)).await;
-    
+
+    let tracker = RiskRewardTracker::new(position_tracker, market_data.clone(), alert_manager);
+
+    market_data
+        .update_price("EURUSD".to_string(), dec!(1.1025))
+        .await;
+
     let position = Position {
         id: Uuid::new_v4(),
         account_id: Uuid::new_v4(),
@@ -147,9 +139,9 @@ async fn test_recommendation_generation() {
         take_profit: Some(dec!(1.1100)),
         opened_at: Utc::now(),
     };
-    
+
     let metrics = tracker.calculate_risk_reward(&position).await.unwrap();
-    
+
     assert!(metrics.recommendation.is_some());
     let recommendation = metrics.recommendation.unwrap();
     assert!(recommendation.contains("partial profits"));
@@ -160,16 +152,16 @@ async fn test_target_optimization() {
     let position_tracker = Arc::new(PositionTracker::new());
     let market_data = Arc::new(MarketDataProvider::new());
     let alert_manager = Arc::new(RiskRewardAlertManager::new());
-    
-    let tracker = RiskRewardTracker::new(
-        position_tracker,
-        market_data.clone(),
-        alert_manager,
-    );
-    
-    market_data.update_price("GBPUSD".to_string(), dec!(1.3000)).await;
-    market_data.update_atr("GBPUSD".to_string(), dec!(0.0080)).await;
-    
+
+    let tracker = RiskRewardTracker::new(position_tracker, market_data.clone(), alert_manager);
+
+    market_data
+        .update_price("GBPUSD".to_string(), dec!(1.3000))
+        .await;
+    market_data
+        .update_atr("GBPUSD".to_string(), dec!(0.0080))
+        .await;
+
     let position = Position {
         id: Uuid::new_v4(),
         account_id: Uuid::new_v4(),
@@ -185,9 +177,9 @@ async fn test_target_optimization() {
         take_profit: Some(dec!(1.3050)),
         opened_at: Utc::now(),
     };
-    
+
     let optimization = tracker.optimize_targets(&position).await.unwrap();
-    
+
     assert!(optimization.optimal_stop.is_some());
     assert!(optimization.optimal_target.is_some());
     assert_eq!(optimization.optimal_stop.unwrap(), dec!(1.2840));

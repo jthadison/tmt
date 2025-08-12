@@ -1,16 +1,16 @@
+use rand::Rng;
+use rust_decimal::prelude::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use tracing::{info, warn, error, debug};
-use rand::Rng;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use rust_decimal::prelude::ToPrimitive;
 
 use crate::platforms::abstraction::{
     interfaces::ITradingPlatform,
-    models::{UnifiedOrder, UnifiedOrderType, UnifiedOrderSide},
+    models::{UnifiedOrder, UnifiedOrderSide, UnifiedOrderType},
 };
 // Temporarily disabled complex risk dependencies
 // use crate::risk::{DrawdownTracker, ExposureMonitor, MarginMonitor};
@@ -130,7 +130,9 @@ impl TradeExecutionOrchestrator {
         let mut accounts = self.accounts.write().await;
         let mut platforms = self.platforms.write().await;
 
-        let account_info = platform.get_account_info().await
+        let account_info = platform
+            .get_account_info()
+            .await
             .map_err(|e| format!("Failed to get account info: {}", e))?;
 
         let status = AccountStatus {
@@ -149,33 +151,42 @@ impl TradeExecutionOrchestrator {
         accounts.insert(account_id.clone(), status);
         platforms.insert(account_id.clone(), platform);
 
-        info!("Registered account {} with initial balance {}", account_id, initial_balance);
+        info!(
+            "Registered account {} with initial balance {}",
+            account_id, initial_balance
+        );
         Ok(())
     }
 
     pub async fn process_signal(&self, signal: TradeSignal) -> Result<ExecutionPlan, String> {
         info!("Processing signal {} for {}", signal.id, signal.symbol);
-        
+
         let accounts = self.accounts.read().await;
         let eligible_accounts = self.select_eligible_accounts(&accounts, &signal).await?;
-        
+
         if eligible_accounts.is_empty() {
             return Err("No eligible accounts for signal execution".to_string());
         }
 
-        let mut plan = self.create_execution_plan(signal.clone(), eligible_accounts).await?;
-        
+        let mut plan = self
+            .create_execution_plan(signal.clone(), eligible_accounts)
+            .await?;
+
         plan = self.apply_anti_correlation(&plan).await?;
-        
+
         let mut active = self.active_executions.write().await;
         active.insert(signal.id.clone(), plan.clone());
-        
+
         self.log_audit_entry(
             signal.id.clone(),
             "PLAN_CREATED".to_string(),
-            format!("Created execution plan with {} accounts", plan.account_assignments.len()),
+            format!(
+                "Created execution plan with {} accounts",
+                plan.account_assignments.len()
+            ),
             None,
-        ).await;
+        )
+        .await;
 
         Ok(plan)
     }
@@ -186,7 +197,7 @@ impl TradeExecutionOrchestrator {
         _signal: &TradeSignal,
     ) -> Result<Vec<String>, String> {
         let mut eligible = Vec::new();
-        
+
         for (account_id, status) in accounts.iter() {
             if !status.is_active {
                 debug!("Account {} is inactive", account_id);
@@ -228,20 +239,23 @@ impl TradeExecutionOrchestrator {
         let mut assignments = Vec::new();
 
         for (priority, account_id) in eligible_accounts.iter().enumerate() {
-            let base_delay_ms = rng.gen_range(self.min_timing_variance_ms..=self.max_timing_variance_ms);
+            let base_delay_ms =
+                rng.gen_range(self.min_timing_variance_ms..=self.max_timing_variance_ms);
             let delay = Duration::from_millis(base_delay_ms);
-            
-            let variance_pct = rng.gen_range(self.min_size_variance_pct..=self.max_size_variance_pct);
+
+            let variance_pct =
+                rng.gen_range(self.min_size_variance_pct..=self.max_size_variance_pct);
             let sign = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
             let size_multiplier = 1.0 + (variance_pct * sign);
-            
+
             let accounts = self.accounts.read().await;
-            let account = accounts.get(account_id)
+            let account = accounts
+                .get(account_id)
                 .ok_or_else(|| format!("Account {} not found", account_id))?;
-            
+
             let base_size = self.calculate_position_size(account, &signal);
             let adjusted_size = (base_size * size_multiplier * 100.0).round() / 100.0;
-            
+
             assignments.push(AccountAssignment {
                 account_id: account_id.clone(),
                 position_size: adjusted_size,
@@ -252,16 +266,10 @@ impl TradeExecutionOrchestrator {
 
         let mut timing_variance = HashMap::new();
         let mut size_variance = HashMap::new();
-        
+
         for assignment in &assignments {
-            timing_variance.insert(
-                assignment.account_id.clone(),
-                assignment.entry_timing_delay,
-            );
-            size_variance.insert(
-                assignment.account_id.clone(),
-                assignment.position_size,
-            );
+            timing_variance.insert(assignment.account_id.clone(), assignment.entry_timing_delay);
+            size_variance.insert(assignment.account_id.clone(), assignment.position_size);
         }
 
         Ok(ExecutionPlan {
@@ -277,39 +285,45 @@ impl TradeExecutionOrchestrator {
     }
 
     fn calculate_position_size(&self, account: &AccountStatus, signal: &TradeSignal) -> f64 {
-        let risk_per_trade = account.risk_budget_remaining.min(account.available_margin * 0.01);
-        
+        let risk_per_trade = account
+            .risk_budget_remaining
+            .min(account.available_margin * 0.01);
+
         let stop_distance = (signal.entry_price - signal.stop_loss).abs();
         let position_size = risk_per_trade / stop_distance;
-        
+
         let volatility_adjustment = 1.0 - (account.daily_drawdown / 0.05).min(0.5);
         let adjusted_size = position_size * volatility_adjustment;
-        
+
         (adjusted_size * 100.0).round() / 100.0
     }
 
     async fn apply_anti_correlation(&self, plan: &ExecutionPlan) -> Result<ExecutionPlan, String> {
         let correlation_matrix = self.correlation_matrix.read().await;
         let mut modified_plan = plan.clone();
-        
+
         let assignments_len = modified_plan.account_assignments.len();
         for i in 0..assignments_len {
-            for j in i+1..assignments_len {
+            for j in i + 1..assignments_len {
                 let (acc1, acc2) = {
                     let acc1 = modified_plan.account_assignments[i].account_id.clone();
                     let acc2 = modified_plan.account_assignments[j].account_id.clone();
                     (acc1, acc2)
                 };
-                let key = if acc1 < acc2 { (acc1.clone(), acc2.clone()) } else { (acc2.clone(), acc1.clone()) };
-                
+                let key = if acc1 < acc2 {
+                    (acc1.clone(), acc2.clone())
+                } else {
+                    (acc2.clone(), acc1.clone())
+                };
+
                 if let Some(&correlation) = correlation_matrix.get(&key) {
                     if correlation > self.max_correlation_threshold {
                         let additional_delay = Duration::from_millis(
-                            ((correlation - self.max_correlation_threshold) * 10000.0) as u64
+                            ((correlation - self.max_correlation_threshold) * 10000.0) as u64,
                         );
                         modified_plan.account_assignments[j].entry_timing_delay += additional_delay;
                         modified_plan.account_assignments[j].position_size *= 0.9;
-                        
+
                         info!(
                             "Applied anti-correlation adjustment between {} and {} (correlation: {:.2})",
                             acc1, acc2, correlation
@@ -332,25 +346,27 @@ impl TradeExecutionOrchestrator {
             let _execution_history = self.execution_history.clone();
             let accounts = self.accounts.clone();
             let signal_id = plan.signal_id.clone();
-            
+
             let handle = tokio::spawn(async move {
                 tokio::time::sleep(assignment.entry_timing_delay).await;
-                
+
                 let start_time = Instant::now();
                 let platforms = platforms.read().await;
-                
+
                 if let Some(platform) = platforms.get(&assignment.account_id) {
                     let order = UnifiedOrder {
                         client_order_id: Uuid::new_v4().to_string(),
                         symbol: "EURUSD".to_string(),
                         order_type: UnifiedOrderType::Market,
                         side: UnifiedOrderSide::Buy,
-                        quantity: rust_decimal::Decimal::from_f64_retain(assignment.position_size).unwrap(),
+                        quantity: rust_decimal::Decimal::from_f64_retain(assignment.position_size)
+                            .unwrap(),
                         price: None,
                         stop_price: None,
                         stop_loss: Some(rust_decimal::Decimal::from_f64_retain(1.0800).unwrap()),
                         take_profit: Some(rust_decimal::Decimal::from_f64_retain(1.1000).unwrap()),
-                        time_in_force: crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc,
+                        time_in_force:
+                            crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc,
                         account_id: Some(assignment.account_id.clone()),
                         metadata: crate::platforms::abstraction::models::OrderMetadata {
                             strategy_id: Some(signal_id.clone()),
@@ -376,12 +392,17 @@ impl TradeExecutionOrchestrator {
                                 success: true,
                                 error_message: None,
                                 execution_time: start_time.elapsed(),
-                                actual_entry_price: placed_order.price.map(|p| p.to_f64().unwrap_or(0.0)),
+                                actual_entry_price: placed_order
+                                    .price
+                                    .map(|p| p.to_f64().unwrap_or(0.0)),
                                 slippage: None,
                             }
                         }
                         Err(e) => {
-                            error!("Failed to execute order for account {}: {}", assignment.account_id, e);
+                            error!(
+                                "Failed to execute order for account {}: {}",
+                                assignment.account_id, e
+                            );
                             ExecutionResult {
                                 signal_id: signal_id.clone(),
                                 account_id: assignment.account_id.clone(),
@@ -431,14 +452,18 @@ impl TradeExecutionOrchestrator {
             result.signal_id, result.account_id
         );
 
-        let alternative_accounts = self.find_alternative_accounts(&result.account_id, plan).await?;
-        
+        let alternative_accounts = self
+            .find_alternative_accounts(&result.account_id, plan)
+            .await?;
+
         if alternative_accounts.is_empty() {
             return Err("No alternative accounts available for retry".to_string());
         }
 
         let selected_account = &alternative_accounts[0];
-        let assignment = plan.account_assignments.iter()
+        let assignment = plan
+            .account_assignments
+            .iter()
             .find(|a| a.account_id == result.account_id)
             .ok_or("Original assignment not found")?;
 
@@ -454,12 +479,17 @@ impl TradeExecutionOrchestrator {
             account_assignments: vec![new_assignment],
             timing_variance: HashMap::new(),
             size_variance: HashMap::new(),
-            rationale: format!("Retry execution on alternative account {}", selected_account),
+            rationale: format!(
+                "Retry execution on alternative account {}",
+                selected_account
+            ),
         };
 
         let retry_results = self.execute_plan(&retry_plan).await;
-        
-        retry_results.into_iter().next()
+
+        retry_results
+            .into_iter()
+            .next()
             .ok_or_else(|| "Retry execution failed".to_string())
     }
 
@@ -471,7 +501,9 @@ impl TradeExecutionOrchestrator {
         let accounts = self.accounts.read().await;
         let mut alternatives = Vec::new();
 
-        let used_accounts: Vec<String> = plan.account_assignments.iter()
+        let used_accounts: Vec<String> = plan
+            .account_assignments
+            .iter()
             .map(|a| a.account_id.clone())
             .collect();
 
@@ -479,7 +511,7 @@ impl TradeExecutionOrchestrator {
             if account_id == failed_account {
                 continue;
             }
-            
+
             if used_accounts.contains(account_id) {
                 continue;
             }
@@ -503,7 +535,10 @@ impl TradeExecutionOrchestrator {
             id: Uuid::new_v4().to_string(),
             timestamp: SystemTime::now(),
             signal_id,
-            account_id: result.as_ref().map(|r| r.account_id.clone()).unwrap_or_default(),
+            account_id: result
+                .as_ref()
+                .map(|r| r.account_id.clone())
+                .unwrap_or_default(),
             action,
             decision_rationale: rationale,
             result,
@@ -512,26 +547,38 @@ impl TradeExecutionOrchestrator {
 
         let mut history = self.execution_history.write().await;
         history.push(entry);
-        
+
         if history.len() > 10000 {
             history.drain(0..1000);
         }
     }
 
     async fn log_execution_result(&self, result: &ExecutionResult) {
-        let action = if result.success { "EXECUTION_SUCCESS" } else { "EXECUTION_FAILED" };
-        let rationale = result.error_message.clone()
+        let action = if result.success {
+            "EXECUTION_SUCCESS"
+        } else {
+            "EXECUTION_FAILED"
+        };
+        let rationale = result
+            .error_message
+            .clone()
             .unwrap_or_else(|| format!("Order executed in {:?}", result.execution_time));
-        
+
         self.log_audit_entry(
             result.signal_id.clone(),
             action.to_string(),
             rationale,
             Some(result.clone()),
-        ).await;
+        )
+        .await;
     }
 
-    pub async fn update_correlation_matrix(&self, account1: &str, account2: &str, correlation: f64) {
+    pub async fn update_correlation_matrix(
+        &self,
+        account1: &str,
+        account2: &str,
+        correlation: f64,
+    ) {
         let mut matrix = self.correlation_matrix.write().await;
         let key = if account1 < account2 {
             (account1.to_string(), account2.to_string())
@@ -543,7 +590,11 @@ impl TradeExecutionOrchestrator {
 
     pub async fn get_execution_history(&self, limit: usize) -> Vec<ExecutionAuditEntry> {
         let history = self.execution_history.read().await;
-        let start = if history.len() > limit { history.len() - limit } else { 0 };
+        let start = if history.len() > limit {
+            history.len() - limit
+        } else {
+            0
+        };
         history[start..].to_vec()
     }
 

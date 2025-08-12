@@ -101,39 +101,45 @@ impl RiskConfig {
 
     pub fn from_env() -> Self {
         let mut config = Self::default();
-        
+
         if let Ok(warning_level) = std::env::var("RISK_MARGIN_WARNING_LEVEL") {
             if let Ok(level) = warning_level.parse::<f64>() {
-                config.margin_thresholds.warning_level = Decimal::from_f64_retain(level).unwrap_or(dec!(150));
+                config.margin_thresholds.warning_level =
+                    Decimal::from_f64_retain(level).unwrap_or(dec!(150));
             }
         }
 
         if let Ok(critical_level) = std::env::var("RISK_MARGIN_CRITICAL_LEVEL") {
             if let Ok(level) = critical_level.parse::<f64>() {
-                config.margin_thresholds.critical_level = Decimal::from_f64_retain(level).unwrap_or(dec!(120));
+                config.margin_thresholds.critical_level =
+                    Decimal::from_f64_retain(level).unwrap_or(dec!(120));
             }
         }
 
         if let Ok(daily_threshold) = std::env::var("RISK_DAILY_DRAWDOWN_THRESHOLD") {
             if let Ok(threshold) = daily_threshold.parse::<f64>() {
-                config.drawdown_thresholds.daily_threshold = Decimal::from_f64_retain(threshold).unwrap_or(dec!(5));
+                config.drawdown_thresholds.daily_threshold =
+                    Decimal::from_f64_retain(threshold).unwrap_or(dec!(5));
             }
         }
 
         if let Ok(max_threshold) = std::env::var("RISK_MAX_DRAWDOWN_THRESHOLD") {
             if let Ok(threshold) = max_threshold.parse::<f64>() {
-                config.drawdown_thresholds.max_threshold = Decimal::from_f64_retain(threshold).unwrap_or(dec!(20));
+                config.drawdown_thresholds.max_threshold =
+                    Decimal::from_f64_retain(threshold).unwrap_or(dec!(20));
             }
         }
 
         if let Ok(max_exposure) = std::env::var("RISK_MAX_EXPOSURE_PER_SYMBOL") {
             if let Ok(exposure) = max_exposure.parse::<f64>() {
-                config.exposure_limits.max_exposure_per_symbol = Decimal::from_f64_retain(exposure).unwrap_or(dec!(25));
+                config.exposure_limits.max_exposure_per_symbol =
+                    Decimal::from_f64_retain(exposure).unwrap_or(dec!(25));
             }
         }
 
         if let Ok(enabled) = std::env::var("RISK_AUTOMATED_RESPONSES_ENABLED") {
-            config.risk_response_config.enable_automated_responses = enabled.parse().unwrap_or(true);
+            config.risk_response_config.enable_automated_responses =
+                enabled.parse().unwrap_or(true);
         }
 
         config
@@ -154,15 +160,21 @@ impl RiskConfig {
             return Err("Margin critical level must be greater than stop out level".to_string());
         }
 
-        if self.drawdown_thresholds.daily_threshold <= dec!(0) || self.drawdown_thresholds.daily_threshold >= dec!(100) {
+        if self.drawdown_thresholds.daily_threshold <= dec!(0)
+            || self.drawdown_thresholds.daily_threshold >= dec!(100)
+        {
             return Err("Daily drawdown threshold must be between 0% and 100%".to_string());
         }
 
-        if self.drawdown_thresholds.max_threshold <= dec!(0) || self.drawdown_thresholds.max_threshold >= dec!(100) {
+        if self.drawdown_thresholds.max_threshold <= dec!(0)
+            || self.drawdown_thresholds.max_threshold >= dec!(100)
+        {
             return Err("Maximum drawdown threshold must be between 0% and 100%".to_string());
         }
 
-        if self.exposure_limits.max_exposure_per_symbol <= dec!(0) || self.exposure_limits.max_exposure_per_symbol > dec!(100) {
+        if self.exposure_limits.max_exposure_per_symbol <= dec!(0)
+            || self.exposure_limits.max_exposure_per_symbol > dec!(100)
+        {
             return Err("Max exposure per symbol must be between 0% and 100%".to_string());
         }
 
@@ -178,7 +190,7 @@ pub fn load_config() -> RiskConfig {
             }
         }
     }
-    
+
     let config = RiskConfig::from_env();
     if config.validate().is_ok() {
         config
@@ -202,7 +214,7 @@ mod tests {
         let mut config = RiskConfig::default();
         config.margin_thresholds.warning_level = dec!(100);
         config.margin_thresholds.critical_level = dec!(120);
-        
+
         assert!(config.validate().is_err());
     }
 
@@ -211,7 +223,10 @@ mod tests {
         let config = RiskConfig::default();
         let toml_string = toml::to_string(&config).unwrap();
         let deserialized: RiskConfig = toml::from_str(&toml_string).unwrap();
-        
-        assert_eq!(config.margin_thresholds.warning_level, deserialized.margin_thresholds.warning_level);
+
+        assert_eq!(
+            config.margin_thresholds.warning_level,
+            deserialized.margin_thresholds.warning_level
+        );
     }
 }

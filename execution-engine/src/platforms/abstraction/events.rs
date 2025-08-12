@@ -59,7 +59,7 @@ pub enum EventType {
     ConnectionRestored,
     AuthenticationSuccess,
     AuthenticationFailed,
-    
+
     // Order events
     OrderPlaced,
     OrderModified,
@@ -68,47 +68,47 @@ pub enum EventType {
     OrderPartiallyFilled,
     OrderRejected,
     OrderExpired,
-    
+
     // Position events
     PositionOpened,
     PositionClosed,
     PositionModified,
     PositionMarginCall,
     PositionStopOut,
-    
+
     // Market data events
     MarketDataUpdate,
     MarketDataSubscribed,
     MarketDataUnsubscribed,
     MarketDataError,
-    
+
     // Account events
     AccountBalanceUpdate,
     AccountMarginUpdate,
     AccountEquityUpdate,
     AccountStatusChange,
-    
+
     // Platform events
     PlatformStatusChange,
     PlatformMaintenance,
     PlatformError,
-    
+
     // Trading session events
     SessionOpened,
     SessionClosed,
     TradingHalted,
     TradingResumed,
-    
+
     // Risk management events
     RiskLimitBreached,
     MarginCallTriggered,
     StopOutTriggered,
-    
+
     // System events
     Heartbeat,
     Diagnostic,
     PerformanceMetric,
-    
+
     // Custom events
     Custom(String),
 }
@@ -292,7 +292,9 @@ impl UnifiedEventBus {
 
     pub async fn publish(&self, mut event: PlatformEvent) {
         // Set sequence number
-        event.sequence_number = self.sequence_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        event.sequence_number = self
+            .sequence_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         // Apply filters
         if !self.should_publish(&event) {
@@ -416,8 +418,15 @@ pub struct EventStats {
 #[async_trait::async_trait]
 pub trait EventStore: Send + Sync {
     async fn store_event(&self, event: &PlatformEvent) -> Result<(), Box<dyn std::error::Error>>;
-    async fn get_events(&self, filter: &EventFilter, limit: Option<usize>) -> Result<Vec<PlatformEvent>, Box<dyn std::error::Error>>;
-    async fn get_event_stats(&self, from: chrono::DateTime<chrono::Utc>) -> Result<EventStats, Box<dyn std::error::Error>>;
+    async fn get_events(
+        &self,
+        filter: &EventFilter,
+        limit: Option<usize>,
+    ) -> Result<Vec<PlatformEvent>, Box<dyn std::error::Error>>;
+    async fn get_event_stats(
+        &self,
+        from: chrono::DateTime<chrono::Utc>,
+    ) -> Result<EventStats, Box<dyn std::error::Error>>;
 }
 
 /// Event deduplication utility
@@ -439,9 +448,8 @@ impl EventDeduplicator {
         let now = chrono::Utc::now();
 
         // Clean up old entries
-        self.recent_events.retain(|_, timestamp| {
-            now - *timestamp < self.dedup_window
-        });
+        self.recent_events
+            .retain(|_, timestamp| now - *timestamp < self.dedup_window);
 
         // Check if we've seen this event recently
         if let Some(last_seen) = self.recent_events.get(&key) {
@@ -457,29 +465,29 @@ impl EventDeduplicator {
     fn create_dedup_key(&self, event: &PlatformEvent) -> String {
         match &event.data {
             EventData::Order(data) => {
-                format!("order:{}:{}:{:?}", 
-                    event.account_id, 
-                    data.order.platform_order_id, 
-                    data.order.status
+                format!(
+                    "order:{}:{}:{:?}",
+                    event.account_id, data.order.platform_order_id, data.order.status
                 )
             }
             EventData::Position(data) => {
-                format!("position:{}:{}:{}", 
-                    event.account_id, 
-                    data.position.symbol, 
-                    data.position.quantity
+                format!(
+                    "position:{}:{}:{}",
+                    event.account_id, data.position.symbol, data.position.quantity
                 )
             }
             EventData::MarketData(data) => {
-                format!("market:{}:{}:{}", 
-                    event.account_id, 
-                    data.market_data.symbol, 
+                format!(
+                    "market:{}:{}:{}",
+                    event.account_id,
+                    data.market_data.symbol,
                     event.timestamp.timestamp_millis() / 1000 // Second-level deduplication
                 )
             }
-            _ => format!("{}:{}:{}", 
-                format!("{:?}", event.event_type), 
-                event.account_id, 
+            _ => format!(
+                "{}:{}:{}",
+                format!("{:?}", event.event_type),
+                event.account_id,
                 event.timestamp.timestamp_millis() / 5000 // 5-second window for other events
             ),
         }

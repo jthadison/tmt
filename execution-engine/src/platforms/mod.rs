@@ -1,7 +1,7 @@
 // Temporarily disabled due to missing dependencies
 // pub mod tradelocker;
-pub mod dxtrade;
 pub mod abstraction;
+pub mod dxtrade;
 
 use serde::{Deserialize, Serialize};
 
@@ -23,16 +23,16 @@ pub trait TradingPlatform: Send + Sync {
 // Re-export key abstractions for easier usage
 pub use abstraction::{
     ITradingPlatform,
-    UnifiedOrder,
-    UnifiedAccountInfo,
-    UnifiedMarketData,
-    PlatformError,
     PlatformAbstractionLayer,
     PlatformCapabilities,
     // Temporarily disabled missing types
     // UnifiedOrderResponse,
-    // UnifiedPosition, 
+    // UnifiedPosition,
     // PlatformFactory,
     // PlatformRegistry,
     // PerformanceMonitor,
+    PlatformError,
+    UnifiedAccountInfo,
+    UnifiedMarketData,
+    UnifiedOrder,
 };

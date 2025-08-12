@@ -1,16 +1,19 @@
+use rust_decimal::prelude::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tokio::time::{interval, timeout};
-use serde::{Deserialize, Serialize};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use uuid::Uuid;
-use rust_decimal::prelude::ToPrimitive;
 
 use crate::platforms::abstraction::{
     interfaces::{ITradingPlatform, OrderFilter},
-    models::{UnifiedOrder, UnifiedOrderStatus, UnifiedOrderType, UnifiedOrderSide, UnifiedTimeInForce, OrderMetadata, UnifiedOrderResponse},
+    models::{
+        OrderMetadata, UnifiedOrder, UnifiedOrderResponse, UnifiedOrderSide, UnifiedOrderStatus,
+        UnifiedOrderType, UnifiedTimeInForce,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +58,7 @@ impl ExecutionMonitor {
     pub fn add_partial_fill(&mut self, fill: PartialFill) {
         self.filled_quantity += fill.filled_quantity;
         self.partial_fills.push(fill);
-        
+
         if self.filled_quantity >= self.expected_quantity {
             self.status = UnifiedOrderStatus::Filled;
             self.completion_time = Some(SystemTime::now());
@@ -65,7 +68,12 @@ impl ExecutionMonitor {
     }
 
     pub fn is_complete(&self) -> bool {
-        matches!(self.status, UnifiedOrderStatus::Filled | UnifiedOrderStatus::Canceled | UnifiedOrderStatus::Rejected)
+        matches!(
+            self.status,
+            UnifiedOrderStatus::Filled
+                | UnifiedOrderStatus::Canceled
+                | UnifiedOrderStatus::Rejected
+        )
     }
 
     pub fn remaining_quantity(&self) -> f64 {
@@ -105,15 +113,16 @@ impl ExecutionCoordinator {
         account_id: String,
         expected_quantity: f64,
     ) -> Result<ExecutionMonitor, String> {
-        let monitor = ExecutionMonitor::new(order_id.clone(), account_id.clone(), expected_quantity);
-        
+        let monitor =
+            ExecutionMonitor::new(order_id.clone(), account_id.clone(), expected_quantity);
+
         {
             let mut monitors = self.monitors.write().await;
             monitors.insert(order_id.clone(), monitor.clone());
         }
 
         let monitoring_task = self.start_monitoring_task(order_id.clone());
-        
+
         tokio::select! {
             result = monitoring_task => result,
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
@@ -126,24 +135,26 @@ impl ExecutionCoordinator {
         let monitors = self.monitors.clone();
         let platforms = self.platforms.clone();
         let monitoring_interval = self.monitoring_interval;
-        
+
         let mut ticker = interval(monitoring_interval);
-        
+
         loop {
             ticker.tick().await;
-            
+
             let mut monitors_lock = monitors.write().await;
-            let monitor = monitors_lock.get_mut(&order_id)
+            let monitor = monitors_lock
+                .get_mut(&order_id)
                 .ok_or_else(|| "Monitor not found".to_string())?;
-            
+
             if monitor.is_complete() {
                 return Ok(monitor.clone());
             }
-            
+
             let platforms_lock = platforms.read().await;
-            let platform = platforms_lock.get(&monitor.account_id)
+            let platform = platforms_lock
+                .get(&monitor.account_id)
                 .ok_or_else(|| "Platform not found".to_string())?;
-            
+
             let order_filter = OrderFilter {
                 order_id: Some(order_id.clone()),
                 symbol: None,
@@ -154,32 +165,38 @@ impl ExecutionCoordinator {
                 to: None,
                 limit: Some(1),
             };
-            
+
             match platform.get_orders(Some(order_filter)).await {
                 Ok(orders) if !orders.is_empty() => {
                     let order = &orders[0];
                     monitor.status = order.status.clone();
-                    
+
                     if let Some(filled_qty) = Self::calculate_filled_quantity(order) {
                         if filled_qty > monitor.filled_quantity {
                             let partial_fill = PartialFill {
                                 order_id: order_id.clone(),
                                 filled_quantity: filled_qty - monitor.filled_quantity,
                                 remaining_quantity: monitor.expected_quantity - filled_qty,
-                                filled_price: order.average_fill_price.map(|p| p.to_f64().unwrap_or(0.0)).unwrap_or(0.0),
+                                filled_price: order
+                                    .average_fill_price
+                                    .map(|p| p.to_f64().unwrap_or(0.0))
+                                    .unwrap_or(0.0),
                                 timestamp: SystemTime::now(),
                             };
                             monitor.add_partial_fill(partial_fill);
-                            
+
                             info!(
                                 "Partial fill for order {}: {:.2}/{:.2}",
                                 order_id, monitor.filled_quantity, monitor.expected_quantity
                             );
                         }
                     }
-                    
+
                     if monitor.is_complete() {
-                        info!("Order {} completed with status {:?}", order_id, monitor.status);
+                        info!(
+                            "Order {} completed with status {:?}",
+                            order_id, monitor.status
+                        );
                         return Ok(monitor.clone());
                     }
                 }
@@ -190,7 +207,7 @@ impl ExecutionCoordinator {
                 Err(e) => {
                     warn!("Failed to get order status for {}: {}", order_id, e);
                     monitor.retry_count += 1;
-                    
+
                     if monitor.retry_count >= monitor.max_retries {
                         error!("Max retries exceeded for order {}", order_id);
                         monitor.status = UnifiedOrderStatus::Rejected;
@@ -211,10 +228,7 @@ impl ExecutionCoordinator {
         }
     }
 
-    pub async fn handle_partial_fill(
-        &self,
-        monitor: &ExecutionMonitor,
-    ) -> Result<String, String> {
+    pub async fn handle_partial_fill(&self, monitor: &ExecutionMonitor) -> Result<String, String> {
         if monitor.remaining_quantity() <= 0.0 {
             return Ok("No remaining quantity to fill".to_string());
         }
@@ -226,7 +240,8 @@ impl ExecutionCoordinator {
         );
 
         let platforms = self.platforms.read().await;
-        let platform = platforms.get(&monitor.account_id)
+        let platform = platforms
+            .get(&monitor.account_id)
             .ok_or_else(|| "Platform not found".to_string())?;
 
         let completion_order = UnifiedOrder {
@@ -250,14 +265,23 @@ impl ExecutionCoordinator {
             },
         };
 
-        match timeout(self.partial_fill_timeout, platform.place_order(completion_order)).await {
+        match timeout(
+            self.partial_fill_timeout,
+            platform.place_order(completion_order),
+        )
+        .await
+        {
             Ok(Ok(placed_order)) => {
-                info!("Completion order placed: {}", placed_order.platform_order_id);
+                info!(
+                    "Completion order placed: {}",
+                    placed_order.platform_order_id
+                );
                 self.monitor_execution(
                     placed_order.platform_order_id.clone(),
                     monitor.account_id.clone(),
                     monitor.remaining_quantity(),
-                ).await?;
+                )
+                .await?;
                 Ok(placed_order.platform_order_id)
             }
             Ok(Err(e)) => {
@@ -307,7 +331,8 @@ impl ExecutionCoordinator {
                 status: monitor.status.clone(),
                 fill_rate: monitor.filled_quantity / monitor.expected_quantity,
                 partial_fills_count: monitor.partial_fills.len(),
-                duration: monitor.completion_time
+                duration: monitor
+                    .completion_time
                     .and_then(|ct| ct.duration_since(monitor.start_time).ok())
                     .map(|d| d.as_secs()),
                 retry_count: monitor.retry_count,
@@ -336,11 +361,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_execution_monitor() {
-        let mut monitor = ExecutionMonitor::new(
-            "order123".to_string(),
-            "account1".to_string(),
-            100.0,
-        );
+        let mut monitor =
+            ExecutionMonitor::new("order123".to_string(), "account1".to_string(), 100.0);
 
         assert_eq!(monitor.remaining_quantity(), 100.0);
         assert!(!monitor.is_complete());

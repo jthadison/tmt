@@ -1,5 +1,6 @@
-pub mod orchestrator;
 pub mod coordinator;
+pub mod exit_management;
+pub mod orchestrator;
 
 #[cfg(test)]
 pub mod mock_platform;
@@ -8,20 +9,15 @@ pub mod mock_platform;
 mod simple_test;
 
 pub use orchestrator::{
-    TradeExecutionOrchestrator,
-    TradeSignal,
-    ExecutionPlan,
-    ExecutionResult,
-    AccountStatus,
-    AccountAssignment,
-    ExecutionAuditEntry,
+    AccountAssignment, AccountStatus, ExecutionAuditEntry, ExecutionPlan, ExecutionResult,
+    TradeExecutionOrchestrator, TradeSignal,
 };
 
-pub use coordinator::{
-    ExecutionCoordinator,
-    ExecutionMonitor,
-    PartialFill,
-    ExecutionSummary,
+pub use coordinator::{ExecutionCoordinator, ExecutionMonitor, ExecutionSummary, PartialFill};
+
+pub use exit_management::{
+    BreakEvenManager, ExitAuditLogger, ExitManagementSystem, NewsEventProtection,
+    PartialProfitManager, TimeBasedExitManager, TrailingStopManager,
 };
 
 #[cfg(test)]

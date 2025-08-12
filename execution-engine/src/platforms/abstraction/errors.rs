@@ -8,113 +8,122 @@ pub enum PlatformError {
     /// Connection related errors
     #[error("Connection failed: {reason}")]
     ConnectionFailed { reason: String },
-    
+
     #[error("Connection timeout after {timeout_ms}ms")]
     ConnectionTimeout { timeout_ms: u64 },
-    
+
     #[error("Platform disconnected: {reason}")]
     Disconnected { reason: String },
-    
+
     #[error("Authentication failed: {reason}")]
     AuthenticationFailed { reason: String },
-    
+
     /// Order related errors
     #[error("Order validation failed: {violations:?}")]
     OrderValidationFailed { violations: Vec<ValidationError> },
-    
+
     #[error("Order rejected by platform: {reason}")]
-    OrderRejected { reason: String, platform_code: Option<String> },
-    
+    OrderRejected {
+        reason: String,
+        platform_code: Option<String>,
+    },
+
     #[error("Order not found: {order_id}")]
     OrderNotFound { order_id: String },
-    
+
     #[error("Order modification failed: {reason}")]
     OrderModificationFailed { reason: String },
-    
+
     /// Position related errors
     #[error("Position not found: {symbol}")]
     PositionNotFound { symbol: String },
-    
+
     #[error("Insufficient margin: required {required}, available {available}")]
-    InsufficientMargin { required: rust_decimal::Decimal, available: rust_decimal::Decimal },
-    
+    InsufficientMargin {
+        required: rust_decimal::Decimal,
+        available: rust_decimal::Decimal,
+    },
+
     #[error("Position close failed: {reason}")]
     PositionCloseFailed { reason: String },
-    
+
     /// Market data errors
     #[error("Symbol not found: {symbol}")]
     SymbolNotFound { symbol: String },
-    
+
     #[error("Market data unavailable: {reason}")]
     MarketDataUnavailable { reason: String },
-    
+
     #[error("Market closed for symbol: {symbol}")]
     MarketClosed { symbol: String },
-    
+
     #[error("Subscription failed: {reason}")]
     SubscriptionFailed { reason: String },
-    
+
     /// Account related errors
     #[error("Account not found: {account_id}")]
     AccountNotFound { account_id: String },
-    
+
     #[error("Insufficient funds: required {required}, available {available}")]
-    InsufficientFunds { required: rust_decimal::Decimal, available: rust_decimal::Decimal },
-    
+    InsufficientFunds {
+        required: rust_decimal::Decimal,
+        available: rust_decimal::Decimal,
+    },
+
     #[error("Trading not allowed: {reason}")]
     TradingNotAllowed { reason: String },
-    
+
     /// Platform specific errors
     #[error("Platform not supported: {platform}")]
     PlatformNotSupported { platform: String },
-    
+
     #[error("Platform not found: {platform_id}")]
     PlatformNotFound { platform_id: String },
-    
+
     #[error("Feature not supported: {feature}")]
     FeatureNotSupported { feature: String },
-    
+
     /// Rate limiting errors
     #[error("Rate limit exceeded: retry after {retry_after_ms}ms")]
     RateLimitExceeded { retry_after_ms: u64 },
-    
+
     #[error("API limit reached: {limit_type}")]
     ApiLimitReached { limit_type: String },
-    
+
     /// Network and communication errors
     #[error("Network error: {reason}")]
     NetworkError { reason: String },
-    
+
     #[error("Request timeout after {timeout_ms}ms")]
     RequestTimeout { timeout_ms: u64 },
-    
+
     #[error("Invalid response: {reason}")]
     InvalidResponse { reason: String },
-    
+
     /// Configuration and setup errors
     #[error("Configuration error: {reason}")]
     ConfigurationError { reason: String },
-    
+
     #[error("Invalid credentials: {reason}")]
     InvalidCredentials { reason: String },
-    
+
     #[error("Platform initialization failed: {reason}")]
     InitializationFailed { reason: String },
-    
+
     /// Generic errors
     #[error("Internal error: {reason}")]
     InternalError { reason: String },
-    
+
     #[error("Unknown error: {reason}")]
     Unknown { reason: String },
-    
+
     /// Wrapped platform-specific errors
     #[error("TradeLocker error: {error}")]
     TradeLocker { error: String },
-    
+
     #[error("DXTrade error: {error}")]
     DXTrade { error: String },
-    
+
     #[error("MetaTrader error: {error}")]
     MetaTrader { error: String },
 }
@@ -122,12 +131,13 @@ pub enum PlatformError {
 impl PlatformError {
     /// Check if error is recoverable (can be retried)
     pub fn is_recoverable(&self) -> bool {
-        matches!(self, 
-            PlatformError::ConnectionTimeout { .. } |
-            PlatformError::NetworkError { .. } |
-            PlatformError::RequestTimeout { .. } |
-            PlatformError::RateLimitExceeded { .. } |
-            PlatformError::MarketDataUnavailable { .. }
+        matches!(
+            self,
+            PlatformError::ConnectionTimeout { .. }
+                | PlatformError::NetworkError { .. }
+                | PlatformError::RequestTimeout { .. }
+                | PlatformError::RateLimitExceeded { .. }
+                | PlatformError::MarketDataUnavailable { .. }
         )
     }
 
@@ -212,31 +222,31 @@ pub enum ErrorSeverity {
 pub enum ValidationError {
     #[error("Invalid symbol: {symbol}")]
     InvalidSymbol { symbol: String },
-    
+
     #[error("Invalid quantity: {quantity}")]
     InvalidQuantity { quantity: rust_decimal::Decimal },
-    
+
     #[error("Invalid price: {price}")]
     InvalidPrice { price: rust_decimal::Decimal },
-    
+
     #[error("Order size too small: minimum {min_size}")]
     OrderTooSmall { min_size: rust_decimal::Decimal },
-    
+
     #[error("Order size too large: maximum {max_size}")]
     OrderTooLarge { max_size: rust_decimal::Decimal },
-    
+
     #[error("Invalid order type for symbol")]
     InvalidOrderTypeForSymbol,
-    
+
     #[error("Market closed for symbol: {symbol}")]
     MarketClosed { symbol: String },
-    
+
     #[error("Invalid time in force for order type")]
     InvalidTimeInForce,
-    
+
     #[error("Missing required field: {field}")]
     MissingRequiredField { field: String },
-    
+
     #[error("Conflicting parameters: {reason}")]
     ConflictingParameters { reason: String },
 }
@@ -297,7 +307,7 @@ impl EnrichedError {
     pub fn new(error: PlatformError, context: ErrorContext) -> Self {
         let recovery_suggestion = Self::suggest_recovery(&error);
         let user_message = Self::generate_user_message(&error);
-        
+
         Self {
             error,
             context,
@@ -310,9 +320,15 @@ impl EnrichedError {
 
     fn suggest_recovery(error: &PlatformError) -> Option<String> {
         match error {
-            PlatformError::ConnectionTimeout { .. } => Some("Check network connection and retry".to_string()),
-            PlatformError::RateLimitExceeded { retry_after_ms } => Some(format!("Wait {}ms and retry", retry_after_ms)),
-            PlatformError::InsufficientMargin { .. } => Some("Reduce position size or add margin".to_string()),
+            PlatformError::ConnectionTimeout { .. } => {
+                Some("Check network connection and retry".to_string())
+            }
+            PlatformError::RateLimitExceeded { retry_after_ms } => {
+                Some(format!("Wait {}ms and retry", retry_after_ms))
+            }
+            PlatformError::InsufficientMargin { .. } => {
+                Some("Reduce position size or add margin".to_string())
+            }
             PlatformError::MarketClosed { .. } => Some("Wait for market to open".to_string()),
             _ => None,
         }
@@ -320,10 +336,18 @@ impl EnrichedError {
 
     fn generate_user_message(error: &PlatformError) -> Option<String> {
         match error {
-            PlatformError::InsufficientMargin { .. } => Some("Not enough margin to place this order".to_string()),
-            PlatformError::InsufficientFunds { .. } => Some("Insufficient account balance".to_string()),
-            PlatformError::MarketDataUnavailable { .. } => Some("Market data temporarily unavailable".to_string()),
-            PlatformError::TradingNotAllowed { .. } => Some("Trading is currently disabled for this account".to_string()),
+            PlatformError::InsufficientMargin { .. } => {
+                Some("Not enough margin to place this order".to_string())
+            }
+            PlatformError::InsufficientFunds { .. } => {
+                Some("Insufficient account balance".to_string())
+            }
+            PlatformError::MarketDataUnavailable { .. } => {
+                Some("Market data temporarily unavailable".to_string())
+            }
+            PlatformError::TradingNotAllowed { .. } => {
+                Some("Trading is currently disabled for this account".to_string())
+            }
             _ => None,
         }
     }

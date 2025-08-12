@@ -27,9 +27,9 @@ pub use rest_client::RestClient;
 pub use session_manager::SessionManager;
 
 use crate::platforms::{PlatformType, TradingPlatform};
-use serde::{Deserialize, Serialize};
-use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DXTradeCredentials {
@@ -52,7 +52,7 @@ impl DXTradeEnvironment {
     pub fn fix_host(&self) -> &str {
         match self {
             Self::Production => "fix.dxtrade.com",
-            Self::Test => "fix-test.dxtrade.com", 
+            Self::Test => "fix-test.dxtrade.com",
             Self::Staging => "fix-staging.dxtrade.com",
         }
     }
