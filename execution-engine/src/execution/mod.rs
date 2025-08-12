@@ -1,5 +1,6 @@
 pub mod orchestrator;
 pub mod coordinator;
+pub mod exit_management;
 
 #[cfg(test)]
 pub mod mock_platform;
@@ -22,6 +23,16 @@ pub use coordinator::{
     ExecutionMonitor,
     PartialFill,
     ExecutionSummary,
+};
+
+pub use exit_management::{
+    ExitManagementSystem,
+    TrailingStopManager,
+    BreakEvenManager,
+    PartialProfitManager,
+    TimeBasedExitManager,
+    NewsEventProtection,
+    ExitAuditLogger,
 };
 
 #[cfg(test)]
