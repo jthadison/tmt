@@ -1,20 +1,19 @@
-use std::sync::Arc;
-use std::collections::HashMap;
-use chrono::Utc;
-use rust_decimal::Decimal;
-use rust_decimal::prelude::ToPrimitive;
 use async_trait::async_trait;
+use chrono::Utc;
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::platforms::abstraction::{
-    ITradingPlatform, UnifiedPosition, UnifiedMarketData, UnifiedPositionSide,
-    OrderModification, UnifiedOrderResponse, UnifiedOrderStatus, UnifiedOrderSide, UnifiedOrderType,
-    PlatformError,
-};
-use crate::platforms::abstraction::interfaces::EventFilter;
-use crate::platforms::abstraction::events::PlatformEvent;
 use super::*;
 use crate::execution::exit_management::{
-    ExitManagementIntegration, ExitManagementSystem, PlatformAdapterFactory
+    ExitManagementIntegration, ExitManagementSystem, PlatformAdapterFactory,
+};
+use crate::platforms::abstraction::events::PlatformEvent;
+use crate::platforms::abstraction::interfaces::EventFilter;
+use crate::platforms::abstraction::{
+    ITradingPlatform, OrderModification, PlatformError, UnifiedMarketData, UnifiedOrderResponse,
+    UnifiedOrderSide, UnifiedOrderStatus, UnifiedOrderType, UnifiedPosition, UnifiedPositionSide,
 };
 
 /// Mock platform that implements the full ITradingPlatform interface for integration testing
@@ -27,35 +26,41 @@ struct MockIntegratedPlatform {
 impl MockIntegratedPlatform {
     fn new() -> Self {
         let mut market_data = HashMap::new();
-        
-        // Add default market data
-        market_data.insert("EURUSD".to_string(), UnifiedMarketData {
-            symbol: "EURUSD".to_string(),
-            bid: Decimal::from_f64_retain(1.0799).unwrap(),
-            ask: Decimal::from_f64_retain(1.0801).unwrap(),
-            spread: Decimal::from_f64_retain(0.0002).unwrap(),
-            last_price: Some(Decimal::from_f64_retain(1.0800).unwrap()),
-            volume: Some(Decimal::from(1000)),
-            high: Some(Decimal::from_f64_retain(1.0850).unwrap()),
-            low: Some(Decimal::from_f64_retain(1.0750).unwrap()),
-            timestamp: Utc::now(),
-            session: Some(crate::platforms::abstraction::TradingSession::Regular),
-            platform_specific: HashMap::new(),
-        });
 
-        market_data.insert("GBPUSD".to_string(), UnifiedMarketData {
-            symbol: "GBPUSD".to_string(),
-            bid: Decimal::from_f64_retain(1.2499).unwrap(),
-            ask: Decimal::from_f64_retain(1.2501).unwrap(),
-            spread: Decimal::from_f64_retain(0.0002).unwrap(),
-            last_price: Some(Decimal::from_f64_retain(1.2500).unwrap()),
-            volume: Some(Decimal::from(800)),
-            high: Some(Decimal::from_f64_retain(1.2550).unwrap()),
-            low: Some(Decimal::from_f64_retain(1.2450).unwrap()),
-            timestamp: Utc::now(),
-            session: Some(crate::platforms::abstraction::TradingSession::Regular),
-            platform_specific: HashMap::new(),
-        });
+        // Add default market data
+        market_data.insert(
+            "EURUSD".to_string(),
+            UnifiedMarketData {
+                symbol: "EURUSD".to_string(),
+                bid: Decimal::from_f64_retain(1.0799).unwrap(),
+                ask: Decimal::from_f64_retain(1.0801).unwrap(),
+                spread: Decimal::from_f64_retain(0.0002).unwrap(),
+                last_price: Some(Decimal::from_f64_retain(1.0800).unwrap()),
+                volume: Some(Decimal::from(1000)),
+                high: Some(Decimal::from_f64_retain(1.0850).unwrap()),
+                low: Some(Decimal::from_f64_retain(1.0750).unwrap()),
+                timestamp: Utc::now(),
+                session: Some(crate::platforms::abstraction::TradingSession::Regular),
+                platform_specific: HashMap::new(),
+            },
+        );
+
+        market_data.insert(
+            "GBPUSD".to_string(),
+            UnifiedMarketData {
+                symbol: "GBPUSD".to_string(),
+                bid: Decimal::from_f64_retain(1.2499).unwrap(),
+                ask: Decimal::from_f64_retain(1.2501).unwrap(),
+                spread: Decimal::from_f64_retain(0.0002).unwrap(),
+                last_price: Some(Decimal::from_f64_retain(1.2500).unwrap()),
+                volume: Some(Decimal::from(800)),
+                high: Some(Decimal::from_f64_retain(1.2550).unwrap()),
+                low: Some(Decimal::from_f64_retain(1.2450).unwrap()),
+                timestamp: Utc::now(),
+                session: Some(crate::platforms::abstraction::TradingSession::Regular),
+                platform_specific: HashMap::new(),
+            },
+        );
 
         Self {
             positions: std::sync::RwLock::new(Vec::new()),
@@ -96,19 +101,38 @@ impl ITradingPlatform for MockIntegratedPlatform {
         crate::platforms::PlatformType::MetaTrader4
     }
 
-    fn platform_name(&self) -> &str { "MockIntegratedPlatform" }
-    fn platform_version(&self) -> &str { "1.0.0" }
+    fn platform_name(&self) -> &str {
+        "MockIntegratedPlatform"
+    }
+    fn platform_version(&self) -> &str {
+        "1.0.0"
+    }
 
-    async fn connect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-    async fn disconnect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-    async fn is_connected(&self) -> bool { true }
-    async fn ping(&self) -> Result<u64, PlatformError> { Ok(10) }
+    async fn connect(&mut self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+    async fn disconnect(&mut self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+    async fn is_connected(&self) -> bool {
+        true
+    }
+    async fn ping(&self) -> Result<u64, PlatformError> {
+        Ok(10)
+    }
 
-    async fn place_order(&self, _order: crate::platforms::abstraction::UnifiedOrder) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn place_order(
+        &self,
+        _order: crate::platforms::abstraction::UnifiedOrder,
+    ) -> Result<UnifiedOrderResponse, PlatformError> {
         unimplemented!("place_order not needed for exit management tests")
     }
 
-    async fn modify_order(&self, order_id: &str, modifications: OrderModification) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn modify_order(
+        &self,
+        order_id: &str,
+        modifications: OrderModification,
+    ) -> Result<UnifiedOrderResponse, PlatformError> {
         // Record the modification
         {
             let mut mods = self.order_modifications.write().unwrap();
@@ -136,13 +160,18 @@ impl ITradingPlatform for MockIntegratedPlatform {
         })
     }
 
-    async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> { Ok(()) }
+    async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> {
+        Ok(())
+    }
 
     async fn get_order(&self, _order_id: &str) -> Result<UnifiedOrderResponse, PlatformError> {
         unimplemented!("get_order not needed for exit management tests")
     }
 
-    async fn get_orders(&self, _filter: Option<crate::platforms::abstraction::OrderFilter>) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
+    async fn get_orders(
+        &self,
+        _filter: Option<crate::platforms::abstraction::OrderFilter>,
+    ) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
         Ok(Vec::new())
     }
 
@@ -155,10 +184,18 @@ impl ITradingPlatform for MockIntegratedPlatform {
         Ok(positions.iter().find(|p| p.symbol == symbol).cloned())
     }
 
-    async fn close_position(&self, symbol: &str, quantity: Option<Decimal>) -> Result<UnifiedOrderResponse, PlatformError> {
+    async fn close_position(
+        &self,
+        symbol: &str,
+        quantity: Option<Decimal>,
+    ) -> Result<UnifiedOrderResponse, PlatformError> {
         let positions = self.positions.read().unwrap();
-        let position = positions.iter().find(|p| p.symbol == symbol)
-            .ok_or_else(|| PlatformError::PositionNotFound { symbol: symbol.to_string() })?;
+        let position = positions
+            .iter()
+            .find(|p| p.symbol == symbol)
+            .ok_or_else(|| PlatformError::PositionNotFound {
+                symbol: symbol.to_string(),
+            })?;
 
         let close_quantity = quantity.unwrap_or(position.quantity);
 
@@ -185,25 +222,37 @@ impl ITradingPlatform for MockIntegratedPlatform {
         })
     }
 
-    async fn get_account_info(&self) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
+    async fn get_account_info(
+        &self,
+    ) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
         unimplemented!("get_account_info not needed for exit management tests")
     }
 
-    async fn get_balance(&self) -> Result<Decimal, PlatformError> { 
-        Ok(Decimal::from(10000)) 
+    async fn get_balance(&self) -> Result<Decimal, PlatformError> {
+        Ok(Decimal::from(10000))
     }
 
-    async fn get_margin_info(&self) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
+    async fn get_margin_info(
+        &self,
+    ) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
         unimplemented!("get_margin_info not needed for exit management tests")
     }
 
     async fn get_market_data(&self, symbol: &str) -> Result<UnifiedMarketData, PlatformError> {
-        self.market_data.read().unwrap().get(symbol)
+        self.market_data
+            .read()
+            .unwrap()
+            .get(symbol)
             .cloned()
-            .ok_or_else(|| PlatformError::MarketDataNotFound { symbol: symbol.to_string() })
+            .ok_or_else(|| PlatformError::MarketDataNotFound {
+                symbol: symbol.to_string(),
+            })
     }
 
-    async fn subscribe_market_data(&self, _symbols: Vec<String>) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
+    async fn subscribe_market_data(
+        &self,
+        _symbols: Vec<String>,
+    ) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
         unimplemented!("subscribe_market_data not needed for exit management tests")
     }
 
@@ -215,19 +264,31 @@ impl ITradingPlatform for MockIntegratedPlatform {
         unimplemented!("capabilities not needed for exit management tests")
     }
 
-    async fn subscribe_events(&self) -> Result<tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>, PlatformError> {
+    async fn subscribe_events(
+        &self,
+    ) -> Result<
+        tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>,
+        PlatformError,
+    > {
         unimplemented!("subscribe_events not needed for exit management tests")
     }
 
-    async fn get_event_history(&self, _filter: EventFilter) -> Result<Vec<PlatformEvent>, PlatformError> {
+    async fn get_event_history(
+        &self,
+        _filter: EventFilter,
+    ) -> Result<Vec<PlatformEvent>, PlatformError> {
         Ok(Vec::new())
     }
 
-    async fn health_check(&self) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
+    async fn health_check(
+        &self,
+    ) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
         unimplemented!("health_check not needed for exit management tests")
     }
 
-    async fn get_diagnostics(&self) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
+    async fn get_diagnostics(
+        &self,
+    ) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
         unimplemented!("get_diagnostics not needed for exit management tests")
     }
 }
@@ -245,9 +306,12 @@ fn create_test_unified_position(
         UnifiedPositionSide::Long => current_price - entry_price,
         UnifiedPositionSide::Short => entry_price - current_price,
     };
-    
+
     UnifiedPosition {
-        position_id: format!("test_pos_{}", uuid::Uuid::new_v4().to_string()[..8].to_string()),
+        position_id: format!(
+            "test_pos_{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        ),
         symbol: symbol.to_string(),
         side,
         quantity,
@@ -259,7 +323,8 @@ fn create_test_unified_position(
         commission: Decimal::from_f64_retain(2.0).unwrap(),
         stop_loss: stop_loss.map(|sl| Decimal::from_f64_retain(sl).unwrap()),
         take_profit: take_profit.map(|tp| Decimal::from_f64_retain(tp).unwrap()),
-        opened_at: Utc::now() - chrono::Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
+        opened_at: Utc::now()
+            - chrono::Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
         updated_at: Utc::now(),
         account_id: "test_account".to_string(),
         platform_specific: HashMap::new(),
@@ -269,7 +334,7 @@ fn create_test_unified_position(
 #[tokio::test]
 async fn test_platform_integration_basic_workflow() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add a test position
     let position = create_test_unified_position(
         "EURUSD",
@@ -282,10 +347,15 @@ async fn test_platform_integration_basic_workflow() {
     mock_platform.add_position(position.clone());
 
     // Create exit management system with platform integration
-    let exit_management = ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
+    let exit_management =
+        ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
 
     // Test that the system can access positions through the adapter
-    let positions = exit_management.get_trailing_stop_manager().get_positions_for_trailing().await.unwrap();
+    let positions = exit_management
+        .get_trailing_stop_manager()
+        .get_positions_for_trailing()
+        .await
+        .unwrap();
     assert_eq!(positions.len(), 1);
     assert_eq!(positions[0].symbol, "EURUSD");
     assert_eq!(positions[0].entry_price, 1.0800);
@@ -295,7 +365,7 @@ async fn test_platform_integration_basic_workflow() {
 #[tokio::test]
 async fn test_platform_integration_trailing_stops() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add a profitable position
     let position = create_test_unified_position(
         "EURUSD",
@@ -308,8 +378,9 @@ async fn test_platform_integration_trailing_stops() {
     mock_platform.add_position(position.clone());
 
     // Create exit management system
-    let exit_management = ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
-    
+    let exit_management =
+        ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
+
     // Get the trailing stop manager
     let components = ExitManagementIntegration::create_components(mock_platform.clone()).unwrap();
     let trailing_manager = components.trailing_stop_manager;
@@ -317,14 +388,20 @@ async fn test_platform_integration_trailing_stops() {
     // Test trailing stop activation
     let positions = components.trading_platform.get_positions().await.unwrap();
     let adapted_position = &positions[0];
-    
-    let result = trailing_manager.activate_trailing_stop(adapted_position).await;
-    assert!(result.is_ok(), "Failed to activate trailing stop: {:?}", result);
+
+    let result = trailing_manager
+        .activate_trailing_stop(adapted_position)
+        .await;
+    assert!(
+        result.is_ok(),
+        "Failed to activate trailing stop: {:?}",
+        result
+    );
 
     // Verify trailing stop was activated
     let active_trails = trailing_manager.get_active_trails();
     assert_eq!(active_trails.len(), 1);
-    
+
     let trail = &active_trails[0].1;
     assert_eq!(trail.position_id, adapted_position.id);
 }
@@ -332,13 +409,13 @@ async fn test_platform_integration_trailing_stops() {
 #[tokio::test]
 async fn test_platform_integration_break_even() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add a position at 1:1 risk-reward (break-even trigger)
     let position = create_test_unified_position(
         "EURUSD",
         UnifiedPositionSide::Long,
         1.0800,
-        1.0820, // Entry + (Entry - StopLoss) = 1.0800 + 20 pips = 1:1 R:R
+        1.0820,       // Entry + (Entry - StopLoss) = 1.0800 + 20 pips = 1:1 R:R
         Some(1.0780), // 20 pips risk
         Some(1.0850),
     );
@@ -350,20 +427,31 @@ async fn test_platform_integration_break_even() {
 
     // Test break-even activation
     let result = break_even_manager.check_break_even_opportunities().await;
-    assert!(result.is_ok(), "Failed to check break-even opportunities: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Failed to check break-even opportunities: {:?}",
+        result
+    );
 
     // Verify order modification was requested
     let modifications = mock_platform.get_order_modifications();
-    assert_eq!(modifications.len(), 1, "Expected 1 order modification for break-even");
-    
+    assert_eq!(
+        modifications.len(),
+        1,
+        "Expected 1 order modification for break-even"
+    );
+
     let (order_id, modification) = &modifications[0];
-    assert!(modification.stop_loss.is_some(), "Break-even should modify stop loss");
+    assert!(
+        modification.stop_loss.is_some(),
+        "Break-even should modify stop loss"
+    );
 }
 
 #[tokio::test]
 async fn test_platform_integration_partial_profits() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add a position at 1:1 risk-reward for partial profit taking
     let position = create_test_unified_position(
         "EURUSD",
@@ -381,7 +469,11 @@ async fn test_platform_integration_partial_profits() {
 
     // Test partial profit taking
     let result = partial_profit_manager.check_profit_targets().await;
-    assert!(result.is_ok(), "Failed to check profit targets: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Failed to check profit targets: {:?}",
+        result
+    );
 
     // Note: In a full test, we would mock the partial close functionality
     // and verify the correct volume was closed at the right price level
@@ -390,7 +482,7 @@ async fn test_platform_integration_partial_profits() {
 #[tokio::test]
 async fn test_platform_integration_full_monitoring_cycle() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add multiple positions with different scenarios
     let position1 = create_test_unified_position(
         "EURUSD",
@@ -400,38 +492,46 @@ async fn test_platform_integration_full_monitoring_cycle() {
         Some(1.0780),
         Some(1.0850),
     );
-    
+
     let position2 = create_test_unified_position(
         "GBPUSD",
         UnifiedPositionSide::Short,
         1.2500,
-        1.2480, // At 1:1 R:R - should trigger break-even
+        1.2480,       // At 1:1 R:R - should trigger break-even
         Some(1.2520), // 20 pips risk
         Some(1.2450),
     );
-    
+
     mock_platform.add_position(position1);
     mock_platform.add_position(position2);
 
     // Create full exit management system
-    let mut exit_management = ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
+    let mut exit_management =
+        ExitManagementIntegration::create_with_platform(mock_platform.clone()).unwrap();
 
     // Run one monitoring cycle
     let result = exit_management.monitor_once().await;
-    assert!(result.is_ok(), "Failed to run monitoring cycle: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Failed to run monitoring cycle: {:?}",
+        result
+    );
 
     // Verify system processed both positions
     let trailing_stats = exit_management.get_trailing_stop_stats().await.unwrap();
     // Note: Exact assertions would depend on the specific logic and thresholds
 
     println!("Integration test completed successfully");
-    println!("Trailing stop stats: active trails = {}", trailing_stats.active_trails);
+    println!(
+        "Trailing stop stats: active trails = {}",
+        trailing_stats.active_trails
+    );
 }
 
 #[tokio::test]
 async fn test_platform_adapter_conversion() {
     let mock_platform = Arc::new(MockIntegratedPlatform::new());
-    
+
     // Add a test position
     let unified_position = create_test_unified_position(
         "EURUSD",
@@ -449,14 +549,14 @@ async fn test_platform_adapter_conversion() {
     // Test position conversion
     let positions = adapter.get_positions().await.unwrap();
     assert_eq!(positions.len(), 1);
-    
+
     let position = &positions[0];
     assert_eq!(position.symbol, "EURUSD");
     assert_eq!(position.entry_price, 1.0800);
     assert_eq!(position.current_price, 1.0825);
     assert_eq!(position.stop_loss, Some(1.0780));
     assert_eq!(position.take_profit, Some(1.0850));
-    
+
     // Test market data conversion
     let market_data = adapter.get_market_data("EURUSD").await.unwrap();
     assert_eq!(market_data.symbol, "EURUSD");

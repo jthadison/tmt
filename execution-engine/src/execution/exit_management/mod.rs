@@ -1,37 +1,46 @@
-pub mod trailing_stops;
 pub mod break_even;
-pub mod partial_profits;
-pub mod time_exits;
-pub mod news_protection;
 pub mod exit_logger;
-pub mod types;
-pub mod platform_adapter;
 pub mod integration;
+pub mod news_protection;
+pub mod partial_profits;
+pub mod platform_adapter;
+pub mod time_exits;
+pub mod trailing_stops;
+pub mod types;
 
 #[cfg(test)]
 pub mod tests;
 
-pub use trailing_stops::TrailingStopManager;
 pub use break_even::BreakEvenManager;
-pub use partial_profits::PartialProfitManager;
-pub use time_exits::TimeBasedExitManager;
-pub use news_protection::NewsEventProtection;
 pub use exit_logger::ExitAuditLogger;
-pub use types::*;
+pub use integration::{ExitManagementComponents, ExitManagementIntegration};
+pub use news_protection::NewsEventProtection;
+pub use partial_profits::PartialProfitManager;
 pub use platform_adapter::{ExitManagementPlatformAdapter, PlatformAdapterFactory};
-pub use integration::{ExitManagementIntegration, ExitManagementComponents};
+pub use time_exits::TimeBasedExitManager;
+pub use trailing_stops::TrailingStopManager;
+pub use types::*;
 
-use std::sync::Arc;
-use tokio::time::{Duration, interval};
 use async_trait::async_trait;
+use std::sync::Arc;
+use tokio::time::{interval, Duration};
 // Simple trading platform trait for exit management
 #[async_trait::async_trait]
 pub trait TradingPlatform: Send + Sync + std::fmt::Debug {
     async fn get_positions(&self) -> Result<Vec<types::Position>>;
     async fn get_market_data(&self, symbol: &str) -> Result<types::MarketData>;
-    async fn modify_order(&self, request: types::OrderModifyRequest) -> Result<types::OrderModifyResult>;
-    async fn close_position(&self, request: types::ClosePositionRequest) -> Result<types::ClosePositionResult>;
-    async fn close_position_partial(&self, request: types::PartialCloseRequest) -> Result<types::ClosePositionResult>;
+    async fn modify_order(
+        &self,
+        request: types::OrderModifyRequest,
+    ) -> Result<types::OrderModifyResult>;
+    async fn close_position(
+        &self,
+        request: types::ClosePositionRequest,
+    ) -> Result<types::ClosePositionResult>;
+    async fn close_position_partial(
+        &self,
+        request: types::PartialCloseRequest,
+    ) -> Result<types::ClosePositionResult>;
 }
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -57,22 +66,22 @@ impl ExitManagementSystem {
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let break_even_manager = Arc::new(BreakEvenManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let partial_profit_manager = Arc::new(PartialProfitManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let time_exit_manager = Arc::new(TimeBasedExitManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let news_protection = Arc::new(NewsEventProtection::new(
             trading_platform.clone(),
             exit_logger.clone(),
@@ -122,18 +131,18 @@ impl ExitManagementSystem {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_millis(500)); // Check every 500ms
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = trailing_manager.update_trailing_stops().await {
                     tracing::error!("Error updating trailing stops: {}", e);
                 }
-                
+
                 if let Err(e) = break_even_manager.check_break_even_triggers().await {
                     tracing::error!("Error checking break-even triggers: {}", e);
                 }
-                
+
                 if let Err(e) = partial_manager.check_profit_targets().await {
                     tracing::error!("Error checking profit targets: {}", e);
                 }
@@ -142,18 +151,18 @@ impl ExitManagementSystem {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(30)); // Check every 30 seconds
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = time_manager.check_time_based_exits().await {
                     tracing::error!("Error checking time-based exits: {}", e);
                 }
-                
+
                 if let Err(e) = news_manager.monitor_upcoming_news().await {
                     tracing::error!("Error monitoring news events: {}", e);
                 }
-                
+
                 if let Err(e) = news_manager.restore_post_news_stops().await {
                     tracing::error!("Error restoring post-news stops: {}", e);
                 }
@@ -178,14 +187,14 @@ impl ExitManagementSystem {
 
     pub async fn emergency_close_all_positions(&self, reason: String) -> Result<Vec<ExitResult>> {
         tracing::warn!("Emergency close triggered: {}", reason);
-        
+
         let mut results = Vec::new();
-        
+
         // Get all open positions - this would need to be implemented based on your position tracking
         // For now, returning empty results
-        
+
         self.exit_logger.log_emergency_close_event(reason).await?;
-        
+
         Ok(results)
     }
 

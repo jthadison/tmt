@@ -1,15 +1,18 @@
-use std::sync::Arc;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::platforms::abstraction::{ITradingPlatform, UnifiedPosition, UnifiedMarketData, OrderModification, UnifiedOrderResponse, PlatformError};
-use crate::platforms::abstraction::interfaces::EventFilter;
-use crate::platforms::abstraction::events::PlatformEvent;
-use super::TradingPlatform;
 use super::types::*;
+use super::TradingPlatform;
+use crate::platforms::abstraction::events::PlatformEvent;
+use crate::platforms::abstraction::interfaces::EventFilter;
+use crate::platforms::abstraction::{
+    ITradingPlatform, OrderModification, PlatformError, UnifiedMarketData, UnifiedOrderResponse,
+    UnifiedPosition,
+};
 
 /// Platform adapter that bridges the exit management system with the actual platform abstraction
 pub struct ExitManagementPlatformAdapter {
@@ -47,7 +50,7 @@ impl ExitManagementPlatformAdapter {
             commission: unified_pos.commission.to_f64().unwrap_or(0.0),
             open_time: unified_pos.opened_at,
             magic_number: None, // Not available in UnifiedPosition
-            comment: None, // Not available in UnifiedPosition
+            comment: None,      // Not available in UnifiedPosition
         }
     }
 
@@ -66,42 +69,60 @@ impl ExitManagementPlatformAdapter {
 #[async_trait]
 impl TradingPlatform for ExitManagementPlatformAdapter {
     async fn get_positions(&self) -> Result<Vec<Position>> {
-        let unified_positions = self.platform.get_positions().await
+        let unified_positions = self
+            .platform
+            .get_positions()
+            .await
             .map_err(|e| anyhow::anyhow!("Platform error getting positions: {:?}", e))?;
-        
+
         let positions = unified_positions
             .iter()
             .map(|pos| self.convert_position(pos))
             .collect();
-        
+
         Ok(positions)
     }
 
     async fn get_market_data(&self, symbol: &str) -> Result<MarketData> {
-        let unified_data = self.platform.get_market_data(symbol).await
+        let unified_data = self
+            .platform
+            .get_market_data(symbol)
+            .await
             .map_err(|e| anyhow::anyhow!("Platform error getting market data: {:?}", e))?;
-        
+
         Ok(self.convert_market_data(&unified_data))
     }
 
     async fn modify_order(&self, request: OrderModifyRequest) -> Result<OrderModifyResult> {
         let modification = OrderModification {
-            quantity: None, // Not modifying quantity for exit management
-            price: None, // Not modifying price for exit management
+            quantity: None,   // Not modifying quantity for exit management
+            price: None,      // Not modifying price for exit management
             stop_price: None, // Not using stop_price
-            take_profit: request.new_take_profit.map(Decimal::from_f64_retain).flatten(),
-            stop_loss: request.new_stop_loss.map(Decimal::from_f64_retain).flatten(),
+            take_profit: request
+                .new_take_profit
+                .map(Decimal::from_f64_retain)
+                .flatten(),
+            stop_loss: request
+                .new_stop_loss
+                .map(Decimal::from_f64_retain)
+                .flatten(),
             time_in_force: None, // Not modifying time in force
         };
 
-        let response = self.platform.modify_order(&request.order_id, modification).await
+        let response = self
+            .platform
+            .modify_order(&request.order_id, modification)
+            .await
             .map_err(|e| anyhow::anyhow!("Platform error modifying order: {:?}", e))?;
 
         Ok(OrderModifyResult {
             order_id: response.platform_order_id,
-            success: matches!(response.status, crate::platforms::abstraction::UnifiedOrderStatus::New | 
-                                              crate::platforms::abstraction::UnifiedOrderStatus::PartiallyFilled |
-                                              crate::platforms::abstraction::UnifiedOrderStatus::Filled),
+            success: matches!(
+                response.status,
+                crate::platforms::abstraction::UnifiedOrderStatus::New
+                    | crate::platforms::abstraction::UnifiedOrderStatus::PartiallyFilled
+                    | crate::platforms::abstraction::UnifiedOrderStatus::Filled
+            ),
             message: format!("Order modified: {:?}", response.status),
         })
     }
@@ -109,32 +130,53 @@ impl TradingPlatform for ExitManagementPlatformAdapter {
     async fn close_position(&self, request: ClosePositionRequest) -> Result<ClosePositionResult> {
         // Find the position to get its symbol
         let positions = self.get_positions().await?;
-        let position = positions.iter().find(|p| p.id == request.position_id)
+        let position = positions
+            .iter()
+            .find(|p| p.id == request.position_id)
             .ok_or_else(|| anyhow::anyhow!("Position not found: {}", request.position_id))?;
 
-        let response = self.platform.close_position(&position.symbol, None).await
+        let response = self
+            .platform
+            .close_position(&position.symbol, None)
+            .await
             .map_err(|e| anyhow::anyhow!("Platform error closing position: {:?}", e))?;
 
         Ok(ClosePositionResult {
             position_id: request.position_id,
-            close_price: response.average_fill_price.unwrap_or_default().to_f64().unwrap_or(0.0),
+            close_price: response
+                .average_fill_price
+                .unwrap_or_default()
+                .to_f64()
+                .unwrap_or(0.0),
             realized_pnl: Some(Decimal::ZERO), // Would need to calculate this
             close_time: chrono::Utc::now(),
         })
     }
 
-    async fn close_position_partial(&self, request: PartialCloseRequest) -> Result<ClosePositionResult> {
+    async fn close_position_partial(
+        &self,
+        request: PartialCloseRequest,
+    ) -> Result<ClosePositionResult> {
         // Find the position to get its symbol
         let positions = self.get_positions().await?;
-        let position = positions.iter().find(|p| p.id == request.position_id)
+        let position = positions
+            .iter()
+            .find(|p| p.id == request.position_id)
             .ok_or_else(|| anyhow::anyhow!("Position not found: {}", request.position_id))?;
 
-        let response = self.platform.close_position(&position.symbol, Some(request.volume)).await
+        let response = self
+            .platform
+            .close_position(&position.symbol, Some(request.volume))
+            .await
             .map_err(|e| anyhow::anyhow!("Platform error partially closing position: {:?}", e))?;
 
         Ok(ClosePositionResult {
             position_id: request.position_id,
-            close_price: response.average_fill_price.unwrap_or_default().to_f64().unwrap_or(0.0),
+            close_price: response
+                .average_fill_price
+                .unwrap_or_default()
+                .to_f64()
+                .unwrap_or(0.0),
             realized_pnl: Some(Decimal::ZERO), // Would need to calculate this
             close_time: chrono::Utc::now(),
         })
@@ -146,7 +188,7 @@ pub struct PlatformAdapterFactory;
 
 impl PlatformAdapterFactory {
     pub fn create_exit_management_adapter(
-        platform: Arc<dyn ITradingPlatform + Send + Sync>
+        platform: Arc<dyn ITradingPlatform + Send + Sync>,
     ) -> Arc<dyn TradingPlatform> {
         Arc::new(ExitManagementPlatformAdapter::new(platform))
     }
@@ -155,7 +197,7 @@ impl PlatformAdapterFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platforms::abstraction::{UnifiedPositionSide, UnifiedMarketData};
+    use crate::platforms::abstraction::{UnifiedMarketData, UnifiedPositionSide};
     use chrono::Utc;
     use rust_decimal::Decimal;
     use std::collections::HashMap;
@@ -168,19 +210,38 @@ mod tests {
             crate::platforms::PlatformType::MetaTrader4
         }
 
-        fn platform_name(&self) -> &str { "MockPlatform" }
-        fn platform_version(&self) -> &str { "1.0.0" }
+        fn platform_name(&self) -> &str {
+            "MockPlatform"
+        }
+        fn platform_version(&self) -> &str {
+            "1.0.0"
+        }
 
-        async fn connect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-        async fn disconnect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-        async fn is_connected(&self) -> bool { true }
-        async fn ping(&self) -> Result<u64, PlatformError> { Ok(10) }
+        async fn connect(&mut self) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        async fn disconnect(&mut self) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        async fn is_connected(&self) -> bool {
+            true
+        }
+        async fn ping(&self) -> Result<u64, PlatformError> {
+            Ok(10)
+        }
 
-        async fn place_order(&self, _order: crate::platforms::abstraction::UnifiedOrder) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn place_order(
+            &self,
+            _order: crate::platforms::abstraction::UnifiedOrder,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn modify_order(&self, order_id: &str, _modifications: OrderModification) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn modify_order(
+            &self,
+            order_id: &str,
+            _modifications: OrderModification,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             Ok(UnifiedOrderResponse {
                 platform_order_id: order_id.to_string(),
                 client_order_id: order_id.to_string(),
@@ -201,13 +262,18 @@ mod tests {
             })
         }
 
-        async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> { Ok(()) }
+        async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> {
+            Ok(())
+        }
 
         async fn get_order(&self, _order_id: &str) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_orders(&self, _filter: Option<crate::platforms::abstraction::OrderFilter>) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
+        async fn get_orders(
+            &self,
+            _filter: Option<crate::platforms::abstraction::OrderFilter>,
+        ) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
             Ok(Vec::new())
         }
 
@@ -232,11 +298,18 @@ mod tests {
             }])
         }
 
-        async fn get_position(&self, _symbol: &str) -> Result<Option<UnifiedPosition>, PlatformError> {
+        async fn get_position(
+            &self,
+            _symbol: &str,
+        ) -> Result<Option<UnifiedPosition>, PlatformError> {
             Ok(None)
         }
 
-        async fn close_position(&self, _symbol: &str, _quantity: Option<Decimal>) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn close_position(
+            &self,
+            _symbol: &str,
+            _quantity: Option<Decimal>,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             Ok(UnifiedOrderResponse {
                 platform_order_id: "close-order-1".to_string(),
                 client_order_id: "close-order-1".to_string(),
@@ -257,13 +330,19 @@ mod tests {
             })
         }
 
-        async fn get_account_info(&self) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
+        async fn get_account_info(
+            &self,
+        ) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_balance(&self) -> Result<Decimal, PlatformError> { Ok(Decimal::from(10000)) }
+        async fn get_balance(&self) -> Result<Decimal, PlatformError> {
+            Ok(Decimal::from(10000))
+        }
 
-        async fn get_margin_info(&self) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
+        async fn get_margin_info(
+            &self,
+        ) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
             unimplemented!()
         }
 
@@ -283,11 +362,17 @@ mod tests {
             })
         }
 
-        async fn subscribe_market_data(&self, _symbols: Vec<String>) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
+        async fn subscribe_market_data(
+            &self,
+            _symbols: Vec<String>,
+        ) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
             unimplemented!()
         }
 
-        async fn unsubscribe_market_data(&self, _symbols: Vec<String>) -> Result<(), PlatformError> {
+        async fn unsubscribe_market_data(
+            &self,
+            _symbols: Vec<String>,
+        ) -> Result<(), PlatformError> {
             Ok(())
         }
 
@@ -295,19 +380,31 @@ mod tests {
             unimplemented!()
         }
 
-        async fn subscribe_events(&self) -> Result<tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>, PlatformError> {
+        async fn subscribe_events(
+            &self,
+        ) -> Result<
+            tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>,
+            PlatformError,
+        > {
             unimplemented!()
         }
 
-        async fn get_event_history(&self, _filter: EventFilter) -> Result<Vec<PlatformEvent>, PlatformError> {
+        async fn get_event_history(
+            &self,
+            _filter: EventFilter,
+        ) -> Result<Vec<PlatformEvent>, PlatformError> {
             Ok(Vec::new())
         }
 
-        async fn health_check(&self) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
+        async fn health_check(
+            &self,
+        ) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_diagnostics(&self) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
+        async fn get_diagnostics(
+            &self,
+        ) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
             unimplemented!()
         }
     }

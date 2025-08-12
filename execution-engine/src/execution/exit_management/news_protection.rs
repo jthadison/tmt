@@ -1,14 +1,14 @@
+use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
+use dashmap::DashMap;
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
-use dashmap::DashMap;
-use anyhow::{Result, Context};
-use chrono::{DateTime, Utc, Duration};
-use tracing::{info, warn, error};
-use rust_decimal::Decimal;
+use tracing::{error, info, warn};
 
-use super::TradingPlatform;
-use super::types::*;
 use super::exit_logger::ExitAuditLogger;
+use super::types::*;
+use super::TradingPlatform;
 
 #[derive(Debug, Clone)]
 pub struct EconomicCalendarClient {
@@ -23,11 +23,15 @@ impl EconomicCalendarClient {
         Self { api_key, base_url }
     }
 
-    pub async fn get_upcoming_events(&self, lookback: Duration, min_impact: ImpactLevel) -> Result<Vec<NewsEvent>> {
+    pub async fn get_upcoming_events(
+        &self,
+        lookback: Duration,
+        min_impact: ImpactLevel,
+    ) -> Result<Vec<NewsEvent>> {
         // In a real implementation, this would make HTTP requests to an economic calendar API
         // For now, returning mock data
         let now = Utc::now();
-        
+
         Ok(vec![
             NewsEvent {
                 id: "USD_NFP_001".to_string(),
@@ -81,13 +85,19 @@ impl NewsEventProtection {
     }
 
     pub async fn monitor_upcoming_news(&self) -> Result<()> {
-        let lookback_duration = Duration::from_std(std::time::Duration::from_secs(4 * 3600)).unwrap();
-        let upcoming_events = self.economic_calendar
-            .get_upcoming_events(lookback_duration, ImpactLevel::High).await?;
+        let lookback_duration =
+            Duration::from_std(std::time::Duration::from_secs(4 * 3600)).unwrap();
+        let upcoming_events = self
+            .economic_calendar
+            .get_upcoming_events(lookback_duration, ImpactLevel::High)
+            .await?;
 
         for event in upcoming_events {
             if let Err(e) = self.apply_news_protection(&event).await {
-                error!("Failed to apply news protection for event {}: {}", event.id, e);
+                error!(
+                    "Failed to apply news protection for event {}: {}",
+                    event.id, e
+                );
             }
         }
 
@@ -97,7 +107,9 @@ impl NewsEventProtection {
     async fn apply_news_protection(&self, event: &NewsEvent) -> Result<()> {
         let affected_positions = self.get_positions_for_currency(&event.currency).await?;
         let default_config = NewsProtectionConfig::default();
-        let config = self.news_configs.get(&event.currency)
+        let config = self
+            .news_configs
+            .get(&event.currency)
             .unwrap_or(&default_config);
 
         if !config.enabled {
@@ -106,7 +118,9 @@ impl NewsEventProtection {
 
         info!(
             "Applying news protection for {} event: {} ({} positions affected)",
-            event.currency, event.description, affected_positions.len()
+            event.currency,
+            event.description,
+            affected_positions.len()
         );
 
         for position in affected_positions {
@@ -117,13 +131,15 @@ impl NewsEventProtection {
 
             match config.protection_strategy {
                 NewsProtectionStrategy::TightenStops => {
-                    self.tighten_stops_for_news(&position, event, config).await?;
-                },
+                    self.tighten_stops_for_news(&position, event, config)
+                        .await?;
+                }
                 NewsProtectionStrategy::ClosePosition => {
                     self.close_position_for_news(&position, event).await?;
-                },
+                }
                 NewsProtectionStrategy::ReduceSize => {
-                    self.reduce_position_for_news(&position, event, config).await?;
+                    self.reduce_position_for_news(&position, event, config)
+                        .await?;
                 }
             }
         }
@@ -135,7 +151,7 @@ impl NewsEventProtection {
         &self,
         position: &Position,
         event: &NewsEvent,
-        config: &NewsProtectionConfig
+        config: &NewsProtectionConfig,
     ) -> Result<()> {
         let current_stop = position.stop_loss.unwrap_or(position.entry_price);
         let entry_price = position.entry_price;
@@ -159,7 +175,9 @@ impl NewsEventProtection {
             new_take_profit: position.take_profit,
         };
 
-        self.trading_platform.modify_order(modify_request).await
+        self.trading_platform
+            .modify_order(modify_request)
+            .await
             .context("Failed to tighten stop for news protection")?;
 
         // Record news protection
@@ -169,13 +187,16 @@ impl NewsEventProtection {
             protected_stop: new_stop,
             news_event: event.clone(),
             protection_start: Utc::now(),
-            restoration_scheduled: Some(event.time + Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap()),
+            restoration_scheduled: Some(
+                event.time + Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
+            ),
         };
 
         self.protected_positions.insert(position.id, protection);
 
         // Log protection application
-        self.log_news_protection(position, event, current_stop, new_stop).await?;
+        self.log_news_protection(position, event, current_stop, new_stop)
+            .await?;
 
         info!(
             "News protection applied to position {}: Stop tightened from {} to {} for {} event",
@@ -188,14 +209,21 @@ impl NewsEventProtection {
     async fn close_position_for_news(&self, position: &Position, event: &NewsEvent) -> Result<()> {
         let close_request = ClosePositionRequest {
             position_id: position.id,
-            reason: format!("Pre-news closure for {} event: {}", event.currency, event.description),
+            reason: format!(
+                "Pre-news closure for {} event: {}",
+                event.currency, event.description
+            ),
         };
 
-        let close_result = self.trading_platform.close_position(close_request).await
+        let close_result = self
+            .trading_platform
+            .close_position(close_request)
+            .await
             .context("Failed to close position for news protection")?;
 
         // Log news-related closure
-        self.log_news_closure(position, event, close_result.close_price).await?;
+        self.log_news_closure(position, event, close_result.close_price)
+            .await?;
 
         info!(
             "Position {} closed for news protection: {} event at price {}",
@@ -209,27 +237,37 @@ impl NewsEventProtection {
         &self,
         position: &Position,
         event: &NewsEvent,
-        config: &NewsProtectionConfig
+        config: &NewsProtectionConfig,
     ) -> Result<()> {
         // Reduce position size by 50%
         let reduction_percentage = 0.5;
-        let reduce_volume = position.volume * Decimal::from_f64_retain(reduction_percentage).unwrap();
+        let reduce_volume =
+            position.volume * Decimal::from_f64_retain(reduction_percentage).unwrap();
 
         let close_request = PartialCloseRequest {
             position_id: position.id,
             volume: reduce_volume,
-            reason: format!("News protection size reduction for {}: {}", event.currency, event.description),
+            reason: format!(
+                "News protection size reduction for {}: {}",
+                event.currency, event.description
+            ),
         };
 
-        let close_result = self.trading_platform.close_position_partial(close_request).await
+        let close_result = self
+            .trading_platform
+            .close_position_partial(close_request)
+            .await
             .context("Failed to reduce position size for news protection")?;
 
         // Log size reduction
-        self.log_news_size_reduction(position, event, reduce_volume, close_result.close_price).await?;
+        self.log_news_size_reduction(position, event, reduce_volume, close_result.close_price)
+            .await?;
 
         info!(
             "Position {} size reduced by {:.1}% for news protection: {} event",
-            position.id, reduction_percentage * 100.0, event.description
+            position.id,
+            reduction_percentage * 100.0,
+            event.description
         );
 
         Ok(())
@@ -252,7 +290,10 @@ impl NewsEventProtection {
         // Restore original stops
         for protection in to_restore {
             if let Err(e) = self.restore_reasonable_stop(&protection).await {
-                error!("Failed to restore stop for position {}: {}", protection.position_id, e);
+                error!(
+                    "Failed to restore stop for position {}: {}",
+                    protection.position_id, e
+                );
             }
         }
 
@@ -262,7 +303,7 @@ impl NewsEventProtection {
     async fn restore_reasonable_stop(&self, protection: &NewsProtection) -> Result<()> {
         // Check if position still exists
         let positions = self.trading_platform.get_positions().await?;
-        
+
         if let Some(position) = positions.iter().find(|p| p.id == protection.position_id) {
             // Calculate a reasonable stop level based on current market conditions
             let reasonable_stop = self.calculate_reasonable_stop_post_news(position).await?;
@@ -273,11 +314,14 @@ impl NewsEventProtection {
                 new_take_profit: position.take_profit,
             };
 
-            self.trading_platform.modify_order(modify_request).await
+            self.trading_platform
+                .modify_order(modify_request)
+                .await
                 .context("Failed to restore stop after news event")?;
 
             // Log restoration
-            self.log_stop_restoration(position, protection, reasonable_stop).await?;
+            self.log_stop_restoration(position, protection, reasonable_stop)
+                .await?;
 
             info!(
                 "Post-news stop restoration for position {}: {} -> {}",
@@ -294,13 +338,16 @@ impl NewsEventProtection {
     async fn calculate_reasonable_stop_post_news(&self, position: &Position) -> Result<f64> {
         // This would use technical analysis to determine a reasonable stop level
         // For now, using a simple ATR-based calculation
-        
-        let market_data = self.trading_platform.get_market_data(&position.symbol).await?;
+
+        let market_data = self
+            .trading_platform
+            .get_market_data(&position.symbol)
+            .await?;
         let current_price = (market_data.bid + market_data.ask) / 2.0;
-        
+
         // Use 2x ATR for stop distance (simplified)
         let atr_distance = market_data.spread * 4.0; // Simplified ATR calculation
-        
+
         let reasonable_stop = match position.position_type {
             UnifiedPositionSide::Long => current_price - atr_distance,
             UnifiedPositionSide::Short => current_price + atr_distance,
@@ -311,7 +358,7 @@ impl NewsEventProtection {
 
     async fn get_positions_for_currency(&self, currency: &str) -> Result<Vec<Position>> {
         let all_positions = self.trading_platform.get_positions().await?;
-        
+
         // Filter positions that involve the specified currency
         let affected_positions: Vec<Position> = all_positions
             .into_iter()
@@ -338,16 +385,20 @@ impl NewsEventProtection {
         position: &Position,
         event: &NewsEvent,
         old_stop: f64,
-        new_stop: f64
+        new_stop: f64,
     ) -> Result<()> {
-        let current_price = (self.trading_platform.get_market_data(&position.symbol).await?).ask;
-        
+        let current_price = (self
+            .trading_platform
+            .get_market_data(&position.symbol)
+            .await?)
+            .ask;
+
         let market_context = MarketContext {
             current_price,
-            atr_14: 0.0015, // Simplified
+            atr_14: 0.0015,      // Simplified
             trend_strength: 0.3, // Reduced during news protection
-            volatility: 0.05, // Increased volatility expected
-            spread: 0.0002, // Wider spreads during news
+            volatility: 0.05,    // Increased volatility expected
+            spread: 0.0002,      // Wider spreads during news
             timestamp: Utc::now(),
         };
 
@@ -367,7 +418,12 @@ impl NewsEventProtection {
         Ok(())
     }
 
-    async fn log_news_closure(&self, position: &Position, event: &NewsEvent, close_price: f64) -> Result<()> {
+    async fn log_news_closure(
+        &self,
+        position: &Position,
+        event: &NewsEvent,
+        close_price: f64,
+    ) -> Result<()> {
         let market_context = MarketContext {
             current_price: close_price,
             atr_14: 0.0015,
@@ -398,7 +454,7 @@ impl NewsEventProtection {
         position: &Position,
         event: &NewsEvent,
         reduced_volume: Decimal,
-        close_price: f64
+        close_price: f64,
     ) -> Result<()> {
         let market_context = MarketContext {
             current_price: close_price,
@@ -425,15 +481,24 @@ impl NewsEventProtection {
         Ok(())
     }
 
-    async fn log_stop_restoration(&self, position: &Position, protection: &NewsProtection, new_stop: f64) -> Result<()> {
-        let current_price = (self.trading_platform.get_market_data(&position.symbol).await?).ask;
-        
+    async fn log_stop_restoration(
+        &self,
+        position: &Position,
+        protection: &NewsProtection,
+        new_stop: f64,
+    ) -> Result<()> {
+        let current_price = (self
+            .trading_platform
+            .get_market_data(&position.symbol)
+            .await?)
+            .ask;
+
         let market_context = MarketContext {
             current_price,
             atr_14: 0.0015,
             trend_strength: 0.5, // Normal conditions restored
-            volatility: 0.02, // Normal volatility
-            spread: 0.0001, // Normal spreads
+            volatility: 0.02,    // Normal volatility
+            spread: 0.0001,      // Normal spreads
             timestamp: Utc::now(),
         };
 
@@ -468,8 +533,8 @@ impl NewsEventProtection {
         // This would typically query historical data
         Ok(NewsProtectionStats {
             protections_applied: self.protected_positions.len() as u32,
-            positions_closed_pre_news: 0, // From historical data
-            stops_tightened: 0, // From historical data
+            positions_closed_pre_news: 0,   // From historical data
+            stops_tightened: 0,             // From historical data
             protection_effectiveness: 0.85, // From historical analysis
         })
     }
@@ -481,7 +546,10 @@ impl NewsEventProtection {
     pub async fn force_restore_protection(&self, position_id: PositionId) -> Result<()> {
         if let Some((_, protection)) = self.protected_positions.remove(&position_id) {
             self.restore_reasonable_stop(&protection).await?;
-            info!("Forced restoration of protection for position {}", position_id);
+            info!(
+                "Forced restoration of protection for position {}",
+                position_id
+            );
         } else {
             warn!("No protection found for position {}", position_id);
         }
@@ -489,8 +557,11 @@ impl NewsEventProtection {
     }
 
     pub async fn get_upcoming_news_events(&self, hours_ahead: u32) -> Result<Vec<NewsEvent>> {
-        let lookback = Duration::from_std(std::time::Duration::from_secs(hours_ahead as u64 * 3600)).unwrap();
-        self.economic_calendar.get_upcoming_events(lookback, ImpactLevel::Medium).await
+        let lookback =
+            Duration::from_std(std::time::Duration::from_secs(hours_ahead as u64 * 3600)).unwrap();
+        self.economic_calendar
+            .get_upcoming_events(lookback, ImpactLevel::Medium)
+            .await
     }
 
     pub fn has_position_protection(&self, position_id: PositionId) -> bool {

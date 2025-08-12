@@ -1,12 +1,11 @@
 use chrono::Utc;
-use rust_decimal_macros::dec;
-use uuid::Uuid;
 use execution_engine::risk::{
-    ExposureMonitor, Position, PositionType, PositionTracker,
-    CurrencyExposureCalculator, ExposureLimits, ExposureAlertManager,
-    ConcentrationLevel
+    ConcentrationLevel, CurrencyExposureCalculator, ExposureAlertManager, ExposureLimits,
+    ExposureMonitor, Position, PositionTracker, PositionType,
 };
+use rust_decimal_macros::dec;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_pair_exposure_calculation() {
@@ -14,14 +13,14 @@ async fn test_pair_exposure_calculation() {
     let currency_calculator = Arc::new(CurrencyExposureCalculator);
     let exposure_limits = Arc::new(ExposureLimits::new());
     let alert_manager = Arc::new(ExposureAlertManager);
-    
+
     let monitor = ExposureMonitor::new(
         position_tracker.clone(),
         currency_calculator,
         exposure_limits,
         alert_manager,
     );
-    
+
     let positions = vec![
         Position {
             id: Uuid::new_v4(),
@@ -54,13 +53,15 @@ async fn test_pair_exposure_calculation() {
             opened_at: Utc::now(),
         },
     ];
-    
+
     for position in &positions {
-        position_tracker.positions.insert(position.id, position.clone());
+        position_tracker
+            .positions
+            .insert(position.id, position.clone());
     }
-    
+
     let report = monitor.calculate_total_exposure().await.unwrap();
-    
+
     assert!(report.pair_exposure.contains_key("EURUSD"));
     let eurusd_exposure = &report.pair_exposure["EURUSD"];
     assert_eq!(eurusd_exposure.long_exposure, dec!(11000));
@@ -75,14 +76,14 @@ async fn test_concentration_risk_calculation() {
     let currency_calculator = Arc::new(CurrencyExposureCalculator);
     let exposure_limits = Arc::new(ExposureLimits::new());
     let alert_manager = Arc::new(ExposureAlertManager);
-    
+
     let monitor = ExposureMonitor::new(
         position_tracker.clone(),
         currency_calculator,
         exposure_limits,
         alert_manager,
     );
-    
+
     let positions = vec![
         Position {
             id: Uuid::new_v4(),
@@ -115,21 +116,26 @@ async fn test_concentration_risk_calculation() {
             opened_at: Utc::now(),
         },
     ];
-    
+
     for position in &positions {
-        position_tracker.positions.insert(position.id, position.clone());
+        position_tracker
+            .positions
+            .insert(position.id, position.clone());
     }
-    
+
     let report = monitor.calculate_total_exposure().await.unwrap();
-    
+
     assert!(report.concentration_risk.herfindahl_index > dec!(0.5));
-    assert_eq!(report.concentration_risk.concentration_level, ConcentrationLevel::High);
+    assert_eq!(
+        report.concentration_risk.concentration_level,
+        ConcentrationLevel::High
+    );
 }
 
 #[tokio::test]
 async fn test_currency_exposure_calculation() {
     let currency_calculator = CurrencyExposureCalculator;
-    
+
     let positions = vec![
         Position {
             id: Uuid::new_v4(),
@@ -162,9 +168,12 @@ async fn test_currency_exposure_calculation() {
             opened_at: Utc::now(),
         },
     ];
-    
-    let currency_exposure = currency_calculator.calculate_net_exposure(&positions).await.unwrap();
-    
+
+    let currency_exposure = currency_calculator
+        .calculate_net_exposure(&positions)
+        .await
+        .unwrap();
+
     assert_eq!(currency_exposure["EUR"], dec!(11000));
     assert_eq!(currency_exposure["USD"], dec!(-11000) + dec!(6500));
     assert_eq!(currency_exposure["GBP"], dec!(-6500));
@@ -176,14 +185,14 @@ async fn test_diversification_score() {
     let currency_calculator = Arc::new(CurrencyExposureCalculator);
     let exposure_limits = Arc::new(ExposureLimits::new());
     let alert_manager = Arc::new(ExposureAlertManager);
-    
+
     let monitor = ExposureMonitor::new(
         position_tracker.clone(),
         currency_calculator,
         exposure_limits,
         alert_manager,
     );
-    
+
     let positions = vec![
         Position {
             id: Uuid::new_v4(),
@@ -231,12 +240,14 @@ async fn test_diversification_score() {
             opened_at: Utc::now(),
         },
     ];
-    
+
     for position in &positions {
-        position_tracker.positions.insert(position.id, position.clone());
+        position_tracker
+            .positions
+            .insert(position.id, position.clone());
     }
-    
+
     let report = monitor.calculate_total_exposure().await.unwrap();
-    
+
     assert!(report.diversification_score > dec!(50));
 }

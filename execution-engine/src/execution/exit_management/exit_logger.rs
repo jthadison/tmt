@@ -1,11 +1,11 @@
+use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
-use anyhow::{Result, Context};
-use chrono::{DateTime, Utc, Duration};
-use tracing::{info, warn, error};
-use uuid::Uuid;
-use rust_decimal::Decimal;
 use tokio::sync::RwLock;
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use super::types::*;
 
@@ -15,8 +15,16 @@ pub trait AuditDatabase: Send + Sync + std::fmt::Debug {
     async fn store_audit_entry(&self, entry: &AuditEntry) -> Result<()>;
     async fn get_entries_in_range(&self, time_range: TimeRange) -> Result<Vec<AuditEntry>>;
     async fn get_position_exit_history(&self, position_id: PositionId) -> Result<Vec<AuditEntry>>;
-    async fn store_emergency_close_event(&self, reason: String, timestamp: DateTime<Utc>) -> Result<()>;
-    async fn get_entries_by_type(&self, modification_type: ExitModificationType, limit: Option<u32>) -> Result<Vec<AuditEntry>>;
+    async fn store_emergency_close_event(
+        &self,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    ) -> Result<()>;
+    async fn get_entries_by_type(
+        &self,
+        modification_type: ExitModificationType,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuditEntry>>;
 }
 
 // In-memory implementation for testing/demo
@@ -47,7 +55,9 @@ impl AuditDatabase for InMemoryAuditDatabase {
         let entries = self.entries.read().await;
         let filtered = entries
             .iter()
-            .filter(|entry| entry.timestamp >= time_range.start && entry.timestamp <= time_range.end)
+            .filter(|entry| {
+                entry.timestamp >= time_range.start && entry.timestamp <= time_range.end
+            })
             .cloned()
             .collect();
         Ok(filtered)
@@ -63,7 +73,11 @@ impl AuditDatabase for InMemoryAuditDatabase {
         Ok(position_entries)
     }
 
-    async fn store_emergency_close_event(&self, reason: String, timestamp: DateTime<Utc>) -> Result<()> {
+    async fn store_emergency_close_event(
+        &self,
+        reason: String,
+        timestamp: DateTime<Utc>,
+    ) -> Result<()> {
         let mut events = self.emergency_events.write().await;
         events.push(EmergencyCloseEvent {
             id: Uuid::new_v4(),
@@ -74,21 +88,28 @@ impl AuditDatabase for InMemoryAuditDatabase {
         Ok(())
     }
 
-    async fn get_entries_by_type(&self, modification_type: ExitModificationType, limit: Option<u32>) -> Result<Vec<AuditEntry>> {
+    async fn get_entries_by_type(
+        &self,
+        modification_type: ExitModificationType,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuditEntry>> {
         let entries = self.entries.read().await;
         let mut filtered: Vec<AuditEntry> = entries
             .iter()
-            .filter(|entry| std::mem::discriminant(&entry.modification_type) == std::mem::discriminant(&modification_type))
+            .filter(|entry| {
+                std::mem::discriminant(&entry.modification_type)
+                    == std::mem::discriminant(&modification_type)
+            })
             .cloned()
             .collect();
-        
+
         // Sort by timestamp, newest first
         filtered.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
+
         if let Some(limit) = limit {
             filtered.truncate(limit as usize);
         }
-        
+
         Ok(filtered)
     }
 }
@@ -125,14 +146,17 @@ impl ExitAnalytics {
         let mut counts = self.modification_counts.write().await;
         let modification_type = modification.modification_type.clone();
         *counts.entry(modification_type).or_insert(0) += 1;
-        
+
         // Update performance cache
-        let performance_key = format!("{:?}_{}", modification.modification_type, modification.position_id);
+        let performance_key = format!(
+            "{:?}_{}",
+            modification.modification_type, modification.position_id
+        );
         let performance_impact = self.calculate_modification_impact(modification).await?;
-        
+
         let mut cache = self.performance_cache.write().await;
         cache.insert(performance_key, performance_impact);
-        
+
         Ok(())
     }
 
@@ -143,23 +167,23 @@ impl ExitAnalytics {
             ExitModificationType::TrailingStop => {
                 // Positive impact for trailing stops (protecting profits)
                 Ok(0.1 * (modification.new_value - modification.old_value).abs())
-            },
+            }
             ExitModificationType::BreakEven => {
                 // Strong positive impact (risk elimination)
                 Ok(0.5)
-            },
+            }
             ExitModificationType::PartialProfit => {
                 // Positive impact (profit realization)
                 Ok(0.3 * modification.new_value)
-            },
+            }
             ExitModificationType::TimeExit => {
                 // Neutral to negative impact (forced exit)
                 Ok(-0.1)
-            },
+            }
             ExitModificationType::NewsProtection => {
                 // Moderate positive impact (risk reduction)
                 Ok(0.2)
-            },
+            }
         }
     }
 
@@ -179,7 +203,7 @@ impl ExitAuditLogger {
     pub fn new() -> Self {
         let audit_database = Arc::new(InMemoryAuditDatabase::new());
         let exit_analytics = Arc::new(ExitAnalytics::new());
-        
+
         Self {
             audit_database,
             exit_analytics,
@@ -188,16 +212,19 @@ impl ExitAuditLogger {
 
     pub fn with_database(audit_database: Arc<dyn AuditDatabase>) -> Self {
         let exit_analytics = Arc::new(ExitAnalytics::new());
-        
+
         Self {
             audit_database,
             exit_analytics,
         }
     }
 
-    pub async fn log_exit_modification(&self, modification: ExitModification) -> Result<AuditEntry> {
+    pub async fn log_exit_modification(
+        &self,
+        modification: ExitModification,
+    ) -> Result<AuditEntry> {
         let performance_impact = self.calculate_performance_impact(&modification).await?;
-        
+
         let audit_entry = AuditEntry {
             entry_id: Uuid::new_v4(),
             position_id: modification.position_id,
@@ -211,11 +238,15 @@ impl ExitAuditLogger {
         };
 
         // Store in audit database
-        self.audit_database.store_audit_entry(&audit_entry).await
+        self.audit_database
+            .store_audit_entry(&audit_entry)
+            .await
             .context("Failed to store audit entry")?;
 
         // Update analytics
-        self.exit_analytics.record_modification(&modification).await
+        self.exit_analytics
+            .record_modification(&modification)
+            .await
             .context("Failed to update exit analytics")?;
 
         info!(
@@ -234,36 +265,43 @@ impl ExitAuditLogger {
         // More sophisticated performance impact calculation
         let price_change = modification.new_value - modification.old_value;
         let market_volatility = modification.market_context.volatility;
-        
+
         Ok(match modification.modification_type {
             ExitModificationType::TrailingStop => {
                 // Impact based on how much profit protection was increased
-                let protection_improvement = price_change.abs() / modification.market_context.current_price;
+                let protection_improvement =
+                    price_change.abs() / modification.market_context.current_price;
                 protection_improvement * 100.0 // Convert to basis points
-            },
+            }
             ExitModificationType::BreakEven => {
                 // Fixed high positive impact for eliminating downside risk
                 50.0 // 50 basis points
-            },
+            }
             ExitModificationType::PartialProfit => {
                 // Impact based on profit realization relative to market volatility
                 (modification.new_value / modification.old_value - 1.0) / market_volatility * 10.0
-            },
+            }
             ExitModificationType::TimeExit => {
                 // Negative impact proportional to how far from entry price
                 let exit_distance = (modification.new_value - modification.old_value).abs();
                 -(exit_distance / modification.market_context.current_price * 100.0)
-            },
+            }
             ExitModificationType::NewsProtection => {
                 // Positive impact for risk reduction, scaled by volatility expectation
                 20.0 * market_volatility * 100.0
-            },
+            }
         })
     }
 
-    pub async fn generate_exit_performance_report(&self, time_range: TimeRange) -> Result<ExitPerformanceReport> {
-        let audit_entries = self.audit_database.get_entries_in_range(time_range.clone()).await?;
-        
+    pub async fn generate_exit_performance_report(
+        &self,
+        time_range: TimeRange,
+    ) -> Result<ExitPerformanceReport> {
+        let audit_entries = self
+            .audit_database
+            .get_entries_in_range(time_range.clone())
+            .await?;
+
         let mut report = ExitPerformanceReport {
             trailing_stop_stats: TrailingStopStats {
                 total_trails: 0,
@@ -277,7 +315,10 @@ impl ExitAuditLogger {
                 break_even_activations: 0,
                 successful_break_evens: 0,
                 losses_prevented: Decimal::ZERO,
-                average_time_to_break_even: Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
+                average_time_to_break_even: Duration::from_std(std::time::Duration::from_secs(
+                    2 * 3600,
+                ))
+                .unwrap(),
             },
             partial_profit_stats: PartialProfitStats {
                 total_partials: 0,
@@ -287,7 +328,8 @@ impl ExitAuditLogger {
             },
             time_exit_stats: TimeExitStats {
                 time_exits_triggered: 0,
-                average_hold_time: Duration::from_std(std::time::Duration::from_secs(12 * 3600)).unwrap(),
+                average_hold_time: Duration::from_std(std::time::Duration::from_secs(12 * 3600))
+                    .unwrap(),
                 trend_overrides: 0,
                 time_exit_pnl: Decimal::ZERO,
             },
@@ -305,11 +347,16 @@ impl ExitAuditLogger {
         };
 
         // Analyze each exit type
-        self.analyze_trailing_stop_performance(&audit_entries, &mut report).await?;
-        self.analyze_break_even_performance(&audit_entries, &mut report).await?;
-        self.analyze_partial_profit_performance(&audit_entries, &mut report).await?;
-        self.analyze_time_exit_performance(&audit_entries, &mut report).await?;
-        self.analyze_news_protection_performance(&audit_entries, &mut report).await?;
+        self.analyze_trailing_stop_performance(&audit_entries, &mut report)
+            .await?;
+        self.analyze_break_even_performance(&audit_entries, &mut report)
+            .await?;
+        self.analyze_partial_profit_performance(&audit_entries, &mut report)
+            .await?;
+        self.analyze_time_exit_performance(&audit_entries, &mut report)
+            .await?;
+        self.analyze_news_protection_performance(&audit_entries, &mut report)
+            .await?;
 
         // Calculate overall performance
         report.overall_performance = self.calculate_overall_performance(&audit_entries).await?;
@@ -317,132 +364,150 @@ impl ExitAuditLogger {
         Ok(report)
     }
 
-    async fn analyze_trailing_stop_performance(&self, entries: &[AuditEntry], report: &mut ExitPerformanceReport) -> Result<()> {
+    async fn analyze_trailing_stop_performance(
+        &self,
+        entries: &[AuditEntry],
+        report: &mut ExitPerformanceReport,
+    ) -> Result<()> {
         let trailing_entries: Vec<&AuditEntry> = entries
             .iter()
             .filter(|e| matches!(e.modification_type, ExitModificationType::TrailingStop))
             .collect();
 
         report.trailing_stop_stats.total_trails = trailing_entries.len() as u32;
-        
+
         if !trailing_entries.is_empty() {
             let total_distance: f64 = trailing_entries
                 .iter()
                 .map(|e| (e.new_value - e.old_value).abs())
                 .sum();
-            
-            report.trailing_stop_stats.average_trail_distance = total_distance / trailing_entries.len() as f64;
-            
+
+            report.trailing_stop_stats.average_trail_distance =
+                total_distance / trailing_entries.len() as f64;
+
             // Calculate profit captured (simplified)
-            let total_impact: f64 = trailing_entries
-                .iter()
-                .map(|e| e.performance_impact)
-                .sum();
-            
-            report.trailing_stop_stats.profit_captured = Decimal::from_f64_retain(total_impact).unwrap_or(Decimal::ZERO);
+            let total_impact: f64 = trailing_entries.iter().map(|e| e.performance_impact).sum();
+
+            report.trailing_stop_stats.profit_captured =
+                Decimal::from_f64_retain(total_impact).unwrap_or(Decimal::ZERO);
         }
 
         Ok(())
     }
 
-    async fn analyze_break_even_performance(&self, entries: &[AuditEntry], report: &mut ExitPerformanceReport) -> Result<()> {
+    async fn analyze_break_even_performance(
+        &self,
+        entries: &[AuditEntry],
+        report: &mut ExitPerformanceReport,
+    ) -> Result<()> {
         let break_even_entries: Vec<&AuditEntry> = entries
             .iter()
             .filter(|e| matches!(e.modification_type, ExitModificationType::BreakEven))
             .collect();
 
         report.break_even_stats.break_even_activations = break_even_entries.len() as u32;
-        
+
         // Simplified success calculation
         report.break_even_stats.successful_break_evens = break_even_entries.len() as u32;
-        
+
         let total_impact: f64 = break_even_entries
             .iter()
             .map(|e| e.performance_impact)
             .sum();
-        
-        report.break_even_stats.losses_prevented = Decimal::from_f64_retain(total_impact * 10.0).unwrap_or(Decimal::ZERO);
+
+        report.break_even_stats.losses_prevented =
+            Decimal::from_f64_retain(total_impact * 10.0).unwrap_or(Decimal::ZERO);
 
         Ok(())
     }
 
-    async fn analyze_partial_profit_performance(&self, entries: &[AuditEntry], report: &mut ExitPerformanceReport) -> Result<()> {
+    async fn analyze_partial_profit_performance(
+        &self,
+        entries: &[AuditEntry],
+        report: &mut ExitPerformanceReport,
+    ) -> Result<()> {
         let partial_entries: Vec<&AuditEntry> = entries
             .iter()
             .filter(|e| matches!(e.modification_type, ExitModificationType::PartialProfit))
             .collect();
 
         report.partial_profit_stats.total_partials = partial_entries.len() as u32;
-        
+
         if !partial_entries.is_empty() {
-            let total_volume: f64 = partial_entries
-                .iter()
-                .map(|e| e.new_value)
-                .sum();
-            
-            report.partial_profit_stats.total_volume_closed = Decimal::from_f64_retain(total_volume).unwrap_or(Decimal::ZERO);
-            
+            let total_volume: f64 = partial_entries.iter().map(|e| e.new_value).sum();
+
+            report.partial_profit_stats.total_volume_closed =
+                Decimal::from_f64_retain(total_volume).unwrap_or(Decimal::ZERO);
+
             let average_profit = partial_entries
                 .iter()
                 .map(|e| e.performance_impact)
-                .sum::<f64>() / partial_entries.len() as f64;
-            
-            report.partial_profit_stats.average_profit_per_partial = Decimal::from_f64_retain(average_profit).unwrap_or(Decimal::ZERO);
+                .sum::<f64>()
+                / partial_entries.len() as f64;
+
+            report.partial_profit_stats.average_profit_per_partial =
+                Decimal::from_f64_retain(average_profit).unwrap_or(Decimal::ZERO);
         }
 
         Ok(())
     }
 
-    async fn analyze_time_exit_performance(&self, entries: &[AuditEntry], report: &mut ExitPerformanceReport) -> Result<()> {
+    async fn analyze_time_exit_performance(
+        &self,
+        entries: &[AuditEntry],
+        report: &mut ExitPerformanceReport,
+    ) -> Result<()> {
         let time_exit_entries: Vec<&AuditEntry> = entries
             .iter()
             .filter(|e| matches!(e.modification_type, ExitModificationType::TimeExit))
             .collect();
 
         report.time_exit_stats.time_exits_triggered = time_exit_entries.len() as u32;
-        
-        let total_pnl: f64 = time_exit_entries
-            .iter()
-            .map(|e| e.performance_impact)
-            .sum();
-        
-        report.time_exit_stats.time_exit_pnl = Decimal::from_f64_retain(total_pnl).unwrap_or(Decimal::ZERO);
+
+        let total_pnl: f64 = time_exit_entries.iter().map(|e| e.performance_impact).sum();
+
+        report.time_exit_stats.time_exit_pnl =
+            Decimal::from_f64_retain(total_pnl).unwrap_or(Decimal::ZERO);
 
         Ok(())
     }
 
-    async fn analyze_news_protection_performance(&self, entries: &[AuditEntry], report: &mut ExitPerformanceReport) -> Result<()> {
+    async fn analyze_news_protection_performance(
+        &self,
+        entries: &[AuditEntry],
+        report: &mut ExitPerformanceReport,
+    ) -> Result<()> {
         let news_entries: Vec<&AuditEntry> = entries
             .iter()
             .filter(|e| matches!(e.modification_type, ExitModificationType::NewsProtection))
             .collect();
 
         report.news_protection_stats.protections_applied = news_entries.len() as u32;
-        
+
         // Count different types of news protections based on reasoning
-        let (tightened, closed) = news_entries
-            .iter()
-            .fold((0, 0), |(tight, close), entry| {
-                if entry.reasoning.contains("tightened") {
-                    (tight + 1, close)
-                } else if entry.reasoning.contains("closed") {
-                    (tight, close + 1)
-                } else {
-                    (tight, close)
-                }
-            });
-        
+        let (tightened, closed) = news_entries.iter().fold((0, 0), |(tight, close), entry| {
+            if entry.reasoning.contains("tightened") {
+                (tight + 1, close)
+            } else if entry.reasoning.contains("closed") {
+                (tight, close + 1)
+            } else {
+                (tight, close)
+            }
+        });
+
         report.news_protection_stats.stops_tightened = tightened;
         report.news_protection_stats.positions_closed_pre_news = closed;
-        
+
         // Calculate effectiveness (simplified)
         if !news_entries.is_empty() {
             let average_impact = news_entries
                 .iter()
                 .map(|e| e.performance_impact)
-                .sum::<f64>() / news_entries.len() as f64;
-            
-            report.news_protection_stats.protection_effectiveness = (average_impact / 50.0).max(0.0).min(1.0);
+                .sum::<f64>()
+                / news_entries.len() as f64;
+
+            report.news_protection_stats.protection_effectiveness =
+                (average_impact / 50.0).max(0.0).min(1.0);
         }
 
         Ok(())
@@ -455,19 +520,24 @@ impl ExitAuditLogger {
 
         let total_impact: f64 = entries.iter().map(|e| e.performance_impact).sum();
         let weighted_performance = total_impact / entries.len() as f64;
-        
+
         Ok(weighted_performance)
     }
 
     pub async fn create_exit_replay(&self, position_id: PositionId) -> Result<ExitReplay> {
-        let exit_history = self.audit_database.get_position_exit_history(position_id).await?;
-        
+        let exit_history = self
+            .audit_database
+            .get_position_exit_history(position_id)
+            .await?;
+
         let replay = ExitReplay {
             position_id,
             exit_timeline: self.build_exit_timeline(&exit_history).await?,
             decision_points: self.extract_decision_points(&exit_history).await?,
             market_context_evolution: self.track_market_context_changes(&exit_history).await?,
-            performance_attribution: self.calculate_performance_attribution(&exit_history).await?,
+            performance_attribution: self
+                .calculate_performance_attribution(&exit_history)
+                .await?,
             lessons_learned: self.extract_lessons_learned(&exit_history).await?,
         };
 
@@ -507,7 +577,10 @@ impl ExitAuditLogger {
         Ok(decision_points)
     }
 
-    async fn track_market_context_changes(&self, history: &[AuditEntry]) -> Result<Vec<MarketContext>> {
+    async fn track_market_context_changes(
+        &self,
+        history: &[AuditEntry],
+    ) -> Result<Vec<MarketContext>> {
         let contexts: Vec<MarketContext> = history
             .iter()
             .map(|entry| entry.market_context.clone())
@@ -516,7 +589,10 @@ impl ExitAuditLogger {
         Ok(contexts)
     }
 
-    async fn calculate_performance_attribution(&self, history: &[AuditEntry]) -> Result<PerformanceAttribution> {
+    async fn calculate_performance_attribution(
+        &self,
+        history: &[AuditEntry],
+    ) -> Result<PerformanceAttribution> {
         let mut attribution = PerformanceAttribution {
             trailing_stop_contribution: 0.0,
             break_even_contribution: 0.0,
@@ -529,11 +605,17 @@ impl ExitAuditLogger {
         for entry in history {
             let impact = entry.performance_impact;
             match entry.modification_type {
-                ExitModificationType::TrailingStop => attribution.trailing_stop_contribution += impact,
+                ExitModificationType::TrailingStop => {
+                    attribution.trailing_stop_contribution += impact
+                }
                 ExitModificationType::BreakEven => attribution.break_even_contribution += impact,
-                ExitModificationType::PartialProfit => attribution.partial_profit_contribution += impact,
+                ExitModificationType::PartialProfit => {
+                    attribution.partial_profit_contribution += impact
+                }
                 ExitModificationType::TimeExit => attribution.time_exit_contribution += impact,
-                ExitModificationType::NewsProtection => attribution.news_protection_contribution += impact,
+                ExitModificationType::NewsProtection => {
+                    attribution.news_protection_contribution += impact
+                }
             }
             attribution.total_impact += impact;
         }
@@ -549,49 +631,72 @@ impl ExitAuditLogger {
             lessons.push("Position had extensive exit management activity".to_string());
         }
 
-        let trailing_count = history.iter().filter(|e| matches!(e.modification_type, ExitModificationType::TrailingStop)).count();
+        let trailing_count = history
+            .iter()
+            .filter(|e| matches!(e.modification_type, ExitModificationType::TrailingStop))
+            .count();
         if trailing_count > 3 {
-            lessons.push("Frequent trailing stop adjustments - consider wider initial trails".to_string());
+            lessons.push(
+                "Frequent trailing stop adjustments - consider wider initial trails".to_string(),
+            );
         }
 
-        let news_protections = history.iter().filter(|e| matches!(e.modification_type, ExitModificationType::NewsProtection)).count();
+        let news_protections = history
+            .iter()
+            .filter(|e| matches!(e.modification_type, ExitModificationType::NewsProtection))
+            .count();
         if news_protections > 0 {
-            lessons.push("Position was exposed to news events - consider news calendar integration".to_string());
+            lessons.push(
+                "Position was exposed to news events - consider news calendar integration"
+                    .to_string(),
+            );
         }
 
-        let average_impact: f64 = history.iter().map(|e| e.performance_impact).sum::<f64>() / history.len() as f64;
+        let average_impact: f64 =
+            history.iter().map(|e| e.performance_impact).sum::<f64>() / history.len() as f64;
         if average_impact > 10.0 {
             lessons.push("Exit management added significant value to this position".to_string());
         } else if average_impact < -5.0 {
-            lessons.push("Exit management may have been counterproductive - review triggers".to_string());
+            lessons.push(
+                "Exit management may have been counterproductive - review triggers".to_string(),
+            );
         }
 
         Ok(lessons)
     }
 
     pub async fn log_emergency_close_event(&self, reason: String) -> Result<()> {
-        self.audit_database.store_emergency_close_event(reason, Utc::now()).await?;
+        self.audit_database
+            .store_emergency_close_event(reason, Utc::now())
+            .await?;
         Ok(())
     }
 
     pub async fn get_recent_exits(&self, limit: u32) -> Result<Vec<AuditEntry>> {
         let now = Utc::now();
-        let one_week_ago = now - Duration::from_std(std::time::Duration::from_secs(7 * 24 * 3600)).unwrap();
-        
+        let one_week_ago =
+            now - Duration::from_std(std::time::Duration::from_secs(7 * 24 * 3600)).unwrap();
+
         let time_range = TimeRange {
             start: one_week_ago,
             end: now,
         };
-        
+
         let mut entries = self.audit_database.get_entries_in_range(time_range).await?;
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         entries.truncate(limit as usize);
-        
+
         Ok(entries)
     }
 
-    pub async fn get_exits_by_type(&self, modification_type: ExitModificationType, limit: Option<u32>) -> Result<Vec<AuditEntry>> {
-        self.audit_database.get_entries_by_type(modification_type, limit).await
+    pub async fn get_exits_by_type(
+        &self,
+        modification_type: ExitModificationType,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuditEntry>> {
+        self.audit_database
+            .get_entries_by_type(modification_type, limit)
+            .await
     }
 }
 

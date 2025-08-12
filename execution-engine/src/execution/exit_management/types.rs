@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use rust_decimal::Decimal;
 pub use crate::platforms::abstraction::models::UnifiedPositionSide;
+use chrono::{DateTime, Duration, Utc};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 pub type PositionId = Uuid;
 pub type OrderId = String;
@@ -23,8 +23,8 @@ impl Default for TrailingConfig {
     fn default() -> Self {
         Self {
             atr_multiplier: 2.0,
-            min_trail_distance: 0.0010, // 10 pips for EURUSD
-            max_trail_distance: 0.0100, // 100 pips
+            min_trail_distance: 0.0010,   // 10 pips for EURUSD
+            max_trail_distance: 0.0100,   // 100 pips
             activation_threshold: 0.0015, // 15 pips profit before trailing starts
             symbol: "EURUSD".to_string(),
             timeframe: "H1".to_string(),
@@ -115,8 +115,10 @@ pub struct TimeExitConfig {
 impl Default for TimeExitConfig {
     fn default() -> Self {
         Self {
-            max_hold_duration: Duration::from_std(std::time::Duration::from_secs(24 * 3600)).unwrap(),
-            warning_duration: Duration::from_std(std::time::Duration::from_secs(20 * 3600)).unwrap(),
+            max_hold_duration: Duration::from_std(std::time::Duration::from_secs(24 * 3600))
+                .unwrap(),
+            warning_duration: Duration::from_std(std::time::Duration::from_secs(20 * 3600))
+                .unwrap(),
             enabled: true,
             trend_strength_override_threshold: 0.8,
         }

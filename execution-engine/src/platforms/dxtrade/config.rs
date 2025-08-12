@@ -196,77 +196,79 @@ impl DXTradeConfig {
     pub fn validate(&self) -> Result<()> {
         if self.credentials.sender_comp_id.is_empty() {
             return Err(DXTradeError::ConfigurationError(
-                "sender_comp_id cannot be empty".to_string()
+                "sender_comp_id cannot be empty".to_string(),
             ));
         }
-        
+
         if self.credentials.target_comp_id.is_empty() {
             return Err(DXTradeError::ConfigurationError(
-                "target_comp_id cannot be empty".to_string()
+                "target_comp_id cannot be empty".to_string(),
             ));
         }
-        
+
         if self.credentials.account_id.is_empty() {
             return Err(DXTradeError::ConfigurationError(
-                "account_id cannot be empty".to_string()
+                "account_id cannot be empty".to_string(),
             ));
         }
-        
+
         if self.ssl.cert_file_path.is_empty() {
             return Err(DXTradeError::ConfigurationError(
-                "SSL certificate file path cannot be empty".to_string()
+                "SSL certificate file path cannot be empty".to_string(),
             ));
         }
-        
+
         if self.ssl.key_file_path.is_empty() {
             return Err(DXTradeError::ConfigurationError(
-                "SSL key file path cannot be empty".to_string()
+                "SSL key file path cannot be empty".to_string(),
             ));
         }
-        
+
         if !std::path::Path::new(&self.ssl.cert_file_path).exists() {
-            return Err(DXTradeError::ConfigurationError(
-                format!("SSL certificate file not found: {}", self.ssl.cert_file_path)
-            ));
+            return Err(DXTradeError::ConfigurationError(format!(
+                "SSL certificate file not found: {}",
+                self.ssl.cert_file_path
+            )));
         }
-        
+
         if !std::path::Path::new(&self.ssl.key_file_path).exists() {
-            return Err(DXTradeError::ConfigurationError(
-                format!("SSL key file not found: {}", self.ssl.key_file_path)
-            ));
+            return Err(DXTradeError::ConfigurationError(format!(
+                "SSL key file not found: {}",
+                self.ssl.key_file_path
+            )));
         }
-        
+
         if self.connection.heartbeat_interval_s < 10 {
             return Err(DXTradeError::ConfigurationError(
-                "heartbeat_interval_s must be at least 10 seconds".to_string()
+                "heartbeat_interval_s must be at least 10 seconds".to_string(),
             ));
         }
-        
+
         if self.connection.connect_timeout_ms > 60000 {
             return Err(DXTradeError::ConfigurationError(
-                "connect_timeout_ms should not exceed 60 seconds".to_string()
+                "connect_timeout_ms should not exceed 60 seconds".to_string(),
             ));
         }
-        
+
         Ok(())
     }
-    
+
     pub fn connect_timeout(&self) -> Duration {
         Duration::from_millis(self.connection.connect_timeout_ms)
     }
-    
+
     pub fn read_timeout(&self) -> Duration {
         Duration::from_millis(self.connection.read_timeout_ms)
     }
-    
+
     pub fn write_timeout(&self) -> Duration {
         Duration::from_millis(self.connection.write_timeout_ms)
     }
-    
+
     pub fn heartbeat_interval(&self) -> Duration {
         Duration::from_secs(self.connection.heartbeat_interval_s as u64)
     }
-    
+
     pub fn reconnect_backoff(&self) -> Duration {
         Duration::from_millis(self.connection.reconnect_backoff_ms)
     }

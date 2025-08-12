@@ -1,9 +1,9 @@
 use chrono::{Duration, Utc};
+use risk_engine::*;
 use risk_types::*;
 use rust_decimal_macros::dec;
-use uuid::Uuid;
-use risk_engine::*;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Stress tests for high-load scenarios that could occur in live trading
 #[cfg(test)]
@@ -17,7 +17,7 @@ mod stress_tests {
         let websocket_publisher = Arc::new(WebSocketPublisher::new());
         let kafka_producer = Arc::new(KafkaProducer);
         let currency_converter = Arc::new(CurrencyConverter::new());
-        
+
         let calculator = RealTimePnLCalculator::new(
             position_tracker.clone(),
             market_data_stream.clone(),
@@ -25,7 +25,7 @@ mod stress_tests {
             kafka_producer,
             currency_converter,
         );
-        
+
         // Create a position
         let position = Position {
             id: Uuid::new_v4(),
@@ -46,7 +46,7 @@ mod stress_tests {
         // Stress test: Process 10,000 rapid price updates
         let start_time = std::time::Instant::now();
         let mut total_pnl = dec!(0);
-        
+
         for i in 0..10000 {
             let price_variation = dec!(0.0001) * Decimal::from(i % 100 - 50); // Simulate price movement
             let tick = MarketTick {
@@ -57,21 +57,28 @@ mod stress_tests {
                 volume: dec!(1000),
                 timestamp: Utc::now(),
             };
-            
-            let pnl = calculator.calculate_position_pnl(&position, &tick).await.unwrap();
+
+            let pnl = calculator
+                .calculate_position_pnl(&position, &tick)
+                .await
+                .unwrap();
             total_pnl += pnl.unrealized_pnl;
-            
+
             // Verify no memory leaks or performance degradation
             assert!(pnl.unrealized_pnl.is_finite());
             assert!(pnl.unrealized_pnl_percentage.is_finite());
         }
-        
+
         let duration = start_time.elapsed();
-        
+
         // Should process 10k ticks in reasonable time (< 5 seconds on modern hardware)
-        assert!(duration.as_secs() < 5, "High frequency processing took too long: {:?}", duration);
+        assert!(
+            duration.as_secs() < 5,
+            "High frequency processing took too long: {:?}",
+            duration
+        );
         assert!(total_pnl.is_finite());
-        
+
         println!("Processed 10,000 ticks in {:?}", duration);
     }
 
@@ -81,27 +88,33 @@ mod stress_tests {
         let exposure_calculator = Arc::new(CurrencyExposureCalculator::new());
         let exposure_alerts = Arc::new(ExposureAlertManager::new());
         let limits = ExposureLimits::default();
-        
+
         let monitor = ExposureMonitor::new(
             position_tracker.clone(),
             exposure_calculator,
             exposure_alerts,
             limits,
         );
-        
+
         let account_id = Uuid::new_v4();
-        
+
         // Create a large portfolio with 1000 positions across various symbols
-        let symbols = vec!["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURGBP"];
+        let symbols = vec![
+            "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURGBP",
+        ];
         let mut positions = Vec::new();
-        
+
         for i in 0..1000 {
             let symbol_index = i % symbols.len();
             let position = Position {
                 id: Uuid::new_v4(),
                 account_id,
                 symbol: symbols[symbol_index].to_string(),
-                position_type: if i % 2 == 0 { PositionType::Long } else { PositionType::Short },
+                position_type: if i % 2 == 0 {
+                    PositionType::Long
+                } else {
+                    PositionType::Short
+                },
                 size: dec!(10000) + Decimal::from(i * 100), // Varying position sizes
                 entry_price: dec!(1.0000) + Decimal::from(i) * dec!(0.0001),
                 current_price: Some(dec!(1.0000) + Decimal::from(i) * dec!(0.0001) + dec!(0.0010)),
@@ -114,17 +127,24 @@ mod stress_tests {
             };
             positions.push(position);
         }
-        
+
         let start_time = std::time::Instant::now();
-        let report = monitor.calculate_account_exposure(account_id, positions).await.unwrap();
+        let report = monitor
+            .calculate_account_exposure(account_id, positions)
+            .await
+            .unwrap();
         let duration = start_time.elapsed();
-        
+
         // Should handle large portfolios efficiently
-        assert!(duration.as_millis() < 1000, "Large portfolio calculation took too long: {:?}", duration);
+        assert!(
+            duration.as_millis() < 1000,
+            "Large portfolio calculation took too long: {:?}",
+            duration
+        );
         assert!(report.concentration_risk.herfindahl_index.is_finite());
         assert!(report.total_exposure > dec!(0));
         assert!(!report.pair_exposure.is_empty());
-        
+
         println!("Calculated exposure for 1000 positions in {:?}", duration);
     }
 
@@ -133,59 +153,73 @@ mod stress_tests {
         let equity_history_manager = Arc::new(EquityHistoryManager::new());
         let drawdown_alert_manager = Arc::new(DrawdownAlertManager::new());
         let thresholds = DrawdownThresholds::default();
-        let tracker = DrawdownTracker::new(equity_history_manager.clone(), drawdown_alert_manager, thresholds);
-        
+        let tracker = DrawdownTracker::new(
+            equity_history_manager.clone(),
+            drawdown_alert_manager,
+            thresholds,
+        );
+
         // Simulate 100 accounts with extensive equity history
         let mut account_ids = Vec::new();
         for _ in 0..100 {
             account_ids.push(Uuid::new_v4());
         }
-        
+
         // Add 30 days of hourly equity points for each account (72,000 total points)
         for account_id in &account_ids {
             let mut equity = dec!(10000);
             let mut timestamp = Utc::now() - Duration::days(30);
-            
-            for _ in 0..720 { // 30 days * 24 hours
+
+            for _ in 0..720 {
+                // 30 days * 24 hours
                 // Simulate equity changes
                 let change = Decimal::from(rand::random::<i32>() % 200 - 100); // -100 to +100
                 equity += change;
                 equity = equity.max(dec!(0)); // Don't go below 0
-                
-                equity_history_manager.record_equity(*account_id, equity, equity).await.unwrap();
+
+                equity_history_manager
+                    .record_equity(*account_id, equity, equity)
+                    .await
+                    .unwrap();
                 timestamp += Duration::hours(1);
             }
         }
-        
+
         // Calculate drawdowns for all accounts
         let start_time = std::time::Instant::now();
         let mut total_calculations = 0;
-        
+
         for account_id in account_ids {
             let _metrics = tracker.calculate_drawdowns(account_id).await.unwrap();
             total_calculations += 1;
         }
-        
+
         let duration = start_time.elapsed();
-        
+
         // Should handle large datasets efficiently
         assert_eq!(total_calculations, 100);
-        assert!(duration.as_secs() < 30, "Large dataset calculation took too long: {:?}", duration);
-        
-        println!("Calculated drawdowns for {} accounts with 72,000 equity points in {:?}", 
-                total_calculations, duration);
+        assert!(
+            duration.as_secs() < 30,
+            "Large dataset calculation took too long: {:?}",
+            duration
+        );
+
+        println!(
+            "Calculated drawdowns for {} accounts with 72,000 equity points in {:?}",
+            total_calculations, duration
+        );
     }
 
     #[tokio::test]
     async fn test_concurrent_risk_calculations() {
         use tokio::task;
-        
+
         let position_tracker = Arc::new(PositionTracker::new());
         let market_data_stream = Arc::new(MarketDataStream::new());
         let websocket_publisher = Arc::new(WebSocketPublisher::new());
         let kafka_producer = Arc::new(KafkaProducer);
         let currency_converter = Arc::new(CurrencyConverter::new());
-        
+
         let calculator = Arc::new(RealTimePnLCalculator::new(
             position_tracker.clone(),
             market_data_stream.clone(),
@@ -193,19 +227,23 @@ mod stress_tests {
             kafka_producer,
             currency_converter,
         ));
-        
+
         // Create multiple concurrent tasks calculating P&L
         let mut handles = Vec::new();
-        
+
         for thread_id in 0..50 {
             let calc = calculator.clone();
-            
+
             let handle = task::spawn(async move {
                 let position = Position {
                     id: Uuid::new_v4(),
                     account_id: Uuid::new_v4(),
                     symbol: format!("PAIR{:02}", thread_id % 10),
-                    position_type: if thread_id % 2 == 0 { PositionType::Long } else { PositionType::Short },
+                    position_type: if thread_id % 2 == 0 {
+                        PositionType::Long
+                    } else {
+                        PositionType::Short
+                    },
                     size: dec!(100000),
                     entry_price: dec!(1.1000),
                     current_price: None,
@@ -216,7 +254,7 @@ mod stress_tests {
                     take_profit: None,
                     opened_at: Utc::now(),
                 };
-                
+
                 // Each thread performs 100 calculations
                 let mut results = Vec::new();
                 for i in 0..100 {
@@ -228,39 +266,46 @@ mod stress_tests {
                         volume: dec!(1000),
                         timestamp: Utc::now(),
                     };
-                    
+
                     let pnl = calc.calculate_position_pnl(&position, &tick).await.unwrap();
                     results.push(pnl);
                 }
-                
+
                 results
             });
-            
+
             handles.push(handle);
         }
-        
+
         // Wait for all concurrent calculations to complete
         let start_time = std::time::Instant::now();
         let mut total_calculations = 0;
-        
+
         for handle in handles {
             let results = handle.await.unwrap();
             total_calculations += results.len();
-            
+
             // Verify all results are valid
             for result in results {
                 assert!(result.unrealized_pnl.is_finite());
                 assert!(result.unrealized_pnl_percentage.is_finite());
             }
         }
-        
+
         let duration = start_time.elapsed();
-        
+
         // Should handle concurrent access safely and efficiently
         assert_eq!(total_calculations, 5000); // 50 threads * 100 calculations
-        assert!(duration.as_secs() < 10, "Concurrent calculations took too long: {:?}", duration);
-        
-        println!("Completed {} concurrent calculations in {:?}", total_calculations, duration);
+        assert!(
+            duration.as_secs() < 10,
+            "Concurrent calculations took too long: {:?}",
+            duration
+        );
+
+        println!(
+            "Completed {} concurrent calculations in {:?}",
+            total_calculations, duration
+        );
     }
 
     #[tokio::test]
@@ -270,7 +315,7 @@ mod stress_tests {
         let websocket_publisher = Arc::new(WebSocketPublisher::new());
         let kafka_producer = Arc::new(KafkaProducer);
         let currency_converter = Arc::new(CurrencyConverter::new());
-        
+
         let calculator = RealTimePnLCalculator::new(
             position_tracker.clone(),
             market_data_stream.clone(),
@@ -278,7 +323,7 @@ mod stress_tests {
             kafka_producer,
             currency_converter,
         );
-        
+
         // Test position with extreme values
         let position = Position {
             id: Uuid::new_v4(),
@@ -295,15 +340,15 @@ mod stress_tests {
             take_profit: None,
             opened_at: Utc::now(),
         };
-        
+
         // Test various extreme market scenarios
         let extreme_scenarios = vec![
-            ("Market Crash", dec!(10000)), // 80% drop
-            ("Flash Recovery", dec!(75000)), // 50% spike
-            ("Circuit Breaker", dec!(1)), // Near-zero price
+            ("Market Crash", dec!(10000)),     // 80% drop
+            ("Flash Recovery", dec!(75000)),   // 50% spike
+            ("Circuit Breaker", dec!(1)),      // Near-zero price
             ("Hyperinflation", dec!(1000000)), // 20x increase
         ];
-        
+
         for (scenario_name, price) in extreme_scenarios {
             let tick = MarketTick {
                 symbol: "BTCUSD".to_string(),
@@ -313,18 +358,32 @@ mod stress_tests {
                 volume: dec!(100000),
                 timestamp: Utc::now(),
             };
-            
+
             let result = calculator.calculate_position_pnl(&position, &tick).await;
-            
+
             // Should handle all scenarios without panicking
-            assert!(result.is_ok(), "Failed to handle scenario: {}", scenario_name);
-            
+            assert!(
+                result.is_ok(),
+                "Failed to handle scenario: {}",
+                scenario_name
+            );
+
             let pnl = result.unwrap();
-            assert!(pnl.unrealized_pnl.is_finite(), "Non-finite P&L in scenario: {}", scenario_name);
-            assert!(pnl.unrealized_pnl_percentage.is_finite(), "Non-finite P&L percentage in scenario: {}", scenario_name);
-            
-            println!("Scenario '{}': P&L = {}, Percentage = {}%", 
-                    scenario_name, pnl.unrealized_pnl, pnl.unrealized_pnl_percentage);
+            assert!(
+                pnl.unrealized_pnl.is_finite(),
+                "Non-finite P&L in scenario: {}",
+                scenario_name
+            );
+            assert!(
+                pnl.unrealized_pnl_percentage.is_finite(),
+                "Non-finite P&L percentage in scenario: {}",
+                scenario_name
+            );
+
+            println!(
+                "Scenario '{}': P&L = {}, Percentage = {}%",
+                scenario_name, pnl.unrealized_pnl, pnl.unrealized_pnl_percentage
+            );
         }
     }
 }
@@ -333,7 +392,7 @@ mod stress_tests {
 fn generate_random_tick(symbol: &str, base_price: rust_decimal::Decimal) -> MarketTick {
     let random_factor = Decimal::from(rand::random::<i32>() % 200 - 100) * dec!(0.00001);
     let price = base_price + random_factor;
-    
+
     MarketTick {
         symbol: symbol.to_string(),
         bid: price - dec!(0.00001),

@@ -1,14 +1,14 @@
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use dashmap::DashMap;
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
-use dashmap::DashMap;
-use anyhow::{Result, Context};
-use chrono::{DateTime, Utc};
-use tracing::{info, warn, error};
-use rust_decimal::Decimal;
+use tracing::{error, info, warn};
 
-use super::TradingPlatform;
-use super::types::*;
 use super::exit_logger::ExitAuditLogger;
+use super::types::*;
+use super::TradingPlatform;
 
 #[derive(Debug, Clone)]
 pub struct PositionTargetStatus {
@@ -51,14 +51,20 @@ impl PartialProfitManager {
             let targets_hit = match self.evaluate_profit_targets(&position).await {
                 Ok(targets) => targets,
                 Err(e) => {
-                    error!("Failed to evaluate profit targets for position {}: {}", position.id, e);
+                    error!(
+                        "Failed to evaluate profit targets for position {}: {}",
+                        position.id, e
+                    );
                     continue;
                 }
             };
 
             for target in targets_hit {
                 if let Err(e) = self.execute_partial_close(&position, &target).await {
-                    error!("Failed to execute partial close for position {}: {}", position.id, e);
+                    error!(
+                        "Failed to execute partial close for position {}: {}",
+                        position.id, e
+                    );
                 }
             }
         }
@@ -80,11 +86,13 @@ impl PartialProfitManager {
             entry_price,
             current_price,
             initial_stop,
-            &position.position_type
+            &position.position_type,
         );
 
         let default_config = ProfitTakingConfig::default();
-        let config = self.profit_configs.get(&position.symbol)
+        let config = self
+            .profit_configs
+            .get(&position.symbol)
             .unwrap_or(&default_config);
 
         if !config.enabled {
@@ -125,7 +133,11 @@ impl PartialProfitManager {
         Ok(targets_hit)
     }
 
-    async fn execute_partial_close(&self, position: &Position, target: &ProfitTarget) -> Result<()> {
+    async fn execute_partial_close(
+        &self,
+        position: &Position,
+        target: &ProfitTarget,
+    ) -> Result<()> {
         // Get current remaining volume
         let current_volume = match self.position_targets.get(&position.id) {
             Some(status) => status.remaining_volume,
@@ -133,8 +145,10 @@ impl PartialProfitManager {
         };
 
         // Calculate volume to close
-        let close_volume = current_volume * Decimal::from_f64_retain(target.close_percentage).unwrap();
-        let min_volume = Decimal::from_f64_retain(self.get_minimum_volume(&position.symbol).await?).unwrap();
+        let close_volume =
+            current_volume * Decimal::from_f64_retain(target.close_percentage).unwrap();
+        let min_volume =
+            Decimal::from_f64_retain(self.get_minimum_volume(&position.symbol).await?).unwrap();
 
         // Validate minimum volume requirements
         if close_volume < min_volume {
@@ -152,7 +166,10 @@ impl PartialProfitManager {
             reason: format!("Partial profit taking at {} R:R", target.risk_reward_ratio),
         };
 
-        let close_result = self.trading_platform.close_position_partial(close_request).await
+        let close_result = self
+            .trading_platform
+            .close_position_partial(close_request)
+            .await
             .context("Failed to execute partial close")?;
 
         // Calculate profit for this partial close
@@ -164,10 +181,18 @@ impl PartialProfitManager {
         let partial_profit = Decimal::from_f64_retain(profit_per_unit).unwrap() * close_volume;
 
         // Update position tracking
-        self.update_position_target_status(position.id, target, close_volume, partial_profit).await?;
+        self.update_position_target_status(position.id, target, close_volume, partial_profit)
+            .await?;
 
         // Log partial profit taking
-        self.log_partial_profit_taking(position, target, close_volume, close_result.close_price, partial_profit).await?;
+        self.log_partial_profit_taking(
+            position,
+            target,
+            close_volume,
+            close_result.close_price,
+            partial_profit,
+        )
+        .await?;
 
         info!(
             "Partial profit taken for position {}: {:.1}% at {:.2} R:R (Volume: {:.4}, Profit: {:.2})",
@@ -223,7 +248,7 @@ impl PartialProfitManager {
 
     async fn get_positions_with_remaining_targets(&self) -> Result<Vec<Position>> {
         let all_positions = self.trading_platform.get_positions().await?;
-        
+
         // Filter to positions that still have profit targets to hit
         let positions_with_targets: Vec<Position> = all_positions
             .into_iter()
@@ -232,15 +257,18 @@ impl PartialProfitManager {
                     if !config.enabled {
                         return false;
                     }
-                    
+
                     let status = self.position_targets.get(&pos.id);
                     let targets_hit = match status {
                         Some(ref s) => &s.targets_hit,
                         None => return true, // No targets hit yet
                     };
-                    
+
                     // Check if there are remaining targets
-                    config.profit_targets.iter().any(|target| !targets_hit.contains(&target.level))
+                    config
+                        .profit_targets
+                        .iter()
+                        .any(|target| !targets_hit.contains(&target.level))
                 } else {
                     false
                 }
@@ -270,7 +298,7 @@ impl PartialProfitManager {
         profit: Decimal,
     ) -> Result<()> {
         let current_price = self.get_current_price(&position.symbol).await?;
-        
+
         let market_context = MarketContext {
             current_price,
             atr_14: 0.0015, // Simplified
@@ -299,7 +327,10 @@ impl PartialProfitManager {
         Ok(())
     }
 
-    pub fn get_position_target_status(&self, position_id: PositionId) -> Option<PositionTargetStatus> {
+    pub fn get_position_target_status(
+        &self,
+        position_id: PositionId,
+    ) -> Option<PositionTargetStatus> {
         self.position_targets.get(&position_id).map(|s| s.clone())
     }
 
@@ -317,12 +348,12 @@ impl PartialProfitManager {
             let status = status_ref.value();
             total_partials += status.targets_hit.len() as u32;
             total_profit += status.total_partial_profit;
-            
-            let original_volume = status.remaining_volume + 
-                (status.total_partial_profit / Decimal::from_f64_retain(1.0).unwrap()); // Simplified
+
+            let original_volume = status.remaining_volume
+                + (status.total_partial_profit / Decimal::from_f64_retain(1.0).unwrap()); // Simplified
             let volume_closed = original_volume - status.remaining_volume;
             total_volume_closed += volume_closed;
-            
+
             for &target_level in &status.targets_hit {
                 *target_hits.entry(target_level).or_insert(0) += 1;
             }
@@ -360,12 +391,17 @@ impl PartialProfitManager {
         self.position_targets.len()
     }
 
-    pub async fn validate_partial_profit_logic(&self, position: &Position) -> Result<PartialProfitValidation> {
+    pub async fn validate_partial_profit_logic(
+        &self,
+        position: &Position,
+    ) -> Result<PartialProfitValidation> {
         let current_price = self.get_current_price(&position.symbol).await?;
         let default_config = ProfitTakingConfig::default();
-        let config = self.profit_configs.get(&position.symbol)
+        let config = self
+            .profit_configs
+            .get(&position.symbol)
             .unwrap_or(&default_config);
-        
+
         let mut validation = PartialProfitValidation {
             is_enabled: config.enabled,
             current_risk_reward: 0.0,
@@ -378,7 +414,7 @@ impl PartialProfitManager {
                 position.entry_price,
                 current_price,
                 stop_loss,
-                &position.position_type
+                &position.position_type,
             );
 
             let status = self.position_targets.get(&position.id);

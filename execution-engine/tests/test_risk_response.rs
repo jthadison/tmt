@@ -1,13 +1,12 @@
 use chrono::Utc;
-use rust_decimal_macros::dec;
-use uuid::Uuid;
 use execution_engine::risk::{
-    RiskResponseSystem, RiskEvent, RiskSeverity, ResponseAction,
-    ReductionPriority, EmergencyStopScope, ResponseExecutionResult,
-    RiskThresholds, PositionManager, CircuitBreakerClient,
-    RiskAuditLogger, ResponseExecutor
+    CircuitBreakerClient, EmergencyStopScope, PositionManager, ReductionPriority, ResponseAction,
+    ResponseExecutionResult, ResponseExecutor, RiskAuditLogger, RiskEvent, RiskResponseSystem,
+    RiskSeverity, RiskThresholds,
 };
+use rust_decimal_macros::dec;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_margin_risk_critical_response() {
@@ -16,7 +15,7 @@ async fn test_margin_risk_critical_response() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -24,7 +23,7 @@ async fn test_margin_risk_critical_response() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let risk_event = RiskEvent {
         event_id: Uuid::new_v4(),
@@ -35,23 +34,29 @@ async fn test_margin_risk_critical_response() {
         threshold_value: dec!(120),
         timestamp: Utc::now(),
     };
-    
+
     let response = system.evaluate_and_respond(risk_event).await.unwrap();
-    
+
     assert_eq!(response.severity, RiskSeverity::Critical);
-    
+
     match response.action_taken {
-        ResponseAction::ReducePositions { reduction_percentage, priority, .. } => {
+        ResponseAction::ReducePositions {
+            reduction_percentage,
+            priority,
+            ..
+        } => {
             assert_eq!(reduction_percentage, dec!(50));
             assert_eq!(priority, ReductionPriority::LargestLoss);
-        },
+        }
         _ => panic!("Expected ReducePositions action"),
     }
-    
+
     match response.execution_result {
-        ResponseExecutionResult::PositionsReduced { positions_affected, .. } => {
+        ResponseExecutionResult::PositionsReduced {
+            positions_affected, ..
+        } => {
             assert_eq!(positions_affected, 3);
-        },
+        }
         _ => panic!("Expected PositionsReduced result"),
     }
 }
@@ -63,7 +68,7 @@ async fn test_margin_risk_extreme_response() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -71,7 +76,7 @@ async fn test_margin_risk_extreme_response() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let risk_event = RiskEvent {
         event_id: Uuid::new_v4(),
@@ -82,15 +87,15 @@ async fn test_margin_risk_extreme_response() {
         threshold_value: dec!(120),
         timestamp: Utc::now(),
     };
-    
+
     let response = system.evaluate_and_respond(risk_event).await.unwrap();
-    
+
     assert_eq!(response.severity, RiskSeverity::Extreme);
-    
+
     match response.action_taken {
         ResponseAction::EmergencyStop { scope, .. } => {
             assert_eq!(scope, EmergencyStopScope::Account(account_id));
-        },
+        }
         _ => panic!("Expected EmergencyStop action"),
     }
 }
@@ -102,7 +107,7 @@ async fn test_drawdown_risk_response() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -110,7 +115,7 @@ async fn test_drawdown_risk_response() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let risk_event = RiskEvent {
         event_id: Uuid::new_v4(),
@@ -121,15 +126,18 @@ async fn test_drawdown_risk_response() {
         threshold_value: dec!(20),
         timestamp: Utc::now(),
     };
-    
+
     let response = system.evaluate_and_respond(risk_event).await.unwrap();
-    
+
     assert_eq!(response.severity, RiskSeverity::High);
-    
+
     match response.action_taken {
-        ResponseAction::ReducePositionSize { new_risk_percentage, .. } => {
+        ResponseAction::ReducePositionSize {
+            new_risk_percentage,
+            ..
+        } => {
             assert_eq!(new_risk_percentage, dec!(1));
-        },
+        }
         _ => panic!("Expected ReducePositionSize action"),
     }
 }
@@ -141,7 +149,7 @@ async fn test_exposure_concentration_response() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -149,7 +157,7 @@ async fn test_exposure_concentration_response() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let risk_event = RiskEvent {
         event_id: Uuid::new_v4(),
@@ -160,16 +168,20 @@ async fn test_exposure_concentration_response() {
         threshold_value: dec!(25),
         timestamp: Utc::now(),
     };
-    
+
     let response = system.evaluate_and_respond(risk_event).await.unwrap();
-    
+
     assert_eq!(response.severity, RiskSeverity::High);
-    
+
     match response.action_taken {
-        ResponseAction::ReducePositions { reduction_percentage, priority, .. } => {
+        ResponseAction::ReducePositions {
+            reduction_percentage,
+            priority,
+            ..
+        } => {
             assert_eq!(reduction_percentage, dec!(30));
             assert_eq!(priority, ReductionPriority::LargestPosition);
-        },
+        }
         _ => panic!("Expected ReducePositions action"),
     }
 }
@@ -181,7 +193,7 @@ async fn test_correlation_risk_response() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -189,7 +201,7 @@ async fn test_correlation_risk_response() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let risk_event = RiskEvent {
         event_id: Uuid::new_v4(),
@@ -200,16 +212,20 @@ async fn test_correlation_risk_response() {
         threshold_value: dec!(0.8),
         timestamp: Utc::now(),
     };
-    
+
     let response = system.evaluate_and_respond(risk_event).await.unwrap();
-    
+
     assert_eq!(response.severity, RiskSeverity::Medium);
-    
+
     match response.action_taken {
-        ResponseAction::ReduceCorrelatedPositions { correlation_threshold, reduction_factor, .. } => {
+        ResponseAction::ReduceCorrelatedPositions {
+            correlation_threshold,
+            reduction_factor,
+            ..
+        } => {
             assert_eq!(correlation_threshold, dec!(0.7));
             assert_eq!(reduction_factor, dec!(0.5));
-        },
+        }
         _ => panic!("Expected ReduceCorrelatedPositions action"),
     }
 }
@@ -221,7 +237,7 @@ async fn test_handle_pnl_risk() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -229,13 +245,16 @@ async fn test_handle_pnl_risk() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let current_pnl = dec!(-1500);
     let max_loss_threshold = dec!(-1000);
-    
-    let response = system.handle_pnl_risk(account_id, current_pnl, max_loss_threshold).await.unwrap();
-    
+
+    let response = system
+        .handle_pnl_risk(account_id, current_pnl, max_loss_threshold)
+        .await
+        .unwrap();
+
     assert!(response.is_some());
     let response = response.unwrap();
     assert_eq!(response.risk_event.risk_type, "pnl_threshold");
@@ -249,7 +268,7 @@ async fn test_handle_drawdown_risk() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -257,13 +276,16 @@ async fn test_handle_drawdown_risk() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let current_drawdown = dec!(15);
     let max_drawdown_threshold = dec!(10);
-    
-    let response = system.handle_drawdown_risk(account_id, current_drawdown, max_drawdown_threshold).await.unwrap();
-    
+
+    let response = system
+        .handle_drawdown_risk(account_id, current_drawdown, max_drawdown_threshold)
+        .await
+        .unwrap();
+
     assert!(response.is_some());
     let response = response.unwrap();
     assert_eq!(response.risk_event.risk_type, "drawdown_exceeded");
@@ -276,7 +298,7 @@ async fn test_handle_margin_risk() {
     let circuit_breaker = Arc::new(CircuitBreakerClient);
     let risk_logger = Arc::new(RiskAuditLogger::new());
     let response_executor = Arc::new(ResponseExecutor);
-    
+
     let system = RiskResponseSystem::new(
         risk_thresholds,
         position_manager,
@@ -284,13 +306,16 @@ async fn test_handle_margin_risk() {
         risk_logger,
         response_executor,
     );
-    
+
     let account_id = Uuid::new_v4();
     let current_margin_level = dec!(115);
     let critical_threshold = dec!(120);
-    
-    let response = system.handle_margin_risk(account_id, current_margin_level, critical_threshold).await.unwrap();
-    
+
+    let response = system
+        .handle_margin_risk(account_id, current_margin_level, critical_threshold)
+        .await
+        .unwrap();
+
     assert!(response.is_some());
     let response = response.unwrap();
     assert_eq!(response.risk_event.risk_type, "margin_level");

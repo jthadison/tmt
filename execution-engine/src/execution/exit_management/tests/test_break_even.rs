@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use super::*;
-use crate::execution::exit_management::{BreakEvenManager, ExitAuditLogger};
 use crate::execution::exit_management::types::*;
+use crate::execution::exit_management::{BreakEvenManager, ExitAuditLogger};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_break_even_trigger_detection() {
@@ -13,8 +13,8 @@ async fn test_break_even_trigger_detection() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Long,
-        1.0800,  // Entry
-        1.0820,  // Current (+20 pips)
+        1.0800,       // Entry
+        1.0820,       // Current (+20 pips)
         Some(1.0780), // Stop (-20 pips), so 1:1 R:R
         1,
     );
@@ -24,7 +24,10 @@ async fn test_break_even_trigger_detection() {
     assert!(result.is_ok());
 
     // Verify break-even logic
-    let validation = break_even_manager.validate_break_even_logic(&position).await.unwrap();
+    let validation = break_even_manager
+        .validate_break_even_logic(&position)
+        .await
+        .unwrap();
     assert!(validation.is_valid);
     assert!(validation.risk_reward_ratio >= 1.0);
 }
@@ -39,13 +42,16 @@ async fn test_break_even_insufficient_profit() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Long,
-        1.0800,  // Entry
-        1.0810,  // Current (+10 pips)
+        1.0800,       // Entry
+        1.0810,       // Current (+10 pips)
         Some(1.0780), // Stop (-20 pips), so only 0.5:1 R:R
         1,
     );
 
-    let validation = break_even_manager.validate_break_even_logic(&position).await.unwrap();
+    let validation = break_even_manager
+        .validate_break_even_logic(&position)
+        .await
+        .unwrap();
     assert!(!validation.is_valid);
     assert!(validation.risk_reward_ratio < 1.0);
 }
@@ -60,13 +66,16 @@ async fn test_break_even_short_position() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Short,
-        1.0800,  // Entry
-        1.0780,  // Current (-20 pips profit for short)
+        1.0800,       // Entry
+        1.0780,       // Current (-20 pips profit for short)
         Some(1.0820), // Stop (+20 pips risk), so 1:1 R:R
         1,
     );
 
-    let validation = break_even_manager.validate_break_even_logic(&position).await.unwrap();
+    let validation = break_even_manager
+        .validate_break_even_logic(&position)
+        .await
+        .unwrap();
     assert!(validation.is_valid);
     assert!(validation.risk_reward_ratio >= 1.0);
 }
@@ -87,7 +96,10 @@ async fn test_break_even_no_stop_loss() {
         1,
     );
 
-    let validation = break_even_manager.validate_break_even_logic(&position).await.unwrap();
+    let validation = break_even_manager
+        .validate_break_even_logic(&position)
+        .await
+        .unwrap();
     assert!(!validation.is_valid);
     assert_eq!(validation.reason, "No stop loss set");
 }
@@ -128,7 +140,7 @@ async fn test_break_even_configuration() {
     let mut break_even_manager = BreakEvenManager::new(mock_platform.clone(), exit_logger);
 
     let custom_config = BreakEvenConfig {
-        trigger_ratio: 1.5, // Require 1.5:1 R:R instead of 1:1
+        trigger_ratio: 1.5,           // Require 1.5:1 R:R instead of 1:1
         break_even_buffer_pips: 10.0, // 10 pip buffer
         enabled: true,
     };
@@ -139,13 +151,16 @@ async fn test_break_even_configuration() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Long,
-        1.0800,  // Entry
-        1.0820,  // Current (+20 pips)
+        1.0800,       // Entry
+        1.0820,       // Current (+20 pips)
         Some(1.0780), // Stop (-20 pips), so 1:1 R:R
         1,
     );
 
-    let validation = break_even_manager.validate_break_even_logic(&position).await.unwrap();
+    let validation = break_even_manager
+        .validate_break_even_logic(&position)
+        .await
+        .unwrap();
     // Should not be valid because we need 1.5:1 but only have 1:1
     assert!(!validation.is_valid);
 }

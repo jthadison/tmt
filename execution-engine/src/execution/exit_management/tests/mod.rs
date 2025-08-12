@@ -1,11 +1,11 @@
-pub mod test_trailing_stops;
 pub mod test_break_even;
 pub mod test_platform_integration;
+pub mod test_trailing_stops;
 
-use chrono::{Utc, Duration};
-use uuid::Uuid;
+use super::{types::*, TradingPlatform};
+use chrono::{Duration, Utc};
 use rust_decimal::Decimal;
-use super::{TradingPlatform, types::*};
+use uuid::Uuid;
 
 // Mock trading platform for testing
 #[derive(Debug, Clone)]
@@ -17,23 +17,29 @@ pub struct MockTradingPlatform {
 impl MockTradingPlatform {
     pub fn new() -> Self {
         let mut market_data = std::collections::HashMap::new();
-        
+
         // Add default market data
-        market_data.insert("EURUSD".to_string(), MarketData {
-            symbol: "EURUSD".to_string(),
-            bid: 1.0800,
-            ask: 1.0802,
-            spread: 0.0002,
-            timestamp: Utc::now(),
-        });
-        
-        market_data.insert("GBPUSD".to_string(), MarketData {
-            symbol: "GBPUSD".to_string(),
-            bid: 1.2500,
-            ask: 1.2502,
-            spread: 0.0002,
-            timestamp: Utc::now(),
-        });
+        market_data.insert(
+            "EURUSD".to_string(),
+            MarketData {
+                symbol: "EURUSD".to_string(),
+                bid: 1.0800,
+                ask: 1.0802,
+                spread: 0.0002,
+                timestamp: Utc::now(),
+            },
+        );
+
+        market_data.insert(
+            "GBPUSD".to_string(),
+            MarketData {
+                symbol: "GBPUSD".to_string(),
+                bid: 1.2500,
+                ask: 1.2502,
+                spread: 0.0002,
+                timestamp: Utc::now(),
+            },
+        );
 
         Self {
             positions: Vec::new(),
@@ -57,12 +63,16 @@ impl TradingPlatform for MockTradingPlatform {
     }
 
     async fn get_market_data(&self, symbol: &str) -> anyhow::Result<MarketData> {
-        self.market_data.get(symbol)
+        self.market_data
+            .get(symbol)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Market data not found for symbol: {}", symbol))
     }
 
-    async fn modify_order(&self, _request: OrderModifyRequest) -> anyhow::Result<OrderModifyResult> {
+    async fn modify_order(
+        &self,
+        _request: OrderModifyRequest,
+    ) -> anyhow::Result<OrderModifyResult> {
         Ok(OrderModifyResult {
             order_id: "test_order".to_string(),
             success: true,
@@ -70,7 +80,10 @@ impl TradingPlatform for MockTradingPlatform {
         })
     }
 
-    async fn close_position(&self, _request: ClosePositionRequest) -> anyhow::Result<ClosePositionResult> {
+    async fn close_position(
+        &self,
+        _request: ClosePositionRequest,
+    ) -> anyhow::Result<ClosePositionResult> {
         Ok(ClosePositionResult {
             position_id: Uuid::new_v4(),
             close_price: 1.0801,
@@ -79,7 +92,10 @@ impl TradingPlatform for MockTradingPlatform {
         })
     }
 
-    async fn close_position_partial(&self, _request: PartialCloseRequest) -> anyhow::Result<ClosePositionResult> {
+    async fn close_position_partial(
+        &self,
+        _request: PartialCloseRequest,
+    ) -> anyhow::Result<ClosePositionResult> {
         Ok(ClosePositionResult {
             position_id: Uuid::new_v4(),
             close_price: 1.0801,
@@ -104,7 +120,8 @@ pub fn create_test_position() -> Position {
         unrealized_pnl: 20.0,
         swap: 0.0,
         commission: 5.0,
-        open_time: Utc::now() - Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
+        open_time: Utc::now()
+            - Duration::from_std(std::time::Duration::from_secs(2 * 3600)).unwrap(),
         magic_number: Some(12345),
         comment: Some("Test position".to_string()),
     }
@@ -134,7 +151,8 @@ pub fn create_test_position_with_params(
         },
         swap: 0.0,
         commission: 5.0,
-        open_time: Utc::now() - Duration::from_std(std::time::Duration::from_hours(age_hours as u64)).unwrap(),
+        open_time: Utc::now()
+            - Duration::from_std(std::time::Duration::from_hours(age_hours as u64)).unwrap(),
         magic_number: Some(12345),
         comment: Some("Test position".to_string()),
     }

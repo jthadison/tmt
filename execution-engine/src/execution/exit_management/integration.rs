@@ -1,14 +1,13 @@
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 
-use crate::platforms::abstraction::ITradingPlatform;
-use crate::platforms::abstraction::interfaces::EventFilter;
-use crate::platforms::abstraction::events::PlatformEvent;
 use super::{
-    ExitManagementSystem, ExitAuditLogger, PlatformAdapterFactory,
-    TrailingStopManager, BreakEvenManager, PartialProfitManager, 
-    TimeBasedExitManager, NewsEventProtection
+    BreakEvenManager, ExitAuditLogger, ExitManagementSystem, NewsEventProtection,
+    PartialProfitManager, PlatformAdapterFactory, TimeBasedExitManager, TrailingStopManager,
 };
+use crate::platforms::abstraction::events::PlatformEvent;
+use crate::platforms::abstraction::interfaces::EventFilter;
+use crate::platforms::abstraction::ITradingPlatform;
 
 /// Integration factory for creating a fully configured exit management system
 pub struct ExitManagementIntegration;
@@ -16,14 +15,14 @@ pub struct ExitManagementIntegration;
 impl ExitManagementIntegration {
     /// Create a complete exit management system with platform integration
     pub fn create_with_platform(
-        platform: Arc<dyn ITradingPlatform + Send + Sync>
+        platform: Arc<dyn ITradingPlatform + Send + Sync>,
     ) -> Result<ExitManagementSystem> {
         // Create platform adapter
         let trading_platform = PlatformAdapterFactory::create_exit_management_adapter(platform);
-        
+
         // Create audit logger
         let exit_logger = Arc::new(ExitAuditLogger::new());
-        
+
         // Create the exit management system
         Ok(ExitManagementSystem::new(trading_platform, exit_logger))
     }
@@ -35,45 +34,45 @@ impl ExitManagementIntegration {
     ) -> Result<ExitManagementSystem> {
         // Create platform adapter
         let trading_platform = PlatformAdapterFactory::create_exit_management_adapter(platform);
-        
+
         // Create audit logger with custom database
         let exit_logger = Arc::new(ExitAuditLogger::with_database(audit_database));
-        
+
         // Create the exit management system
         Ok(ExitManagementSystem::new(trading_platform, exit_logger))
     }
 
     /// Create individual components for more granular control
     pub fn create_components(
-        platform: Arc<dyn ITradingPlatform + Send + Sync>
+        platform: Arc<dyn ITradingPlatform + Send + Sync>,
     ) -> Result<ExitManagementComponents> {
         // Create platform adapter
         let trading_platform = PlatformAdapterFactory::create_exit_management_adapter(platform);
-        
+
         // Create audit logger
         let exit_logger = Arc::new(ExitAuditLogger::new());
-        
+
         // Create individual managers
         let trailing_stop_manager = Arc::new(TrailingStopManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let break_even_manager = Arc::new(BreakEvenManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let partial_profit_manager = Arc::new(PartialProfitManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let time_exit_manager = Arc::new(TimeBasedExitManager::new(
             trading_platform.clone(),
             exit_logger.clone(),
         ));
-        
+
         let news_protection = Arc::new(NewsEventProtection::new(
             trading_platform.clone(),
             exit_logger.clone(),
@@ -119,10 +118,13 @@ impl ExitManagementComponents {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platforms::abstraction::{UnifiedPosition, UnifiedMarketData, UnifiedPositionSide, OrderModification, UnifiedOrderResponse, PlatformError};
+    use crate::platforms::abstraction::{
+        OrderModification, PlatformError, UnifiedMarketData, UnifiedOrderResponse, UnifiedPosition,
+        UnifiedPositionSide,
+    };
     use async_trait::async_trait;
-    use rust_decimal::Decimal;
     use chrono::Utc;
+    use rust_decimal::Decimal;
     use std::collections::HashMap;
 
     struct MockIntegrationPlatform;
@@ -133,29 +135,53 @@ mod tests {
             crate::platforms::PlatformType::MetaTrader4
         }
 
-        fn platform_name(&self) -> &str { "MockIntegrationPlatform" }
-        fn platform_version(&self) -> &str { "1.0.0" }
+        fn platform_name(&self) -> &str {
+            "MockIntegrationPlatform"
+        }
+        fn platform_version(&self) -> &str {
+            "1.0.0"
+        }
 
-        async fn connect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-        async fn disconnect(&mut self) -> Result<(), PlatformError> { Ok(()) }
-        async fn is_connected(&self) -> bool { true }
-        async fn ping(&self) -> Result<u64, PlatformError> { Ok(10) }
+        async fn connect(&mut self) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        async fn disconnect(&mut self) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        async fn is_connected(&self) -> bool {
+            true
+        }
+        async fn ping(&self) -> Result<u64, PlatformError> {
+            Ok(10)
+        }
 
-        async fn place_order(&self, _order: crate::platforms::abstraction::UnifiedOrder) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn place_order(
+            &self,
+            _order: crate::platforms::abstraction::UnifiedOrder,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn modify_order(&self, _order_id: &str, _modifications: OrderModification) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn modify_order(
+            &self,
+            _order_id: &str,
+            _modifications: OrderModification,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> { Ok(()) }
+        async fn cancel_order(&self, _order_id: &str) -> Result<(), PlatformError> {
+            Ok(())
+        }
 
         async fn get_order(&self, _order_id: &str) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_orders(&self, _filter: Option<crate::platforms::abstraction::OrderFilter>) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
+        async fn get_orders(
+            &self,
+            _filter: Option<crate::platforms::abstraction::OrderFilter>,
+        ) -> Result<Vec<UnifiedOrderResponse>, PlatformError> {
             Ok(Vec::new())
         }
 
@@ -180,21 +206,34 @@ mod tests {
             }])
         }
 
-        async fn get_position(&self, _symbol: &str) -> Result<Option<UnifiedPosition>, PlatformError> {
+        async fn get_position(
+            &self,
+            _symbol: &str,
+        ) -> Result<Option<UnifiedPosition>, PlatformError> {
             Ok(None)
         }
 
-        async fn close_position(&self, _symbol: &str, _quantity: Option<Decimal>) -> Result<UnifiedOrderResponse, PlatformError> {
+        async fn close_position(
+            &self,
+            _symbol: &str,
+            _quantity: Option<Decimal>,
+        ) -> Result<UnifiedOrderResponse, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_account_info(&self) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
+        async fn get_account_info(
+            &self,
+        ) -> Result<crate::platforms::abstraction::UnifiedAccountInfo, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_balance(&self) -> Result<Decimal, PlatformError> { Ok(Decimal::from(10000)) }
+        async fn get_balance(&self) -> Result<Decimal, PlatformError> {
+            Ok(Decimal::from(10000))
+        }
 
-        async fn get_margin_info(&self) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
+        async fn get_margin_info(
+            &self,
+        ) -> Result<crate::platforms::abstraction::MarginInfo, PlatformError> {
             unimplemented!()
         }
 
@@ -214,11 +253,17 @@ mod tests {
             })
         }
 
-        async fn subscribe_market_data(&self, _symbols: Vec<String>) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
+        async fn subscribe_market_data(
+            &self,
+            _symbols: Vec<String>,
+        ) -> Result<tokio::sync::mpsc::Receiver<UnifiedMarketData>, PlatformError> {
             unimplemented!()
         }
 
-        async fn unsubscribe_market_data(&self, _symbols: Vec<String>) -> Result<(), PlatformError> {
+        async fn unsubscribe_market_data(
+            &self,
+            _symbols: Vec<String>,
+        ) -> Result<(), PlatformError> {
             Ok(())
         }
 
@@ -226,19 +271,31 @@ mod tests {
             unimplemented!()
         }
 
-        async fn subscribe_events(&self) -> Result<tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>, PlatformError> {
+        async fn subscribe_events(
+            &self,
+        ) -> Result<
+            tokio::sync::mpsc::Receiver<crate::platforms::abstraction::PlatformEvent>,
+            PlatformError,
+        > {
             unimplemented!()
         }
 
-        async fn get_event_history(&self, _filter: EventFilter) -> Result<Vec<PlatformEvent>, PlatformError> {
+        async fn get_event_history(
+            &self,
+            _filter: EventFilter,
+        ) -> Result<Vec<PlatformEvent>, PlatformError> {
             Ok(Vec::new())
         }
 
-        async fn health_check(&self) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
+        async fn health_check(
+            &self,
+        ) -> Result<crate::platforms::abstraction::HealthStatus, PlatformError> {
             unimplemented!()
         }
 
-        async fn get_diagnostics(&self) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
+        async fn get_diagnostics(
+            &self,
+        ) -> Result<crate::platforms::abstraction::DiagnosticsInfo, PlatformError> {
             unimplemented!()
         }
     }
@@ -246,8 +303,9 @@ mod tests {
     #[tokio::test]
     async fn test_integration_create_with_platform() {
         let mock_platform = Arc::new(MockIntegrationPlatform);
-        let exit_management = ExitManagementIntegration::create_with_platform(mock_platform).unwrap();
-        
+        let exit_management =
+            ExitManagementIntegration::create_with_platform(mock_platform).unwrap();
+
         assert!(exit_management.is_enabled());
     }
 
@@ -255,7 +313,7 @@ mod tests {
     async fn test_integration_create_components() {
         let mock_platform = Arc::new(MockIntegrationPlatform);
         let components = ExitManagementIntegration::create_components(mock_platform).unwrap();
-        
+
         // Test that all components are created
         let exit_management = components.build();
         assert!(exit_management.is_enabled());
@@ -264,11 +322,12 @@ mod tests {
     #[tokio::test]
     async fn test_full_integration_workflow() {
         let mock_platform = Arc::new(MockIntegrationPlatform);
-        let mut exit_management = ExitManagementIntegration::create_with_platform(mock_platform).unwrap();
-        
+        let mut exit_management =
+            ExitManagementIntegration::create_with_platform(mock_platform).unwrap();
+
         // Test monitoring cycle
         exit_management.monitor_once().await.unwrap();
-        
+
         // Test individual manager access
         let trailing_stats = exit_management.get_trailing_stop_stats().await.unwrap();
         assert_eq!(trailing_stats.active_trails, 0);

@@ -1,5 +1,5 @@
-pub mod encryption;
 pub mod audit;
+pub mod encryption;
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -325,17 +325,23 @@ pub enum RiskCalculationError {
     #[error("Invalid position size: cannot be zero")]
     InvalidPositionSize,
     #[error("Currency conversion failed for {from} to {to}: {reason}")]
-    CurrencyConversionFailed { from: String, to: String, reason: String },
+    CurrencyConversionFailed {
+        from: String,
+        to: String,
+        reason: String,
+    },
     #[error("Position data inconsistent: {details}")]
     InconsistentPositionData { details: String },
     #[error("Market data unavailable for symbol: {symbol}")]
     MarketDataUnavailable { symbol: String },
-    #[error("Insufficient data points for calculation: {required} required, {available} available")]
+    #[error(
+        "Insufficient data points for calculation: {required} required, {available} available"
+    )]
     InsufficientData { required: usize, available: usize },
     #[error("Mathematical operation failed: {operation}")]
     MathematicalError { operation: String },
 }
 
 // Re-export modules
-pub use encryption::*;
 pub use audit::*;
+pub use encryption::*;

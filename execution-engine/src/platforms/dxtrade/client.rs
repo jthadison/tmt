@@ -14,18 +14,18 @@ impl DXTradeClient {
     pub fn new(config: DXTradeConfig) -> Result<Self> {
         let fix_client = FIXClient::new(config.clone())?;
         let rest_client = RestClient::new(config.clone())?;
-        
+
         Ok(Self {
             config,
             fix_client,
             rest_client,
         })
     }
-    
+
     pub async fn connect(&self) -> Result<()> {
         self.fix_client.connect().await
     }
-    
+
     pub async fn disconnect(&self) -> Result<()> {
         self.fix_client.disconnect().await
     }

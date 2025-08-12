@@ -1,13 +1,13 @@
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
-use dashmap::DashMap;
-use anyhow::{Result, Context};
-use chrono::{DateTime, Utc};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
-use super::TradingPlatform;
-use super::types::*;
 use super::exit_logger::ExitAuditLogger;
+use super::types::*;
+use super::TradingPlatform;
 
 #[derive(Debug)]
 pub struct TrailingStopManager {
@@ -38,7 +38,9 @@ impl TrailingStopManager {
 
     pub async fn activate_trailing_stop(&self, position: &Position) -> Result<()> {
         let default_config = TrailingConfig::default();
-        let config = self.trail_configs.get(&position.symbol)
+        let config = self
+            .trail_configs
+            .get(&position.symbol)
             .unwrap_or(&default_config);
 
         // Check if position has enough profit to activate trailing
@@ -83,7 +85,8 @@ impl TrailingStopManager {
             position.id, trail_level, current_price
         );
 
-        self.log_trail_activation(position.id, trail_level, current_price).await?;
+        self.log_trail_activation(position.id, trail_level, current_price)
+            .await?;
 
         Ok(())
     }
@@ -105,14 +108,18 @@ impl TrailingStopManager {
                     Ok(update) => {
                         if self.should_update_trail(&trail, &update) {
                             if let Err(e) = self.execute_trail_update(&position, update).await {
-                                error!("Failed to execute trail update for position {}: {}", 
-                                      position.id, e);
+                                error!(
+                                    "Failed to execute trail update for position {}: {}",
+                                    position.id, e
+                                );
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to calculate trail update for position {}: {}", 
-                              position.id, e);
+                        error!(
+                            "Failed to calculate trail update for position {}: {}",
+                            position.id, e
+                        );
                     }
                 }
             }
@@ -121,10 +128,16 @@ impl TrailingStopManager {
         Ok(())
     }
 
-    async fn calculate_new_trail_level(&self, position: &Position, current_trail: &ActiveTrail) -> Result<TrailUpdate> {
+    async fn calculate_new_trail_level(
+        &self,
+        position: &Position,
+        current_trail: &ActiveTrail,
+    ) -> Result<TrailUpdate> {
         let current_atr = self.calculate_atr(&position.symbol, 14).await?;
         let default_config = TrailingConfig::default();
-        let config = self.trail_configs.get(&position.symbol)
+        let config = self
+            .trail_configs
+            .get(&position.symbol)
             .unwrap_or(&default_config);
 
         let trail_distance = (current_atr * config.atr_multiplier)
@@ -147,7 +160,9 @@ impl TrailingStopManager {
             trigger_price: current_price,
             update_reason: format!(
                 "ATR-based trail: ATR={:.5}, Multiplier={}, Distance={:.1} pips",
-                current_atr, config.atr_multiplier, trail_distance * 10000.0
+                current_atr,
+                config.atr_multiplier,
+                trail_distance * 10000.0
             ),
         })
     }
@@ -172,7 +187,10 @@ impl TrailingStopManager {
             new_take_profit: position.take_profit,
         };
 
-        let result = self.trading_platform.modify_order(modify_request).await
+        let result = self
+            .trading_platform
+            .modify_order(modify_request)
+            .await
             .context("Failed to modify order for trailing stop update")?;
 
         // Update active trail record
@@ -194,7 +212,8 @@ impl TrailingStopManager {
 
     pub async fn deactivate_trailing_stop(&self, position_id: PositionId) -> Result<()> {
         if let Some((_, trail)) = self.active_trails.remove(&position_id) {
-            self.log_trail_deactivation(position_id, trail.trail_level).await?;
+            self.log_trail_deactivation(position_id, trail.trail_level)
+                .await?;
             info!("Trailing stop deactivated for position {}", position_id);
         }
         Ok(())
@@ -204,7 +223,8 @@ impl TrailingStopManager {
         // Check cache first
         if let Some(cached_atr) = self.atr_cache.get(symbol) {
             let cache_age = Utc::now() - cached_atr.calculation_time;
-            if cache_age.num_seconds() < 300 { // 5 minutes cache
+            if cache_age.num_seconds() < 300 {
+                // 5 minutes cache
                 return Ok(cached_atr.current_atr);
             }
         }
@@ -212,7 +232,7 @@ impl TrailingStopManager {
         // Calculate new ATR (this is a simplified implementation)
         // In a real system, you would fetch historical price data and calculate ATR properly
         let market_data = self.trading_platform.get_market_data(symbol).await?;
-        
+
         // Simplified ATR calculation - using current spread as proxy
         // Real implementation should use True Range over specified period
         let atr = market_data.spread * 2.0; // Simplified calculation
@@ -237,7 +257,7 @@ impl TrailingStopManager {
 
     async fn get_open_positions_with_trails(&self) -> Result<Vec<Position>> {
         let all_positions = self.trading_platform.get_positions().await?;
-        
+
         // Filter to only positions with active trails
         let positions_with_trails: Vec<Position> = all_positions
             .into_iter()
@@ -247,13 +267,18 @@ impl TrailingStopManager {
         Ok(positions_with_trails)
     }
 
-    async fn log_trail_activation(&self, position_id: PositionId, trail_level: f64, price: f64) -> Result<()> {
+    async fn log_trail_activation(
+        &self,
+        position_id: PositionId,
+        trail_level: f64,
+        price: f64,
+    ) -> Result<()> {
         let market_context = MarketContext {
             current_price: price,
             atr_14: self.calculate_atr(&"EURUSD", 14).await.unwrap_or(0.0), // Simplified
-            trend_strength: 0.5, // Simplified
-            volatility: 0.02, // Simplified
-            spread: 0.0001, // Simplified
+            trend_strength: 0.5,                                            // Simplified
+            volatility: 0.02,                                               // Simplified
+            spread: 0.0001,                                                 // Simplified
             timestamp: Utc::now(),
         };
 
@@ -275,8 +300,8 @@ impl TrailingStopManager {
             current_price: update.trigger_price,
             atr_14: update.atr_used,
             trend_strength: 0.5, // Simplified
-            volatility: 0.02, // Simplified
-            spread: 0.0001, // Simplified
+            volatility: 0.02,    // Simplified
+            spread: 0.0001,      // Simplified
             timestamp: Utc::now(),
         };
 
@@ -293,7 +318,11 @@ impl TrailingStopManager {
         Ok(())
     }
 
-    async fn log_trail_deactivation(&self, position_id: PositionId, final_level: f64) -> Result<()> {
+    async fn log_trail_deactivation(
+        &self,
+        position_id: PositionId,
+        final_level: f64,
+    ) -> Result<()> {
         let market_context = MarketContext {
             current_price: 0.0, // Position closed
             atr_14: 0.0,

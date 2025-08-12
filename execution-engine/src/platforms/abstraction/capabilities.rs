@@ -52,15 +52,24 @@ impl PlatformCapabilities {
         self.features.contains(&feature)
     }
 
-    pub fn supports_order_type(&self, order_type: &crate::platforms::abstraction::models::UnifiedOrderType) -> bool {
+    pub fn supports_order_type(
+        &self,
+        order_type: &crate::platforms::abstraction::models::UnifiedOrderType,
+    ) -> bool {
         self.order_types.contains(order_type)
     }
 
-    pub fn supports_time_in_force(&self, tif: &crate::platforms::abstraction::models::UnifiedTimeInForce) -> bool {
+    pub fn supports_time_in_force(
+        &self,
+        tif: &crate::platforms::abstraction::models::UnifiedTimeInForce,
+    ) -> bool {
         self.time_in_force_options.contains(tif)
     }
 
-    pub fn supports_instrument_type(&self, instrument_type: &crate::platforms::abstraction::models::InstrumentType) -> bool {
+    pub fn supports_instrument_type(
+        &self,
+        instrument_type: &crate::platforms::abstraction::models::InstrumentType,
+    ) -> bool {
         self.supported_instruments.contains(instrument_type)
     }
 
@@ -68,13 +77,16 @@ impl PlatformCapabilities {
         self.rate_limits.get(operation)
     }
 
-    pub fn validate_order_size(&self, size: rust_decimal::Decimal) -> Result<(), super::errors::ValidationError> {
+    pub fn validate_order_size(
+        &self,
+        size: rust_decimal::Decimal,
+    ) -> Result<(), super::errors::ValidationError> {
         if let Some(min) = self.min_order_size {
             if size < min {
                 return Err(super::errors::ValidationError::OrderTooSmall { min_size: min });
             }
         }
-        
+
         if let Some(max) = self.max_order_size {
             if size > max {
                 return Err(super::errors::ValidationError::OrderTooLarge { max_size: max });
@@ -85,7 +97,9 @@ impl PlatformCapabilities {
     }
 
     pub fn estimate_latency(&self, operation: PlatformOperation) -> Option<u64> {
-        self.latency_sla.as_ref().map(|sla| sla.get_expected_latency(operation))
+        self.latency_sla
+            .as_ref()
+            .map(|sla| sla.get_expected_latency(operation))
     }
 }
 
@@ -104,7 +118,7 @@ pub enum PlatformFeature {
     OrderModification,
     OrderCancellation,
     PartialFills,
-    
+
     // Position Management
     NetPositions,
     HedgedPositions,
@@ -113,7 +127,7 @@ pub enum PlatformFeature {
     StopLossManagement,
     TakeProfitManagement,
     TrailingStops,
-    
+
     // Market Data
     RealtimeQuotes,
     Level2Data,
@@ -125,7 +139,7 @@ pub enum PlatformFeature {
     TimeAndSales,
     MarketDataSubscription,
     MarketDataStreaming,
-    
+
     // Account Features
     MultiAccount,
     SubAccounts,
@@ -133,13 +147,13 @@ pub enum PlatformFeature {
     MarginTrading,
     LeverageControl,
     RiskManagement,
-    
+
     // Connectivity
     RestApi,
     WebSocketApi,
     FixProtocol,
     FtpReporting,
-    
+
     // Advanced Features
     AlgorithmicTrading,
     StrategyBacktesting,
@@ -147,13 +161,13 @@ pub enum PlatformFeature {
     SandboxEnvironment,
     WebHooks,
     CustomIndicators,
-    
+
     // Compliance & Reporting
     AuditTrail,
     ComplianceReporting,
     RegulatoryReporting,
     TradingPermissions,
-    
+
     // Platform Specific
     TradeLockerMultiAccount,
     DXTradeFixProtocol,
@@ -188,7 +202,7 @@ impl RateLimit {
             3600 => self.requests_per_hour,
             _ => self.requests_per_second * time_window_seconds,
         };
-        
+
         current_requests >= max_requests
     }
 }
@@ -233,7 +247,7 @@ pub enum PlatformOperation {
 /// TradeLocker specific capabilities
 pub fn tradelocker_capabilities() -> PlatformCapabilities {
     let mut caps = PlatformCapabilities::new("TradeLocker".to_string());
-    
+
     // Features
     caps.features.insert(PlatformFeature::MarketOrders);
     caps.features.insert(PlatformFeature::LimitOrders);
@@ -250,27 +264,42 @@ pub fn tradelocker_capabilities() -> PlatformCapabilities {
     caps.features.insert(PlatformFeature::MarketDataStreaming);
     caps.features.insert(PlatformFeature::WebSocketApi);
     caps.features.insert(PlatformFeature::MultiAccount);
-    caps.features.insert(PlatformFeature::TradeLockerMultiAccount);
+    caps.features
+        .insert(PlatformFeature::TradeLockerMultiAccount);
 
     // Order types
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Market);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Limit);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Stop);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::StopLimit);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::TrailingStop);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Oco);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Market);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Limit);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Stop);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::StopLimit);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::TrailingStop);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Oco);
 
     // Time in force
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Ioc);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Fok);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Day);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Ioc);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Fok);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Day);
 
     // Instruments
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Forex);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Stock);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Index);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Commodity);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Forex);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Stock);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Index);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Commodity);
 
     // Limits
     caps.max_orders_per_second = Some(10);
@@ -280,8 +309,10 @@ pub fn tradelocker_capabilities() -> PlatformCapabilities {
     caps.max_historical_range_days = Some(365);
 
     // Rate limits
-    caps.rate_limits.insert("orders".to_string(), RateLimit::new(10, 600, 36000));
-    caps.rate_limits.insert("market_data".to_string(), RateLimit::new(50, 3000, 180000));
+    caps.rate_limits
+        .insert("orders".to_string(), RateLimit::new(10, 600, 36000));
+    caps.rate_limits
+        .insert("market_data".to_string(), RateLimit::new(50, 3000, 180000));
 
     // SLA
     caps.latency_sla = Some(LatencySLA {
@@ -300,7 +331,7 @@ pub fn tradelocker_capabilities() -> PlatformCapabilities {
 /// DXTrade specific capabilities  
 pub fn dxtrade_capabilities() -> PlatformCapabilities {
     let mut caps = PlatformCapabilities::new("DXTrade".to_string());
-    
+
     // Features
     caps.features.insert(PlatformFeature::MarketOrders);
     caps.features.insert(PlatformFeature::LimitOrders);
@@ -316,25 +347,40 @@ pub fn dxtrade_capabilities() -> PlatformCapabilities {
     caps.features.insert(PlatformFeature::DXTradeFixProtocol);
 
     // Order types
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Market);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Limit);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::Stop);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::StopLimit);
-    caps.order_types.insert(crate::platforms::abstraction::models::UnifiedOrderType::MarketIfTouched);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Market);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Limit);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::Stop);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::StopLimit);
+    caps.order_types
+        .insert(crate::platforms::abstraction::models::UnifiedOrderType::MarketIfTouched);
 
     // Time in force
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Day);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Ioc);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Fok);
-    caps.time_in_force_options.insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtd);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Day);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtc);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Ioc);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Fok);
+    caps.time_in_force_options
+        .insert(crate::platforms::abstraction::models::UnifiedTimeInForce::Gtd);
 
     // Instruments
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Forex);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Stock);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Index);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Commodity);
-    caps.supported_instruments.insert(crate::platforms::abstraction::models::InstrumentType::Future);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Forex);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Stock);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Index);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Commodity);
+    caps.supported_instruments
+        .insert(crate::platforms::abstraction::models::InstrumentType::Future);
 
     // Limits
     caps.max_orders_per_second = Some(20);
@@ -344,8 +390,10 @@ pub fn dxtrade_capabilities() -> PlatformCapabilities {
     caps.max_historical_range_days = Some(1000);
 
     // Rate limits
-    caps.rate_limits.insert("orders".to_string(), RateLimit::new(20, 1200, 72000));
-    caps.rate_limits.insert("market_data".to_string(), RateLimit::new(100, 6000, 360000));
+    caps.rate_limits
+        .insert("orders".to_string(), RateLimit::new(20, 1200, 72000));
+    caps.rate_limits
+        .insert("market_data".to_string(), RateLimit::new(100, 6000, 360000));
 
     // SLA
     caps.latency_sla = Some(LatencySLA {
@@ -365,22 +413,26 @@ pub fn dxtrade_capabilities() -> PlatformCapabilities {
 pub struct CapabilityDetector;
 
 impl CapabilityDetector {
-    pub async fn detect_capabilities(platform_type: crate::platforms::PlatformType) -> Result<PlatformCapabilities, super::errors::PlatformError> {
+    pub async fn detect_capabilities(
+        platform_type: crate::platforms::PlatformType,
+    ) -> Result<PlatformCapabilities, super::errors::PlatformError> {
         match platform_type {
             crate::platforms::PlatformType::TradeLocker => Ok(tradelocker_capabilities()),
             crate::platforms::PlatformType::DXTrade => Ok(dxtrade_capabilities()),
-            _ => Err(super::errors::PlatformError::PlatformNotSupported { 
-                platform: format!("{:?}", platform_type) 
+            _ => Err(super::errors::PlatformError::PlatformNotSupported {
+                platform: format!("{:?}", platform_type),
             }),
         }
     }
 
-    pub async fn runtime_capability_check(platform: &dyn crate::platforms::abstraction::interfaces::ITradingPlatform) -> PlatformCapabilities {
+    pub async fn runtime_capability_check(
+        platform: &dyn crate::platforms::abstraction::interfaces::ITradingPlatform,
+    ) -> PlatformCapabilities {
         let mut caps = platform.capabilities();
-        
+
         // Perform runtime checks to update capabilities based on actual platform state
         // This could include API version detection, feature availability tests, etc.
-        
+
         caps
     }
 }

@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use chrono::Utc;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use super::*;
-use crate::execution::exit_management::{TrailingStopManager, ExitAuditLogger};
 use crate::execution::exit_management::types::*;
+use crate::execution::exit_management::{ExitAuditLogger, TrailingStopManager};
 
 #[tokio::test]
 async fn test_trailing_stop_activation() {
@@ -16,10 +16,10 @@ async fn test_trailing_stop_activation() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Long,
-        1.0800,  // Entry
-        1.0825,  // Current (25 pips profit)
+        1.0800,       // Entry
+        1.0825,       // Current (25 pips profit)
         Some(1.0780), // Stop loss
-        1, // 1 hour old
+        1,            // 1 hour old
     );
 
     // Activate trailing stop
@@ -45,10 +45,10 @@ async fn test_trailing_stop_insufficient_profit() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Long,
-        1.0800,  // Entry
-        1.0805,  // Current (only 5 pips profit)
+        1.0800,       // Entry
+        1.0805,       // Current (only 5 pips profit)
         Some(1.0780), // Stop loss
-        1, // 1 hour old
+        1,            // 1 hour old
     );
 
     // Attempt to activate trailing stop
@@ -76,7 +76,10 @@ async fn test_trailing_stop_update() {
     );
 
     // Activate trailing stop
-    trailing_manager.activate_trailing_stop(&position).await.unwrap();
+    trailing_manager
+        .activate_trailing_stop(&position)
+        .await
+        .unwrap();
 
     // Get initial trail level
     let initial_trails = trailing_manager.get_active_trails();
@@ -110,7 +113,10 @@ async fn test_trailing_stop_deactivation() {
     );
 
     // Activate trailing stop
-    trailing_manager.activate_trailing_stop(&position).await.unwrap();
+    trailing_manager
+        .activate_trailing_stop(&position)
+        .await
+        .unwrap();
 
     // Verify trail exists
     assert_eq!(trailing_manager.get_trail_count(), 1);
@@ -133,8 +139,8 @@ async fn test_trailing_stop_short_position() {
     let position = create_test_position_with_params(
         "EURUSD",
         UnifiedPositionSide::Short,
-        1.0800,  // Entry
-        1.0775,  // Current (25 pips profit for short)
+        1.0800,       // Entry
+        1.0775,       // Current (25 pips profit for short)
         Some(1.0820), // Stop loss above entry
         1,
     );
@@ -161,8 +167,8 @@ async fn test_trailing_configuration() {
     // Configure custom trailing settings
     let custom_config = TrailingConfig {
         atr_multiplier: 3.0,
-        min_trail_distance: 0.0005, // 5 pips
-        max_trail_distance: 0.0200, // 200 pips
+        min_trail_distance: 0.0005,   // 5 pips
+        max_trail_distance: 0.0200,   // 200 pips
         activation_threshold: 0.0020, // 20 pips
         symbol: "EURUSD".to_string(),
         timeframe: "H1".to_string(),
@@ -202,7 +208,7 @@ async fn test_trailing_stop_performance_stats() {
 #[cfg(test)]
 mod property_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_trail_level_always_moves_favorably() {
         let mock_platform = Arc::new(MockTradingPlatform::new());
@@ -219,17 +225,24 @@ mod property_tests {
                 1,
             );
 
-            if position.current_price - position.entry_price >= 0.0015 { // Sufficient profit
-                trailing_manager.activate_trailing_stop(&position).await.unwrap();
-                
+            if position.current_price - position.entry_price >= 0.0015 {
+                // Sufficient profit
+                trailing_manager
+                    .activate_trailing_stop(&position)
+                    .await
+                    .unwrap();
+
                 let trails = trailing_manager.get_active_trails();
                 if !trails.is_empty() {
                     let trail = &trails[0].1;
                     // For long positions, trail level should be below current price
                     assert!(trail.trail_level < position.current_price);
                 }
-                
-                trailing_manager.deactivate_trailing_stop(position.id).await.unwrap();
+
+                trailing_manager
+                    .deactivate_trailing_stop(position.id)
+                    .await
+                    .unwrap();
             }
         }
     }
