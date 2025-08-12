@@ -172,13 +172,13 @@ impl SecureParameterStore {
         let encrypted = self.encryption_manager.encrypt_string(api_key)?;
         self.parameters
             .encrypted_credentials
-            .insert(format!("{}_api_key", platform), encrypted);
+            .insert(format!("{platform}_api_key"), encrypted);
         Ok(())
     }
 
     /// Retrieve API key securely
     pub fn get_api_key(&self, platform: &str) -> Result<String> {
-        let key = format!("{}_api_key", platform);
+        let key = format!("{platform}_api_key");
         let encrypted = self
             .parameters
             .encrypted_credentials
@@ -193,13 +193,13 @@ impl SecureParameterStore {
         let encrypted = self.encryption_manager.encrypt_string(secret)?;
         self.parameters
             .encrypted_account_ids
-            .insert(format!("{}_secret", account_name), encrypted);
+            .insert(format!("{account_name}_secret"), encrypted);
         Ok(())
     }
 
     /// Retrieve account secret securely  
     pub fn get_account_secret(&self, account_name: &str) -> Result<String> {
-        let key = format!("{}_secret", account_name);
+        let key = format!("{account_name}_secret");
         let encrypted = self
             .parameters
             .encrypted_account_ids
@@ -232,7 +232,7 @@ impl SecureParameterStore {
     /// Store prop firm specific parameter
     pub fn store_prop_firm_param(&mut self, firm: &str, param: &str, value: &str) -> Result<()> {
         let encrypted = self.encryption_manager.encrypt_string(value)?;
-        let key = format!("{}_{}", firm, param);
+        let key = format!("{firm}_{param}");
         self.parameters
             .encrypted_prop_firm_params
             .insert(key, encrypted);
@@ -241,7 +241,7 @@ impl SecureParameterStore {
 
     /// Retrieve prop firm specific parameter
     pub fn get_prop_firm_param(&self, firm: &str, param: &str) -> Result<String> {
-        let key = format!("{}_{}", firm, param);
+        let key = format!("{firm}_{param}");
         let encrypted = self
             .parameters
             .encrypted_prop_firm_params
@@ -273,25 +273,25 @@ impl SecureParameterStore {
         // Check all encrypted values for age
         for (key, value) in &self.parameters.encrypted_credentials {
             if now - value.timestamp > max_age {
-                warnings.push(format!("Credential '{}' is older than 90 days", key));
+                warnings.push(format!("Credential '{key}' is older than 90 days"));
             }
         }
 
         for (key, value) in &self.parameters.encrypted_account_ids {
             if now - value.timestamp > max_age {
-                warnings.push(format!("Account ID '{}' is older than 90 days", key));
+                warnings.push(format!("Account ID '{key}' is older than 90 days"));
             }
         }
 
         for (key, value) in &self.parameters.encrypted_limits {
             if now - value.timestamp > max_age {
-                warnings.push(format!("Risk limit '{}' is older than 90 days", key));
+                warnings.push(format!("Risk limit '{key}' is older than 90 days"));
             }
         }
 
         for (key, value) in &self.parameters.encrypted_prop_firm_params {
             if now - value.timestamp > max_age {
-                warnings.push(format!("Prop firm param '{}' is older than 90 days", key));
+                warnings.push(format!("Prop firm param '{key}' is older than 90 days"));
             }
         }
 

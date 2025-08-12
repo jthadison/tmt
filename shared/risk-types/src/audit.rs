@@ -282,6 +282,7 @@ impl RiskAuditLogger {
     }
 
     /// Log a position size adjustment decision
+    #[allow(clippy::too_many_arguments)]
     pub fn log_position_adjustment(
         &mut self,
         account_id: Uuid,

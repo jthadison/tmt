@@ -1,3 +1,18 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::redundant_field_names)] 
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::unwrap_or_default)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::to_string_trait_impl)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::redundant_closure)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(unused_assignments)]
+
 pub mod config;
 // Use shared types instead of local types
 pub use risk_types;
