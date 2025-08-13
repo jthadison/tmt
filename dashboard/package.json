@@ -20,11 +20,13 @@
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",
     "@types/ws": "^8.18.1",
+    "chart.js": "^4.5.0",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
     "next": "^14.2.31",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.0",
     "react-dom": "^18.3.1",
     "speakeasy": "^2.0.0",
     "ws": "^8.18.3"

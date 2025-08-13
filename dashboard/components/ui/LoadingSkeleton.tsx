@@ -89,3 +89,10 @@ export function DashboardSkeleton() {
     </div>
   )
 }
+
+/**
+ * Generic loading skeleton for flexible use
+ */
+export function LoadingSkeleton({ className = '' }: SkeletonProps) {
+  return <Skeleton className={className} />
+}
