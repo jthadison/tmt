@@ -13,6 +13,9 @@ from .models import (
 )
 from .statistical_tester import StatisticalSignificanceTester
 
+# Import data interfaces
+from ...src.shared.python_utils.data_interfaces import TradeDataInterface, MockTradeDataProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +24,11 @@ class StrategyComparison:
     System for comparing strategies and generating rankings based on various metrics.
     """
     
-    def __init__(self):
+    def __init__(self, trade_data_provider: Optional[TradeDataInterface] = None):
         self.statistical_tester = StatisticalSignificanceTester()
+        
+        # Use provided data provider or default to mock
+        self.trade_data_provider = trade_data_provider or MockTradeDataProvider()
         
         # Ranking weights for different metrics
         self.ranking_weights = {
@@ -415,9 +421,34 @@ class StrategyComparison:
         return comparison
     
     async def _get_strategy_returns(self, strategy_id: str) -> List[float]:
-        """Get historical returns for a strategy (mock implementation)."""
-        # In production, this would query actual strategy returns
-        return [0.001, -0.002, 0.003, 0.0, -0.001]  # Mock returns
+        """Get historical returns for a strategy using the data provider interface."""
+        # Get correlation data from the data provider for accounts using this strategy
+        account_ids = [f"ACC_{strategy_id}_{i:03d}" for i in range(3)]  # Mock account IDs for strategy
+        correlation_data = await self.trade_data_provider.get_correlation_data(account_ids)
+        
+        if correlation_data and account_ids:
+            # Average the returns across accounts for this strategy and convert to float
+            strategy_returns = []
+            max_days = max(len(returns) for returns in correlation_data.values()) if correlation_data else 0
+            
+            for day_idx in range(max_days):
+                day_return = 0.0
+                account_count = 0
+                
+                for account_id in account_ids:
+                    if account_id in correlation_data and day_idx < len(correlation_data[account_id]):
+                        day_return += float(correlation_data[account_id][day_idx])
+                        account_count += 1
+                
+                if account_count > 0:
+                    day_return = day_return / account_count
+                
+                strategy_returns.append(day_return)
+            
+            return strategy_returns
+        
+        # Fallback to empty returns if no data available
+        return []
     
     def _generate_comparison_recommendation(self, strategy1: TradingStrategy,
                                           strategy2: TradingStrategy,

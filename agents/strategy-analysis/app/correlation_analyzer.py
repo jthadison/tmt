@@ -16,6 +16,9 @@ from .models import (
     RiskConcentration, CorrelationCluster, TradingStrategy
 )
 
+# Import data interfaces
+from ...src.shared.python_utils.data_interfaces import TradeDataInterface, MockTradeDataProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,10 +28,13 @@ class CorrelationAnalyzer:
     and diversification assessment.
     """
     
-    def __init__(self):
+    def __init__(self, trade_data_provider: Optional[TradeDataInterface] = None):
         self.correlation_threshold_high = Decimal('0.7')   # High correlation threshold
         self.correlation_threshold_medium = Decimal('0.3')  # Medium correlation threshold
         self.min_overlap_period = 30  # Minimum days of overlap for correlation calculation
+        
+        # Use provided data provider or default to mock
+        self.trade_data_provider = trade_data_provider or MockTradeDataProvider()
         
     async def analyze_strategy_correlations(self, strategies: List[TradingStrategy],
                                           analysis_period: timedelta) -> StrategyCorrelationAnalysis:
@@ -130,21 +136,39 @@ class CorrelationAnalyzer:
                                         end_date: datetime) -> List[Decimal]:
         """
         Get daily returns for a strategy over specified period.
-        In production, this would query the actual trade database.
+        Uses the configured trade data provider interface.
         """
-        # Mock implementation - would query actual trade data
         logger.debug(f"Getting daily returns for strategy {strategy_id}")
         
-        # Generate mock daily returns for demonstration
-        num_days = (end_date - start_date).days
-        returns = []
+        # Use the data provider to get correlation data
+        # This simulates getting all accounts that use this strategy
+        account_ids = [f"ACC_{strategy_id}_{i:03d}" for i in range(3)]  # Mock account IDs for strategy
+        correlation_data = await self.trade_data_provider.get_correlation_data(account_ids)
         
-        for day in range(num_days):
-            # Mock return (in production, would aggregate actual trade PnL by day)
-            mock_return = Decimal('0.001') * (day % 10 - 5)  # Simple pattern
-            returns.append(mock_return)
+        # Aggregate returns across accounts for this strategy
+        if correlation_data and account_ids:
+            # Average the returns across accounts for this strategy
+            strategy_returns = []
+            max_days = max(len(returns) for returns in correlation_data.values()) if correlation_data else 0
+            
+            for day_idx in range(max_days):
+                day_return = Decimal('0')
+                account_count = 0
+                
+                for account_id in account_ids:
+                    if account_id in correlation_data and day_idx < len(correlation_data[account_id]):
+                        day_return += correlation_data[account_id][day_idx]
+                        account_count += 1
+                
+                if account_count > 0:
+                    day_return = day_return / account_count
+                
+                strategy_returns.append(day_return)
+            
+            return strategy_returns
         
-        return returns
+        # Fallback to empty returns if no data available
+        return []
     
     def _align_return_series(self, strategy_returns: Dict[str, List[Decimal]],
                            start_date: datetime, end_date: datetime) -> Dict[str, List[Decimal]]:

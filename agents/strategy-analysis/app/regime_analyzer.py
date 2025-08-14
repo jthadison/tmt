@@ -16,6 +16,9 @@ from .models import (
     VolatilityLevel, VolumeProfile, TrendDirection
 )
 
+# Import data interfaces
+from ...src.shared.python_utils.data_interfaces import MarketDataInterface, MockMarketDataProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,9 +39,12 @@ class MarketRegimeAnalyzer:
     evaluating strategy performance in different regimes.
     """
     
-    def __init__(self):
+    def __init__(self, market_data_provider: Optional[MarketDataInterface] = None):
         self.regime_classifier = None
         self.scaler = StandardScaler()
+        
+        # Use provided data provider or default to mock
+        self.market_data_provider = market_data_provider or MockMarketDataProvider()
         
         # Regime classification thresholds
         self.volatility_thresholds = {
@@ -99,18 +105,20 @@ class MarketRegimeAnalyzer:
         
         return regime_trades
     
-    async def _get_market_data_at_time(self, timestamp: datetime) -> MarketData:
+    async def _get_market_data_at_time(self, timestamp: datetime, symbol: str = "EURUSD") -> MarketData:
         """
         Get market data at specific timestamp for regime classification.
-        In production, this would query actual market data.
+        Uses the configured data provider interface.
         """
-        # Mock implementation - would query actual market data service
+        # Get market data from the configured provider
+        market_data_point = await self.market_data_provider.get_market_data_point(symbol)
+        
         return MarketData(
             timestamp=timestamp,
-            price=Decimal('1.1000'),  # Mock price
-            volume=Decimal('1000000'),  # Mock volume
-            volatility=Decimal('0.015'),  # Mock volatility
-            trend_strength=Decimal('0.01')  # Mock trend strength
+            price=market_data_point.price,
+            volume=market_data_point.volume,
+            volatility=market_data_point.volatility,
+            trend_strength=market_data_point.trend_strength
         )
     
     async def _classify_regime(self, market_data: MarketData, timestamp: datetime) -> MarketRegime:
