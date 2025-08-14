@@ -1,0 +1,210 @@
+# Prometheus Alert Rules for TMT Trading System
+# Critical alerts for production monitoring and SLA compliance
+
+groups:
+  - name: trading_system_critical
+    rules:
+      # CRITICAL: Signal-to-execution latency breach
+      - alert: SignalExecutionLatencyHigh
+        expr: histogram_quantile(0.95, tmt_signal_execution_duration_seconds_bucket) > 0.1
+        for: 30s
+        labels:
+          severity: critical
+          component: execution
+          impact: trading_performance
+        annotations:
+          summary: "Signal-to-execution latency exceeding 100ms"
+          description: "95th percentile latency is {{ $value }}s, exceeding 100ms SLA requirement"
+          runbook_url: "https://docs.company.com/runbooks/latency-breach"
+
+      # CRITICAL: System uptime below SLA
+      - alert: SystemUptimeBelowSLA
+        expr: (up == 0) or (avg_over_time(up[5m]) < 0.995)
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+          impact: availability
+        annotations:
+          summary: "System uptime below 99.5% SLA"
+          description: "System availability is {{ $value | humanizePercentage }}, below 99.5% requirement"
+          runbook_url: "https://docs.company.com/runbooks/uptime-breach"
+
+      # CRITICAL: Trade execution failure rate high
+      - alert: TradeExecutionFailureRateHigh
+        expr: rate(tmt_trade_execution_failures_total[5m]) / rate(tmt_trade_execution_total[5m]) > 0.005
+        for: 2m
+        labels:
+          severity: critical
+          component: execution
+          impact: trading_performance
+        annotations:
+          summary: "Trade execution failure rate exceeding 0.5%"
+          description: "Trade execution failure rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.company.com/runbooks/execution-failures"
+
+      # CRITICAL: Circuit breaker activation
+      - alert: CircuitBreakerActivated
+        expr: tmt_circuit_breaker_state == 1
+        for: 0s
+        labels:
+          severity: critical
+          component: circuit_breaker
+          impact: system_protection
+        annotations:
+          summary: "Circuit breaker activated for {{ $labels.account_id }}"
+          description: "Circuit breaker triggered: {{ $labels.reason }}"
+          runbook_url: "https://docs.company.com/runbooks/circuit-breaker"
+
+      # CRITICAL: Database connection pool exhausted
+      - alert: DatabaseConnectionPoolExhausted
+        expr: tmt_db_connections_active / tmt_db_connections_max > 0.9
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          impact: data_access
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of database connections in use"
+          runbook_url: "https://docs.company.com/runbooks/db-connections"
+
+  - name: trading_system_warning
+    rules:
+      # WARNING: High latency trending upward
+      - alert: LatencyTrendingUp
+        expr: increase(histogram_quantile(0.95, tmt_signal_execution_duration_seconds_bucket)[10m:1m]) > 0.02
+        for: 5m
+        labels:
+          severity: warning
+          component: execution
+          impact: performance_degradation
+        annotations:
+          summary: "Signal execution latency trending upward"
+          description: "95th percentile latency increased by {{ $value }}s over 10 minutes"
+
+      # WARNING: Memory usage high
+      - alert: MemoryUsageHigh
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+          impact: resource_constraint
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # WARNING: Compliance rule violations increasing
+      - alert: ComplianceViolationsIncreasing
+        expr: rate(tmt_compliance_violations_total[10m]) > rate(tmt_compliance_violations_total[30m])
+        for: 5m
+        labels:
+          severity: warning
+          component: compliance
+          impact: regulatory_risk
+        annotations:
+          summary: "Compliance violations rate increasing"
+          description: "Compliance violation rate trending upward"
+
+      # WARNING: Agent communication errors
+      - alert: AgentCommunicationErrors
+        expr: rate(tmt_agent_communication_errors_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          component: agents
+          impact: coordination
+        annotations:
+          summary: "High rate of agent communication errors"
+          description: "{{ $value }} agent communication errors per second"
+
+  - name: trading_system_info
+    rules:
+      # INFO: New trading session started
+      - alert: TradingSessionStarted
+        expr: changes(tmt_trading_session_start_time[1h]) > 0
+        for: 0s
+        labels:
+          severity: info
+          component: trading
+          impact: informational
+        annotations:
+          summary: "New trading session started"
+          description: "Trading session started at {{ $value | humanizeTimestamp }}"
+
+      # INFO: Monthly performance report generated
+      - alert: MonthlyReportGenerated
+        expr: changes(tmt_monthly_report_generation_time[1h]) > 0
+        for: 0s
+        labels:
+          severity: info
+          component: reporting
+          impact: informational
+        annotations:
+          summary: "Monthly performance report generated"
+          description: "Monthly optimization report completed"
+
+  - name: business_metrics
+    rules:
+      # Business metric: Daily P&L tracking
+      - alert: DailyPnLAlert
+        expr: tmt_daily_pnl_usd < -1000
+        for: 5m
+        labels:
+          severity: warning
+          component: business
+          impact: financial_performance
+        annotations:
+          summary: "Daily P&L below threshold"
+          description: "Daily P&L is ${{ $value }}, below -$1000 threshold"
+
+      # Business metric: Account drawdown warning
+      - alert: AccountDrawdownHigh
+        expr: tmt_account_drawdown_percentage > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: risk_management
+          impact: account_protection
+        annotations:
+          summary: "Account {{ $labels.account_id }} drawdown high"
+          description: "Account drawdown is {{ $value | humanizePercentage }}, above 5% threshold"
+
+      # Business metric: Win rate declining
+      - alert: WinRateDeclining
+        expr: rate(tmt_winning_trades_total[1h]) / rate(tmt_total_trades_total[1h]) < 0.4
+        for: 30m
+        labels:
+          severity: info
+          component: performance
+          impact: strategy_effectiveness
+        annotations:
+          summary: "Win rate below 40% over last hour"
+          description: "Current win rate: {{ $value | humanizePercentage }}"
+
+  - name: security_monitoring
+    rules:
+      # Security: Unusual API access patterns
+      - alert: UnusualAPIAccess
+        expr: rate(tmt_api_requests_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: security
+          impact: potential_threat
+        annotations:
+          summary: "Unusual API access rate detected"
+          description: "API request rate: {{ $value }} requests/second"
+
+      # Security: Failed authentication attempts
+      - alert: FailedAuthenticationAttempts
+        expr: rate(tmt_auth_failures_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+          component: security
+          impact: access_control
+        annotations:
+          summary: "High rate of authentication failures"
+          description: "{{ $value }} failed authentication attempts per second"

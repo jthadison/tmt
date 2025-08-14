@@ -1,0 +1,21 @@
+# Performance Regression Detection Dependencies
+
+# Core data science and ML libraries
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# HTTP client for Prometheus API
+aiohttp>=3.8.0
+
+# Time series analysis
+statsmodels>=0.14.0
+
+# Configuration and logging
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# Optional: Advanced time series analysis
+# prophet>=1.1.4  # Uncomment for trend forecasting
+# ruptures>=1.1.8  # Uncomment for change point detection

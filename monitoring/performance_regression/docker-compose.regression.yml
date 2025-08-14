@@ -1,0 +1,104 @@
+# Docker Compose for Performance Regression Detection Service
+
+version: '3.8'
+
+services:
+  # Performance Regression Detector
+  regression-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tmt-regression-detector
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - LOG_LEVEL=INFO
+      - DETECTION_INTERVAL=300  # 5 minutes
+      - CONFIDENCE_THRESHOLD=0.8
+      - BASELINE_WINDOW_DAYS=7
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - regression_data:/app/data
+    networks:
+      - tmt-monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - alertmanager
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "monitoring.component=regression-detection"
+      - "monitoring.service=performance-analysis"
+
+  # Redis for caching baselines and models
+  redis-regression:
+    image: redis:7.0-alpine
+    container_name: tmt-regression-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_regression_data:/data
+    networks:
+      - tmt-monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Jupyter notebook for analysis and debugging
+  regression-notebook:
+    image: jupyter/scipy-notebook:latest
+    container_name: tmt-regression-notebook
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=regression_analysis_token
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./data:/home/jovyan/data
+      - regression_data:/home/jovyan/regression_data
+    networks:
+      - tmt-monitoring
+    restart: unless-stopped
+    labels:
+      - "monitoring.component=analysis-notebook"
+
+volumes:
+  regression_data:
+    driver: local
+  redis_regression_data:
+    driver: local
+
+networks:
+  tmt-monitoring:
+    external: true
+
+# Configuration for development environment
+x-development: &development
+  environment:
+    - DEBUG=true
+    - LOG_LEVEL=DEBUG
+    - DETECTION_INTERVAL=60  # 1 minute for development
+
+# Override for production
+x-production: &production
+  environment:
+    - DEBUG=false
+    - LOG_LEVEL=INFO
+    - DETECTION_INTERVAL=300
+  deploy:
+    resources:
+      limits:
+        cpus: '2.0'
+        memory: 2G
+      reservations:
+        cpus: '1.0'
+        memory: 1G

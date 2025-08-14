@@ -1,0 +1,268 @@
+# AlertManager Configuration for TMT Trading System
+# Routes critical trading system alerts to appropriate channels
+
+global:
+  smtp_smarthost: 'smtp.company.com:587'
+  smtp_from: 'trading-alerts@company.com'
+  smtp_auth_username: 'trading-alerts@company.com'
+  smtp_auth_password: 'secure_smtp_password'
+
+# Routing tree for different alert types
+route:
+  group_by: ['alertname', 'severity', 'component']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default-receiver'
+  
+  routes:
+    # CRITICAL: Trading system failures - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-trading-team'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 5m
+      routes:
+        # Latency breaches need immediate action
+        - match:
+            alertname: SignalExecutionLatencyHigh
+          receiver: 'latency-response-team'
+          group_wait: 0s
+          repeat_interval: 2m
+        
+        # Circuit breaker activations
+        - match:
+            alertname: CircuitBreakerActivated
+          receiver: 'circuit-breaker-team'
+          group_wait: 0s
+          repeat_interval: 1m
+        
+        # System uptime breaches
+        - match:
+            alertname: SystemUptimeBelowSLA
+          receiver: 'infrastructure-team'
+          group_wait: 0s
+          repeat_interval: 5m
+
+    # WARNING: Performance degradation
+    - match:
+        severity: warning
+      receiver: 'warning-trading-team'
+      group_wait: 2m
+      group_interval: 10m
+      repeat_interval: 2h
+
+    # INFO: Informational alerts
+    - match:
+        severity: info
+      receiver: 'info-notifications'
+      group_wait: 5m
+      group_interval: 30m
+      repeat_interval: 24h
+
+    # Business metrics routing
+    - match:
+        component: business
+      receiver: 'business-team'
+      group_wait: 5m
+      repeat_interval: 1h
+
+    # Security alerts
+    - match:
+        component: security
+      receiver: 'security-team'
+      group_wait: 1m
+      repeat_interval: 30m
+
+# Notification receivers
+receivers:
+  # Default receiver for uncategorized alerts
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'devops@company.com'
+        subject: 'TMT Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Component: {{ .Labels.component }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  # CRITICAL: Immediate response team for trading system failures
+  - name: 'critical-trading-team'
+    email_configs:
+      - to: 'trading-critical@company.com'
+        subject: '🚨 CRITICAL TMT ALERT: {{ .GroupLabels.alertname }}'
+        body: |
+          CRITICAL TRADING SYSTEM ALERT
+          ============================
+          
+          {{ range .Alerts }}
+          🚨 ALERT: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Component: {{ .Labels.component }}
+          Impact: {{ .Labels.impact }}
+          Started: {{ .StartsAt }}
+          
+          {{ if .Annotations.runbook_url }}
+          📖 Runbook: {{ .Annotations.runbook_url }}
+          {{ end }}
+          
+          IMMEDIATE ACTION REQUIRED
+          {{ end }}
+    
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
+        channel: '#trading-critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          **{{ .Annotations.summary }}**
+          
+          **Description:** {{ .Annotations.description }}
+          **Component:** {{ .Labels.component }}
+          **Impact:** {{ .Labels.impact }}
+          **Started:** {{ .StartsAt }}
+          {{ if .Annotations.runbook_url }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+          {{ end }}
+        color: 'danger'
+
+    # PagerDuty integration for critical alerts
+    pagerduty_configs:
+      - integration_key: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+        description: 'TMT Critical: {{ .GroupLabels.alertname }}'
+        severity: 'critical'
+        details:
+          summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+          component: '{{ .GroupLabels.component }}'
+          impact: '{{ range .Alerts }}{{ .Labels.impact }}{{ end }}'
+
+  # Latency response team - specialized for performance issues
+  - name: 'latency-response-team'
+    email_configs:
+      - to: 'performance-team@company.com'
+        subject: '⚡ LATENCY BREACH: {{ .GroupLabels.alertname }}'
+        body: |
+          LATENCY SLA BREACH DETECTED
+          ==========================
+          
+          {{ range .Alerts }}
+          ⚡ Current latency exceeding 100ms SLA requirement
+          
+          Details: {{ .Annotations.description }}
+          Started: {{ .StartsAt }}
+          Runbook: {{ .Annotations.runbook_url }}
+          
+          IMMEDIATE PERFORMANCE INVESTIGATION REQUIRED
+          {{ end }}
+
+  # Circuit breaker team - specialized for safety system issues
+  - name: 'circuit-breaker-team'
+    email_configs:
+      - to: 'risk-team@company.com,trading-ops@company.com'
+        subject: '🛡️ CIRCUIT BREAKER ACTIVATED: {{ .GroupLabels.alertname }}'
+        body: |
+          CIRCUIT BREAKER PROTECTION ACTIVATED
+          ===================================
+          
+          {{ range .Alerts }}
+          🛡️ Circuit breaker has stopped trading for protection
+          
+          Account: {{ .Labels.account_id }}
+          Reason: {{ .Labels.reason }}
+          Time: {{ .StartsAt }}
+          
+          REVIEW REQUIRED BEFORE RESUMING TRADING
+          {{ end }}
+
+  # Infrastructure team for system-level issues
+  - name: 'infrastructure-team'
+    email_configs:
+      - to: 'infrastructure@company.com'
+        subject: '🏗️ INFRASTRUCTURE ALERT: {{ .GroupLabels.alertname }}'
+
+  # Warning level alerts
+  - name: 'warning-trading-team'
+    email_configs:
+      - to: 'trading-team@company.com'
+        subject: '⚠️ TMT Warning: {{ .GroupLabels.alertname }}'
+        body: |
+          Trading System Warning
+          =====================
+          
+          {{ range .Alerts }}
+          ⚠️ Warning: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Component: {{ .Labels.component }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  # Informational notifications
+  - name: 'info-notifications'
+    email_configs:
+      - to: 'trading-info@company.com'
+        subject: 'ℹ️ TMT Info: {{ .GroupLabels.alertname }}'
+
+  # Business team for financial metrics
+  - name: 'business-team'
+    email_configs:
+      - to: 'business-team@company.com,finance@company.com'
+        subject: '📊 TMT Business Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          Trading Business Metrics Alert
+          =============================
+          
+          {{ range .Alerts }}
+          📊 Business Metric: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Impact: {{ .Labels.impact }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  # Security team for security-related alerts
+  - name: 'security-team'
+    email_configs:
+      - to: 'security@company.com'
+        subject: '🔐 TMT Security Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          Trading System Security Alert
+          ============================
+          
+          {{ range .Alerts }}
+          🔐 Security Event: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Component: {{ .Labels.component }}
+          Time: {{ .StartsAt }}
+          
+          SECURITY REVIEW REQUIRED
+          {{ end }}
+
+# Inhibition rules to prevent alert spam
+inhibit_rules:
+  # If system is down, don't send component-specific alerts
+  - source_match:
+      alertname: SystemUptimeBelowSLA
+    target_match_re:
+      alertname: '(SignalExecutionLatencyHigh|TradeExecutionFailureRateHigh|DatabaseConnectionPoolExhausted)'
+    equal: ['instance']
+
+  # If circuit breaker is active, don't send performance alerts for that account
+  - source_match:
+      alertname: CircuitBreakerActivated
+    target_match_re:
+      alertname: '(TradeExecutionFailureRateHigh|DailyPnLAlert)'
+    equal: ['account_id']
+
+# Alert suppression during maintenance windows
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

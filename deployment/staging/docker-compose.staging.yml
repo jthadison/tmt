@@ -1,0 +1,617 @@
+# Docker Compose for TMT Trading System Staging Environment
+# Complete staging deployment with monitoring, testing, and validation
+
+version: '3.8'
+
+services:
+  # ========================================
+  # DATABASE SERVICES
+  # ========================================
+  
+  # PostgreSQL for transactional data
+  postgres-staging:
+    image: postgres:15-alpine
+    container_name: tmt-postgres-staging
+    environment:
+      POSTGRES_DB: trading_staging
+      POSTGRES_USER: trading_user
+      POSTGRES_PASSWORD: staging_password_secure
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"  # Different port for staging
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading_user -d trading_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB for market data
+  timescaledb-staging:
+    image: timescale/timescaledb:latest-pg15
+    container_name: tmt-timescaledb-staging
+    environment:
+      POSTGRES_DB: market_data_staging
+      POSTGRES_USER: timescale_user
+      POSTGRES_PASSWORD: staging_ts_password
+    volumes:
+      - timescale_staging_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  # Redis for caching and session management
+  redis-staging:
+    image: redis:7.0-alpine
+    container_name: tmt-redis-staging
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_staging_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  # ========================================
+  # MESSAGE QUEUE
+  # ========================================
+  
+  # Apache Kafka for event streaming
+  zookeeper-staging:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: tmt-zookeeper-staging
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  kafka-staging:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: tmt-kafka-staging
+    depends_on:
+      - zookeeper-staging
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-staging:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-staging:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    volumes:
+      - kafka_staging_data:/var/lib/kafka/data
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  # ========================================
+  # TMT TRADING AGENTS
+  # ========================================
+  
+  # Circuit Breaker Agent
+  circuit-breaker-staging:
+    build:
+      context: ../../agents/circuit-breaker
+      dockerfile: Dockerfile
+    container_name: tmt-circuit-breaker-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - REDIS_URL=redis://redis-staging:6379
+      - KAFKA_BROKERS=kafka-staging:29092
+      - LOG_LEVEL=DEBUG
+      - CIRCUIT_BREAKER_THRESHOLDS_LOOSE=true  # More permissive for staging
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./config/circuit-breaker-staging.yml:/app/config.yml
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - redis-staging
+      - kafka-staging
+    restart: unless-stopped
+    labels:
+      - "tmt.component=circuit-breaker"
+      - "tmt.environment=staging"
+
+  # Compliance Agent
+  compliance-staging:
+    build:
+      context: ../../agents/compliance
+      dockerfile: Dockerfile
+    container_name: tmt-compliance-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+      - COMPLIANCE_MODE=lenient  # Less strict for staging
+    ports:
+      - "8002:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # Wyckoff Analysis Agent
+  wyckoff-staging:
+    build:
+      context: ../../agents/wyckoff-analysis
+      dockerfile: Dockerfile
+    container_name: tmt-wyckoff-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - TIMESCALE_URL=postgresql://timescale_user:staging_ts_password@timescaledb-staging:5432/market_data_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+    ports:
+      - "8003:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - timescaledb-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # ARIA Risk Management Agent
+  aria-risk-staging:
+    build:
+      context: ../../agents/aria-risk
+      dockerfile: Dockerfile
+    container_name: tmt-aria-risk-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+      - RISK_MULTIPLIER=0.5  # Reduced risk for staging
+    ports:
+      - "8004:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # Execution Engine
+  execution-engine-staging:
+    build:
+      context: ../../execution-engine
+      dockerfile: Dockerfile
+    container_name: tmt-execution-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+      - PAPER_TRADING=true  # Force paper trading in staging
+      - MT4_ENABLED=false   # Disable real broker connections
+    ports:
+      - "8005:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # Anti-Correlation Agent
+  anti-correlation-staging:
+    build:
+      context: ../../agents/anti-correlation
+      dockerfile: Dockerfile
+    container_name: tmt-anti-correlation-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+    ports:
+      - "8006:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # Human Behavior Agent
+  human-behavior-staging:
+    build:
+      context: ../../agents/human-behavior
+      dockerfile: Dockerfile
+    container_name: tmt-human-behavior-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+    ports:
+      - "8007:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # Continuous Improvement Agent
+  continuous-improvement-staging:
+    build:
+      context: ../../agents/continuous-improvement
+      dockerfile: Dockerfile
+    container_name: tmt-continuous-improvement-staging
+    environment:
+      - ENV=staging
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - KAFKA_BROKERS=kafka-staging:29092
+      - IMPROVEMENT_CYCLE_FAST=true  # Accelerated cycles for testing
+    ports:
+      - "8008:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - kafka-staging
+    restart: unless-stopped
+
+  # ========================================
+  # DASHBOARD AND API
+  # ========================================
+  
+  # Next.js Dashboard
+  dashboard-staging:
+    build:
+      context: ../../dashboard
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: staging
+    container_name: tmt-dashboard-staging
+    environment:
+      - NODE_ENV=staging
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+    ports:
+      - "3001:3000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+    restart: unless-stopped
+
+  # API Gateway
+  api-gateway-staging:
+    build:
+      context: ../../api-gateway
+      dockerfile: Dockerfile
+    container_name: tmt-api-gateway-staging
+    environment:
+      - ENV=staging
+      - CIRCUIT_BREAKER_URL=http://circuit-breaker-staging:8000
+      - COMPLIANCE_URL=http://compliance-staging:8000
+      - WYCKOFF_URL=http://wyckoff-staging:8000
+      - ARIA_URL=http://aria-risk-staging:8000
+      - EXECUTION_URL=http://execution-engine-staging:8000
+      - ANTI_CORRELATION_URL=http://anti-correlation-staging:8000
+      - HUMAN_BEHAVIOR_URL=http://human-behavior-staging:8000
+      - CONTINUOUS_IMPROVEMENT_URL=http://continuous-improvement-staging:8000
+    ports:
+      - "8000:8000"
+    networks:
+      - tmt-staging
+    depends_on:
+      - circuit-breaker-staging
+      - compliance-staging
+      - wyckoff-staging
+      - aria-risk-staging
+      - execution-engine-staging
+      - anti-correlation-staging
+      - human-behavior-staging
+      - continuous-improvement-staging
+    restart: unless-stopped
+
+  # ========================================
+  # MONITORING STACK
+  # ========================================
+  
+  # Prometheus
+  prometheus-staging:
+    image: prom/prometheus:v2.45.0
+    container_name: tmt-prometheus-staging
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=7d'  # Shorter retention for staging
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus-staging.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alert-rules-staging.yml:/etc/prometheus/alert-rules.yml
+      - prometheus_staging_data:/prometheus
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  # Grafana
+  grafana-staging:
+    image: grafana/grafana:10.0.3
+    container_name: tmt-grafana-staging
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=staging_admin_password
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - grafana_staging_data:/var/lib/grafana
+      - ./monitoring/grafana/staging-dashboard.json:/var/lib/grafana/dashboards/staging-dashboard.json
+    networks:
+      - tmt-staging
+    depends_on:
+      - prometheus-staging
+    restart: unless-stopped
+
+  # AlertManager
+  alertmanager-staging:
+    image: prom/alertmanager:v0.26.0
+    container_name: tmt-alertmanager-staging
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9094'
+    ports:
+      - "9094:9093"
+    volumes:
+      - ./monitoring/alertmanager-staging.yml:/etc/alertmanager/config.yml
+      - alertmanager_staging_data:/alertmanager
+    networks:
+      - tmt-staging
+    restart: unless-stopped
+
+  # Performance Regression Detector
+  regression-detector-staging:
+    build:
+      context: ../../monitoring/performance_regression
+      dockerfile: Dockerfile
+    container_name: tmt-regression-detector-staging
+    environment:
+      - PROMETHEUS_URL=http://prometheus-staging:9090
+      - ALERTMANAGER_URL=http://alertmanager-staging:9093
+      - LOG_LEVEL=DEBUG
+      - DETECTION_INTERVAL=60  # More frequent checks in staging
+    networks:
+      - tmt-staging
+    depends_on:
+      - prometheus-staging
+      - alertmanager-staging
+    restart: unless-stopped
+
+  # Circuit Breaker Analytics
+  circuit-breaker-analytics-staging:
+    build:
+      context: ../../monitoring/circuit_breaker_analytics
+      dockerfile: Dockerfile
+    container_name: tmt-cb-analytics-staging
+    environment:
+      - PROMETHEUS_URL=http://prometheus-staging:9090
+      - LOG_LEVEL=DEBUG
+    networks:
+      - tmt-staging
+    depends_on:
+      - prometheus-staging
+    restart: unless-stopped
+
+  # ========================================
+  # TESTING AND VALIDATION SERVICES
+  # ========================================
+  
+  # Load Testing Service
+  load-tester:
+    build:
+      context: ../../tests/load
+      dockerfile: Dockerfile
+    container_name: tmt-load-tester-staging
+    environment:
+      - TARGET_URL=http://api-gateway-staging:8000
+      - TEST_DURATION=3600  # 1 hour continuous testing
+      - CONCURRENT_USERS=10
+      - RAMP_UP_TIME=300    # 5 minutes ramp up
+    networks:
+      - tmt-staging
+    depends_on:
+      - api-gateway-staging
+    profiles: ["testing"]  # Only run when testing profile is active
+
+  # Integration Test Runner
+  integration-tester:
+    build:
+      context: ../../tests/integration
+      dockerfile: Dockerfile
+    container_name: tmt-integration-tester-staging
+    environment:
+      - API_BASE_URL=http://api-gateway-staging:8000
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - TEST_ACCOUNTS=ACC001,ACC002,ACC003
+    volumes:
+      - ./test-results:/app/results
+    networks:
+      - tmt-staging
+    depends_on:
+      - api-gateway-staging
+      - postgres-staging
+    profiles: ["testing"]
+
+  # Performance Validator
+  performance-validator:
+    build:
+      context: ../../tests/performance
+      dockerfile: Dockerfile
+    container_name: tmt-performance-validator-staging
+    environment:
+      - PROMETHEUS_URL=http://prometheus-staging:9090
+      - LATENCY_SLA_MS=100
+      - UPTIME_SLA_PERCENTAGE=99.5
+      - VALIDATION_DURATION=1800  # 30 minutes
+    networks:
+      - tmt-staging
+    depends_on:
+      - prometheus-staging
+    profiles: ["testing"]
+
+  # Data Generator (for realistic test data)
+  data-generator:
+    build:
+      context: ../../tools/data-generator
+      dockerfile: Dockerfile
+    container_name: tmt-data-generator-staging
+    environment:
+      - DATABASE_URL=postgresql://trading_user:staging_password_secure@postgres-staging:5432/trading_staging
+      - TIMESCALE_URL=postgresql://timescale_user:staging_ts_password@timescaledb-staging:5432/market_data_staging
+      - GENERATION_RATE=high  # Generate lots of test data
+      - MARKET_SIMULATION=true
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - timescaledb-staging
+    profiles: ["data-generation"]
+
+  # ========================================
+  # UTILITIES AND TOOLS
+  # ========================================
+  
+  # pgAdmin for database management
+  pgadmin-staging:
+    image: dpage/pgadmin4:7
+    container_name: tmt-pgadmin-staging
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@tmt-staging.local
+      PGADMIN_DEFAULT_PASSWORD: staging_pgadmin_password
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5051:80"
+    volumes:
+      - pgadmin_staging_data:/var/lib/pgadmin
+    networks:
+      - tmt-staging
+    depends_on:
+      - postgres-staging
+      - timescaledb-staging
+    profiles: ["admin-tools"]
+
+  # Kafka UI for message queue management
+  kafka-ui-staging:
+    image: provectuslabs/kafka-ui:latest
+    container_name: tmt-kafka-ui-staging
+    environment:
+      KAFKA_CLUSTERS_0_NAME: staging
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-staging:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper-staging:2181
+    ports:
+      - "8081:8080"
+    networks:
+      - tmt-staging
+    depends_on:
+      - kafka-staging
+    profiles: ["admin-tools"]
+
+  # Redis Commander
+  redis-commander-staging:
+    image: rediscommander/redis-commander:latest
+    container_name: tmt-redis-commander-staging
+    environment:
+      REDIS_HOSTS: staging:redis-staging:6379
+    ports:
+      - "8082:8081"
+    networks:
+      - tmt-staging
+    depends_on:
+      - redis-staging
+    profiles: ["admin-tools"]
+
+# ========================================
+# VOLUMES
+# ========================================
+volumes:
+  postgres_staging_data:
+    driver: local
+  timescale_staging_data:
+    driver: local
+  redis_staging_data:
+    driver: local
+  kafka_staging_data:
+    driver: local
+  prometheus_staging_data:
+    driver: local
+  grafana_staging_data:
+    driver: local
+  alertmanager_staging_data:
+    driver: local
+  pgadmin_staging_data:
+    driver: local
+
+# ========================================
+# NETWORKS
+# ========================================
+networks:
+  tmt-staging:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+    labels:
+      - "environment=staging"
+      - "project=tmt-trading-system"
+
+# ========================================
+# CONFIGURATION OVERRIDES
+# ========================================
+
+# Development override
+x-development-override: &development
+  environment:
+    - DEBUG=true
+    - LOG_LEVEL=DEBUG
+  volumes:
+    - ./logs:/app/logs
+
+# Testing override
+x-testing-override: &testing
+  deploy:
+    resources:
+      limits:
+        cpus: '4.0'
+        memory: 4G
+      reservations:
+        cpus: '2.0'
+        memory: 2G
+
+# Health checks template
+x-healthcheck-defaults: &healthcheck_defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 60s
+
+# Logging template
+x-logging-defaults: &logging_defaults
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"

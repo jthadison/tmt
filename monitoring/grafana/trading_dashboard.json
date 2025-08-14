@@ -1,0 +1,301 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "TMT Trading System - Production Dashboard",
+    "tags": ["trading", "production", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "{{instance}} Status",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Signal-to-Execution Latency (95th Percentile)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(tmt_signal_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th Percentile Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "0.1",
+            "legendFormat": "100ms SLA Threshold",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds",
+            "max": 0.15,
+            "min": 0
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [0.1],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "2m",
+          "frequency": "10s",
+          "handler": 1,
+          "name": "Latency SLA Breach",
+          "noDataState": "no_data",
+          "notifications": []
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Trade Execution Success Rate",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "rate(tmt_trade_execution_success_total[5m]) / rate(tmt_trade_execution_total[5m])",
+            "legendFormat": "Success Rate",
+            "refId": "A"
+          }
+        ],
+        "valueName": "current",
+        "format": "percentunit",
+        "thresholds": "0.995,0.999",
+        "colorBackground": true,
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "System Uptime",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "avg_over_time(up[24h])",
+            "legendFormat": "24h Uptime",
+            "refId": "A"
+          }
+        ],
+        "valueName": "current",
+        "format": "percentunit",
+        "thresholds": "0.995,0.999",
+        "colorBackground": true,
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 4}
+      },
+      {
+        "id": 5,
+        "title": "Active Circuit Breakers",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "tmt_circuit_breaker_state == 1",
+            "legendFormat": "{{account_id}} - {{reason}}",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "styles": [
+          {
+            "alias": "Account",
+            "pattern": "account_id",
+            "type": "string"
+          },
+          {
+            "alias": "Reason",
+            "pattern": "reason",
+            "type": "string"
+          },
+          {
+            "alias": "Status",
+            "pattern": "Value",
+            "type": "string",
+            "colorMode": "cell",
+            "colors": ["rgba(245, 54, 54, 0.9)", "rgba(50, 172, 45, 0.97)"],
+            "thresholds": [0.5, 1]
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Agent Communication Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(tmt_agent_communication_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{agent}} Communication",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds",
+            "max": 0.05,
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Daily P&L by Account",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "tmt_daily_pnl_usd",
+            "legendFormat": "{{account_id}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "USD"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14}
+      },
+      {
+        "id": 8,
+        "title": "Trade Volume by Symbol",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (symbol) (rate(tmt_trades_total[1h]))",
+            "legendFormat": "{{symbol}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}
+      },
+      {
+        "id": 9,
+        "title": "Database Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(tmt_db_query_duration_seconds_sum[5m]) / rate(tmt_db_query_duration_seconds_count[5m])",
+            "legendFormat": "Avg Query Time",
+            "refId": "A"
+          },
+          {
+            "expr": "tmt_db_connections_active",
+            "legendFormat": "Active Connections",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 22}
+      },
+      {
+        "id": 10,
+        "title": "Risk Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "tmt_account_drawdown_percentage",
+            "legendFormat": "{{account_id}} Drawdown",
+            "refId": "A"
+          },
+          {
+            "expr": "0.05",
+            "legendFormat": "5% Drawdown Threshold",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Percentage",
+            "max": 0.1,
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 22}
+      },
+      {
+        "id": 11,
+        "title": "Compliance Violations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(tmt_compliance_violations_total[5m])",
+            "legendFormat": "{{rule_type}} Violations/sec",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 28}
+      },
+      {
+        "id": 12,
+        "title": "System Resource Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes",
+            "legendFormat": "Memory Usage %",
+            "refId": "A"
+          },
+          {
+            "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "CPU Usage %",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Percentage",
+            "max": 100,
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 28}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "refresh": "5s",
+    "schemaVersion": 30,
+    "version": 1,
+    "links": []
+  }
+}
