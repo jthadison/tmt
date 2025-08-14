@@ -11,11 +11,12 @@ from unittest.mock import Mock, AsyncMock, patch
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from performance_comparator import PerformanceComparator
 from models import (
     PerformanceMetrics, PerformanceComparison, StatisticalAnalysis,
-    TestGroup
+    ImprovementGroup as TestGroup
 )
 
 
