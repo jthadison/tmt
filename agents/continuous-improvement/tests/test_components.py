@@ -12,10 +12,10 @@ from unittest.mock import Mock
 
 from models import (
     ContinuousImprovementPipeline, ImprovementTest, ImprovementSuggestion,
-    TestPhase, TestDecision, ImprovementCycleResults, TestUpdate,
+    ImprovementPhase, PhaseDecision, ImprovementCycleResults, PhaseUpdate,
     RollbackDecision, RollbackResult, StageDecision, PerformanceComparison,
-    PipelineStatus, PipelineMetrics, TestConfiguration, SuggestionStatus,
-    Priority, RiskLevel, TestGroup, Change, PerformanceMetrics,
+    PipelineStatus, PipelineMetrics, PipelineConfiguration, SuggestionStatus,
+    Priority, RiskLevel, ImprovementGroup, Change, PerformanceMetrics,
     ShadowTestResults, StatisticalAnalysis, RolloutStageResults,
     ImprovementType, ImplementationComplexity
 )
@@ -70,7 +70,7 @@ class TestContinuousImprovementOrchestrator:
         suggestions_count = len(self.pipeline.pending_suggestions)
         max_concurrent = self.pipeline.configuration.max_concurrent_tests
         current_active = len([t for t in self.pipeline.active_improvements 
-                            if t.current_phase not in [TestPhase.COMPLETED, TestPhase.ROLLED_BACK]])
+                            if t.current_phase not in [ImprovementPhase.COMPLETED, ImprovementPhase.ROLLED_BACK]])
         
         suggestions_to_process = self.pipeline.pending_suggestions[:max(0, max_concurrent - current_active)]
         
@@ -80,17 +80,17 @@ class TestContinuousImprovementOrchestrator:
                 name=suggestion.title,
                 description=suggestion.description,
                 improvement_type=suggestion.suggestion_type,
-                current_phase=TestPhase.SHADOW
+                current_phase=ImprovementPhase.SHADOW
             )
             
             # Add test groups
-            test.control_group = TestGroup(
+            test.control_group = ImprovementGroup(
                 group_type="control",
                 accounts=["CTL001", "CTL002"],
                 allocation_percentage=Decimal('50')
             )
             
-            test.treatment_group = TestGroup(
+            test.treatment_group = ImprovementGroup(
                 group_type="treatment", 
                 accounts=["TRT001", "TRT002"],
                 allocation_percentage=Decimal('50'),
@@ -129,7 +129,7 @@ class TestContinuousImprovementOrchestrator:
         """Emergency stop a test"""
         for test in self.pipeline.active_improvements:
             if test.test_id == test_id:
-                test.current_phase = TestPhase.ROLLED_BACK
+                test.current_phase = ImprovementPhase.ROLLED_BACK
                 test.rollback_reason = f"Emergency stop: {reason}"
                 return True
         return False
@@ -144,9 +144,9 @@ class TestContinuousImprovementOrchestrator:
         """Check if shadow test is complete"""
         return True  # Simplified for testing
     
-    async def _update_shadow_test(self, test: ImprovementTest) -> TestUpdate:
+    async def _update_shadow_test(self, test: ImprovementTest) -> PhaseUpdate:
         """Update a shadow test"""
-        test.current_phase = TestPhase.ROLLOUT_10
+        test.current_phase = ImprovementPhase.ROLLOUT_10
         test.shadow_results = ShadowTestResults(
             test_id=test.test_id,
             start_date=datetime.utcnow() - timedelta(days=7),
@@ -156,10 +156,10 @@ class TestContinuousImprovementOrchestrator:
             recommendation="proceed"
         )
         
-        return TestUpdate(
+        return PhaseUpdate(
             test_id=test.test_id,
             status="advanced_to_rollout",
-            new_phase=TestPhase.ROLLOUT_10,
+            new_phase=ImprovementPhase.ROLLOUT_10,
             reason="Shadow test validation passed",
             next_action="Begin 10% rollout"
         )
@@ -210,7 +210,7 @@ class TestGradualRolloutManager:
     async def advance_to_next_stage(self, test: ImprovementTest) -> StageDecision:
         """Advance to next stage"""
         return StageDecision(
-            decision=TestDecision.ADVANCE,
+            decision=PhaseDecision.ADVANCE,
             reason="Performance thresholds met",
             decision_maker="automatic",
             confidence_level=0.85
@@ -232,7 +232,7 @@ class TestGradualRolloutManager:
 class TestPerformanceComparator:
     """Simplified performance comparator for testing"""
     
-    async def compare_groups(self, control_group: TestGroup, treatment_group: TestGroup) -> PerformanceComparison:
+    async def compare_groups(self, control_group: ImprovementGroup, treatment_group: ImprovementGroup) -> PerformanceComparison:
         """Compare group performance"""
         return PerformanceComparison(
             control_performance=PerformanceMetrics(
@@ -265,7 +265,7 @@ class TestPerformanceComparator:
             risk_adjusted_improvement=Decimal('0.75')
         )
     
-    async def get_comparison_summary(self, control_group: TestGroup, treatment_group: TestGroup) -> Dict[str, Any]:
+    async def get_comparison_summary(self, control_group: ImprovementGroup, treatment_group: ImprovementGroup) -> Dict[str, Any]:
         """Get comparison summary"""
         return {
             'recommendation': 'advance',
@@ -274,7 +274,7 @@ class TestPerformanceComparator:
             'risk_assessment': 'acceptable'
         }
     
-    async def _get_group_performance(self, group: TestGroup) -> PerformanceMetrics:
+    async def _get_group_performance(self, group: ImprovementGroup) -> PerformanceMetrics:
         """Get group performance"""
         return PerformanceMetrics(
             total_trades=100,
