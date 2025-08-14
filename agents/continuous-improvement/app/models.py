@@ -23,7 +23,7 @@ class ImprovementType(Enum):
     FEATURE_ADDITION = "feature_addition"
 
 
-class TestPhase(Enum):
+class ImprovementPhase(Enum):
     """Phases of improvement testing"""
     SHADOW = "shadow"
     ROLLOUT_10 = "rollout_10"
@@ -35,7 +35,7 @@ class TestPhase(Enum):
     PAUSED = "paused"
 
 
-class TestDecision(Enum):
+class PhaseDecision(Enum):
     """Decisions for test progression"""
     ADVANCE = "advance"
     HOLD = "hold"
@@ -168,7 +168,7 @@ class Change:
 
 
 @dataclass
-class TestGroup:
+class ImprovementGroup:
     """Represents a control or treatment group in A/B testing"""
     group_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     group_type: str = "control"  # control or treatment
@@ -195,7 +195,7 @@ class TestGroup:
 @dataclass
 class StageDecision:
     """Decision for test stage progression"""
-    decision: TestDecision
+    decision: PhaseDecision
     reason: str
     decision_maker: str  # automatic or manual
     decision_date: datetime = field(default_factory=datetime.utcnow)
@@ -263,7 +263,7 @@ class ShadowTestResults:
 
 
 @dataclass
-class TestConfiguration:
+class ImprovementConfiguration:
     """Configuration parameters for improvement tests"""
     test_duration: int = 30  # Days
     minimum_sample_size: int = 100  # Trades required
@@ -307,14 +307,14 @@ class ImprovementTest:
     implementation_complexity: ImplementationComplexity = ImplementationComplexity.MEDIUM
     
     # Test configuration
-    test_config: TestConfiguration = field(default_factory=TestConfiguration)
+    test_config: ImprovementConfiguration = field(default_factory=ImprovementConfiguration)
     
     # Test groups
-    control_group: Optional[TestGroup] = None
-    treatment_group: Optional[TestGroup] = None
+    control_group: Optional[ImprovementGroup] = None
+    treatment_group: Optional[ImprovementGroup] = None
     
     # Current status
-    current_phase: TestPhase = TestPhase.SHADOW
+    current_phase: ImprovementPhase = ImprovementPhase.SHADOW
     start_date: datetime = field(default_factory=datetime.utcnow)
     current_stage_start: datetime = field(default_factory=datetime.utcnow)
     expected_completion: Optional[datetime] = None
@@ -495,11 +495,11 @@ class ImprovementCycleResults:
 
 
 @dataclass
-class TestUpdate:
+class PhaseUpdate:
     """Update information for a test"""
     test_id: str
     status: str
-    new_phase: Optional[TestPhase] = None
+    new_phase: Optional[ImprovementPhase] = None
     performance: Optional[PerformanceComparison] = None
     reason: Optional[str] = None
     next_action: Optional[str] = None
