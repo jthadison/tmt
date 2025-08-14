@@ -31,10 +31,10 @@ from test_components import (
 
 # Import models from local copy to avoid relative import issues
 from models import (
-    ImprovementTest, ImprovementSuggestion, TestPhase, ImprovementType,
+    ImprovementTest, ImprovementSuggestion, ImprovementPhase, ImprovementType,
     Priority, RiskLevel, ImplementationComplexity, SuggestionStatus,
-    TestGroup, Change, PerformanceMetrics, PerformanceComparison,
-    StatisticalAnalysis, ShadowTestResults, TestDecision
+    ImprovementGroup, Change, PerformanceMetrics, PerformanceComparison,
+    StatisticalAnalysis, ShadowTestResults, PhaseDecision
 )
 
 
@@ -107,7 +107,7 @@ class TestContinuousImprovementIntegration:
         assert len(orchestrator.pipeline.active_improvements) > 0
         created_test = orchestrator.pipeline.active_improvements[0]
         assert created_test.name == high_priority_suggestion.title
-        assert created_test.current_phase == TestPhase.SHADOW
+        assert created_test.current_phase == ImprovementPhase.SHADOW
         
         # Verify test has proper structure
         assert created_test.control_group is not None
@@ -125,17 +125,17 @@ class TestContinuousImprovementIntegration:
             name="Shadow to Rollout Test",
             description="Test shadow to rollout progression",
             improvement_type=ImprovementType.PARAMETER_OPTIMIZATION,
-            current_phase=TestPhase.SHADOW
+            current_phase=ImprovementPhase.SHADOW
         )
         
         # Add proper test groups
-        test.control_group = TestGroup(
+        test.control_group = ImprovementGroup(
             group_type="control",
             accounts=["CTL001", "CTL002"],
             allocation_percentage=Decimal('50')
         )
         
-        test.treatment_group = TestGroup(
+        test.treatment_group = ImprovementGroup(
             group_type="treatment",
             accounts=["TRT001", "TRT002"],
             allocation_percentage=Decimal('50'),
@@ -162,7 +162,7 @@ class TestContinuousImprovementIntegration:
                 
                 # Verify progression to rollout
                 assert update_result.status == 'advanced_to_rollout'
-                assert test.current_phase == TestPhase.ROLLOUT_10
+                assert test.current_phase == ImprovementPhase.ROLLOUT_10
                 assert test.shadow_results is not None
                 assert test.shadow_results.validation_passed is True
     
@@ -177,18 +177,18 @@ class TestContinuousImprovementIntegration:
             name="Rollback Test",
             description="Test automatic rollback functionality",
             improvement_type=ImprovementType.PARAMETER_OPTIMIZATION,
-            current_phase=TestPhase.ROLLOUT_25,
+            current_phase=ImprovementPhase.ROLLOUT_25,
             current_stage_start=datetime.utcnow() - timedelta(hours=3)  # Running for a while
         )
         
         # Add test groups with sufficient trades
-        test.control_group = TestGroup(
+        test.control_group = ImprovementGroup(
             group_type="control",
             accounts=["CTL001"],
             trades_completed=50
         )
         
-        test.treatment_group = TestGroup(
+        test.treatment_group = ImprovementGroup(
             group_type="treatment",
             accounts=["TRT001"],
             trades_completed=50
@@ -270,12 +270,12 @@ class TestContinuousImprovementIntegration:
         comparator = orchestrator.performance_comparator
         
         # Create test groups
-        control_group = TestGroup(
+        control_group = ImprovementGroup(
             group_type="control",
             accounts=["CTL001", "CTL002", "CTL003"]
         )
         
-        treatment_group = TestGroup(
+        treatment_group = ImprovementGroup(
             group_type="treatment",
             accounts=["TRT001", "TRT002", "TRT003"]
         )
@@ -326,7 +326,7 @@ class TestContinuousImprovementIntegration:
             name="Gradual Rollout Test",
             description="Test gradual rollout progression",
             improvement_type=ImprovementType.PARAMETER_OPTIMIZATION,
-            current_phase=TestPhase.ROLLOUT_10
+            current_phase=ImprovementPhase.ROLLOUT_10
         )
         
         # Mock available accounts
@@ -353,7 +353,7 @@ class TestContinuousImprovementIntegration:
                 advance_result = await rollout_manager.advance_to_next_stage(test)
                 
                 # Verify advancement decision
-                assert advance_result.decision == TestDecision.ADVANCE
+                assert advance_result.decision == PhaseDecision.ADVANCE
                 assert advance_result.confidence_level > 0.5
     
     @pytest.mark.asyncio
@@ -420,7 +420,7 @@ class TestContinuousImprovementIntegration:
         max_concurrent = orchestrator.pipeline.configuration.max_concurrent_tests
         active_tests = len([
             t for t in orchestrator.pipeline.active_improvements
-            if t.current_phase not in [TestPhase.COMPLETED, TestPhase.ROLLED_BACK]
+            if t.current_phase not in [ImprovementPhase.COMPLETED, ImprovementPhase.ROLLED_BACK]
         ])
         
         assert active_tests <= max_concurrent
@@ -435,7 +435,7 @@ class TestContinuousImprovementIntegration:
             )
             
             assert stop_result is True
-            assert test_to_stop.current_phase == TestPhase.ROLLED_BACK
+            assert test_to_stop.current_phase == ImprovementPhase.ROLLED_BACK
             assert "Emergency stop" in test_to_stop.rollback_reason
     
     @pytest.mark.asyncio
