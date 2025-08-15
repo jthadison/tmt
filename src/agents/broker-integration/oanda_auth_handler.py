@@ -10,7 +10,10 @@ from enum import Enum
 import aiohttp
 from dataclasses import dataclass
 
-from .credential_manager import OandaCredentialManager, CredentialValidationError
+try:
+    from .credential_manager import OandaCredentialManager, CredentialValidationError
+except ImportError:
+    from credential_manager import OandaCredentialManager, CredentialValidationError
 
 logger = logging.getLogger(__name__)
 
