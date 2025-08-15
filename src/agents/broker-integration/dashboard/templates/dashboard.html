@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMT Account Dashboard - Story 8.2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0e1a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+
+        .header .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            color: #e5e7eb;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+
+        .connection-status.connected {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .large-widget {
+            grid-column: span 2;
+        }
+
+        .widget {
+            background: #1f2937;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid #374151;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .widget:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .widget-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #374151;
+        }
+
+        .widget-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #f9fafb;
+        }
+
+        .widget-status {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+        .status-updating { background-color: #3b82f6; }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 0;
+        }
+
+        .metric-label {
+            font-size: 0.95rem;
+            color: #d1d5db;
+        }
+
+        .metric-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #f9fafb;
+        }
+
+        .metric-value.positive {
+            color: #10b981;
+        }
+
+        .metric-value.negative {
+            color: #ef4444;
+        }
+
+        .metric-value.neutral {
+            color: #6b7280;
+        }
+
+        .large-metric {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .large-metric .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .large-metric .label {
+            font-size: 1rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .large-chart {
+            height: 400px;
+        }
+
+        .spreads-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .spreads-table th,
+        .spreads-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #374151;
+        }
+
+        .spreads-table th {
+            background-color: #374151;
+            font-weight: 600;
+            color: #f9fafb;
+            font-size: 0.9rem;
+        }
+
+        .spreads-table td {
+            font-size: 0.85rem;
+        }
+
+        .tradeable-yes {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .tradeable-no {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        .spread-good {
+            color: #10b981;
+        }
+
+        .spread-average {
+            color: #f59e0b;
+        }
+
+        .spread-poor {
+            color: #ef4444;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+
+        .error-message {
+            background-color: #ef4444;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .last-update {
+            font-size: 0.8rem;
+            color: #6b7280;
+            text-align: right;
+            margin-top: 15px;
+        }
+
+        .performance-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .performance-metric {
+            background-color: #374151;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .performance-metric .label {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            margin-bottom: 5px;
+        }
+
+        .performance-metric .value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .large-widget {
+                grid-column: span 1;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .performance-metrics {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>TMT Account Dashboard</h1>
+            <div class="subtitle">Real-time OANDA Account Monitoring</div>
+            <div id="connectionStatus" class="connection-status disconnected">Connecting...</div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="dashboard-grid">
+            <!-- Account Summary Widget -->
+            <div id="accountSummaryWidget" class="widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Account Summary</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="accountSummaryContent" class="loading">Loading account data...</div>
+            </div>
+
+            <!-- Margin Status Widget -->
+            <div id="marginStatusWidget" class="widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Margin Status</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="marginStatusContent" class="loading">Loading margin data...</div>
+            </div>
+
+            <!-- Position Counter Widget -->
+            <div id="positionCounterWidget" class="widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Positions & Orders</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="positionCounterContent" class="loading">Loading position data...</div>
+            </div>
+
+            <!-- Instrument Spreads Widget -->
+            <div id="instrumentSpreadsWidget" class="widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Instrument Spreads</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="instrumentSpreadsContent" class="loading">Loading spread data...</div>
+            </div>
+
+            <!-- Balance History Chart -->
+            <div id="balanceHistoryWidget" class="widget large-widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Balance History (30 Days)</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="balanceHistoryContent">
+                    <div class="chart-container large-chart">
+                        <canvas id="balanceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Equity Curve Widget -->
+            <div id="equityCurveWidget" class="widget large-widget">
+                <div class="widget-header">
+                    <h3 class="widget-title">Equity Curve & Performance</h3>
+                    <span class="widget-status status-loading">Loading</span>
+                </div>
+                <div id="equityCurveContent">
+                    <div class="chart-container large-chart">
+                        <canvas id="equityChart"></canvas>
+                    </div>
+                    <div id="performanceMetrics" class="performance-metrics"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DashboardClient {
+            constructor() {
+                this.ws = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectDelay = 1000;
+                this.charts = {};
+                this.widgets = {};
+                
+                this.connect();
+            }
+
+            connect() {
+                try {
+                    this.ws = new WebSocket('ws://localhost:8765');
+                    this.setupEventHandlers();
+                } catch (error) {
+                    console.error('Failed to connect to WebSocket:', error);
+                    this.handleConnectionError();
+                }
+            }
+
+            setupEventHandlers() {
+                this.ws.onopen = () => {
+                    console.log('Connected to dashboard WebSocket');
+                    this.updateConnectionStatus(true);
+                    this.reconnectAttempts = 0;
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        this.handleMessage(message);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket connection closed');
+                    this.updateConnectionStatus(false);
+                    this.handleConnectionError();
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus(false);
+                };
+            }
+
+            handleConnectionError() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                    
+                    setTimeout(() => {
+                        this.connect();
+                    }, this.reconnectDelay);
+                    
+                    this.reconnectDelay *= 2; // Exponential backoff
+                } else {
+                    this.showError('Failed to connect to the dashboard server. Please refresh the page.');
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusElement.textContent = 'Connected';
+                    statusElement.className = 'connection-status connected';
+                } else {
+                    statusElement.textContent = 'Disconnected';
+                    statusElement.className = 'connection-status disconnected';
+                }
+            }
+
+            handleMessage(message) {
+                console.log('Received message:', message);
+
+                switch (message.type) {
+                    case 'dashboard_summary':
+                        this.updateDashboardSummary(message.data);
+                        break;
+                    case 'initial_widgets':
+                        this.updateAllWidgets(message.data);
+                        break;
+                    case 'update':
+                        this.handleUpdate(message.update_type, message.data);
+                        break;
+                    default:
+                        console.log('Unknown message type:', message.type);
+                }
+            }
+
+            updateDashboardSummary(data) {
+                // Update header with account info
+                const header = document.querySelector('.header');
+                const subtitle = header.querySelector('.subtitle');
+                subtitle.textContent = `Account: ${data.account_id} | Currency: ${data.currency} | Status: ${data.status}`;
+            }
+
+            updateAllWidgets(widgets) {
+                for (const [widgetId, widgetData] of Object.entries(widgets)) {
+                    this.updateWidget(widgetId, widgetData);
+                }
+            }
+
+            updateWidget(widgetId, data) {
+                this.widgets[widgetId] = data;
+                
+                switch (widgetId) {
+                    case 'account_summary':
+                        this.updateAccountSummary(data);
+                        break;
+                    case 'margin_status':
+                        this.updateMarginStatus(data);
+                        break;
+                    case 'position_counter':
+                        this.updatePositionCounter(data);
+                        break;
+                    case 'instrument_spreads':
+                        this.updateInstrumentSpreads(data);
+                        break;
+                    case 'balance_history':
+                        this.updateBalanceHistory(data);
+                        break;
+                    case 'equity_curve':
+                        this.updateEquityCurve(data);
+                        break;
+                }
+
+                this.updateWidgetStatus(widgetId, data.status);
+            }
+
+            updateWidgetStatus(widgetId, status) {
+                const widget = document.getElementById(`${this.camelToSnake(widgetId)}Widget`);
+                if (widget) {
+                    const statusElement = widget.querySelector('.widget-status');
+                    statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                    statusElement.className = `widget-status status-${status}`;
+                }
+            }
+
+            updateAccountSummary(data) {
+                const content = document.getElementById('accountSummaryContent');
+                const widgetData = data.data;
+                
+                content.innerHTML = `
+                    <div class="large-metric">
+                        <div class="value ${widgetData.equity_change >= 0 ? 'positive' : 'negative'}">
+                            ${widgetData.currency} ${this.formatNumber(widgetData.equity)}
+                        </div>
+                        <div class="label">Account Equity</div>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Balance:</span>
+                        <span class="metric-value">${widgetData.currency} ${this.formatNumber(widgetData.balance)}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Unrealized P&L:</span>
+                        <span class="metric-value ${widgetData.unrealized_pl >= 0 ? 'positive' : 'negative'}">
+                            ${widgetData.currency} ${this.formatNumber(widgetData.unrealized_pl)}
+                        </span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Realized P&L:</span>
+                        <span class="metric-value ${widgetData.realized_pl >= 0 ? 'positive' : 'negative'}">
+                            ${widgetData.currency} ${this.formatNumber(widgetData.realized_pl)}
+                        </span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Leverage:</span>
+                        <span class="metric-value">1:${widgetData.leverage}</span>
+                    </div>
+                    
+                    <div class="last-update">Last updated: ${this.formatTime(data.last_update)}</div>
+                `;
+            }
+
+            updateMarginStatus(data) {
+                const content = document.getElementById('marginStatusContent');
+                const widgetData = data.data;
+                
+                content.innerHTML = `
+                    <div class="large-metric">
+                        <div class="value" style="color: ${widgetData.status_color}">
+                            ${widgetData.status_text}
+                        </div>
+                        <div class="label">Margin Status</div>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Margin Level:</span>
+                        <span class="metric-value" style="color: ${widgetData.status_color}">
+                            ${this.formatNumber(widgetData.margin_level_percent)}%
+                        </span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Margin Used:</span>
+                        <span class="metric-value">${this.formatNumber(widgetData.margin_used)}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Margin Available:</span>
+                        <span class="metric-value">${this.formatNumber(widgetData.margin_available)}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Free Margin:</span>
+                        <span class="metric-value">${this.formatNumber(widgetData.free_margin)}</span>
+                    </div>
+                    
+                    <div class="last-update">Last updated: ${this.formatTime(data.last_update)}</div>
+                `;
+            }
+
+            updatePositionCounter(data) {
+                const content = document.getElementById('positionCounterContent');
+                const widgetData = data.data;
+                
+                content.innerHTML = `
+                    <div class="large-metric">
+                        <div class="value" style="color: ${widgetData.positions_color}">
+                            ${widgetData.open_positions}
+                        </div>
+                        <div class="label">Open Positions</div>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Pending Orders:</span>
+                        <span class="metric-value" style="color: ${widgetData.orders_color}">
+                            ${widgetData.pending_orders}
+                        </span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Total Trades:</span>
+                        <span class="metric-value">${widgetData.total_trades}</span>
+                    </div>
+                    
+                    <div class="last-update">Last updated: ${this.formatTime(data.last_update)}</div>
+                `;
+            }
+
+            updateInstrumentSpreads(data) {
+                const content = document.getElementById('instrumentSpreadsContent');
+                const widgetData = data.data;
+                
+                let tableHtml = `
+                    <div class="metric">
+                        <span class="metric-label">Total Instruments:</span>
+                        <span class="metric-value">${widgetData.total_instruments}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Tradeable:</span>
+                        <span class="metric-value positive">${widgetData.tradeable_count}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Average Spread:</span>
+                        <span class="metric-value">${this.formatNumber(widgetData.average_spread)} pips</span>
+                    </div>
+                    
+                    <table class="spreads-table">
+                        <thead>
+                            <tr>
+                                <th>Instrument</th>
+                                <th>Bid</th>
+                                <th>Ask</th>
+                                <th>Spread</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                widgetData.spreads.forEach(spread => {
+                    tableHtml += `
+                        <tr>
+                            <td>${spread.display_name}</td>
+                            <td>${this.formatPrice(spread.bid)}</td>
+                            <td>${this.formatPrice(spread.ask)}</td>
+                            <td class="${spread.spread_color}">${this.formatNumber(spread.spread_pips)} pips</td>
+                            <td class="${spread.tradeable ? 'tradeable-yes' : 'tradeable-no'}">
+                                ${spread.tradeable ? 'Yes' : 'No'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += `
+                        </tbody>
+                    </table>
+                    <div class="last-update">Last updated: ${this.formatTime(data.last_update)}</div>
+                `;
+                
+                content.innerHTML = tableHtml;
+            }
+
+            updateBalanceHistory(data) {
+                const widgetData = data.data;
+                const chartData = widgetData.chart_data;
+                
+                if (!this.charts.balanceChart) {
+                    const ctx = document.getElementById('balanceChart').getContext('2d');
+                    this.charts.balanceChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: chartData.labels,
+                            datasets: chartData.datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    time: {
+                                        displayFormats: {
+                                            day: 'MMM dd'
+                                        }
+                                    },
+                                    grid: {
+                                        color: '#374151'
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af'
+                                    }
+                                },
+                                y: {
+                                    grid: {
+                                        color: '#374151'
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    labels: {
+                                        color: '#f9fafb'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    this.charts.balanceChart.data = {
+                        labels: chartData.labels,
+                        datasets: chartData.datasets
+                    };
+                    this.charts.balanceChart.update();
+                }
+            }
+
+            updateEquityCurve(data) {
+                const widgetData = data.data;
+                const equityData = widgetData.equity_curve;
+                const metrics = widgetData.performance_metrics;
+                
+                // Update chart
+                if (!this.charts.equityChart) {
+                    const ctx = document.getElementById('equityChart').getContext('2d');
+                    this.charts.equityChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: [{
+                                label: 'Equity',
+                                data: equityData.map(point => ({
+                                    x: point.timestamp,
+                                    y: point.equity
+                                })),
+                                borderColor: '#10b981',
+                                backgroundColor: '#10b981',
+                                tension: 0.1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    grid: {
+                                        color: '#374151'
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af'
+                                    }
+                                },
+                                y: {
+                                    grid: {
+                                        color: '#374151'
+                                    },
+                                    ticks: {
+                                        color: '#9ca3af'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    labels: {
+                                        color: '#f9fafb'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    this.charts.equityChart.data.datasets[0].data = equityData.map(point => ({
+                        x: point.timestamp,
+                        y: point.equity
+                    }));
+                    this.charts.equityChart.update();
+                }
+                
+                // Update performance metrics
+                const metricsContainer = document.getElementById('performanceMetrics');
+                metricsContainer.innerHTML = `
+                    <div class="performance-metric">
+                        <div class="label">Total Return</div>
+                        <div class="value ${metrics.total_return >= 0 ? 'positive' : 'negative'}">
+                            ${this.formatNumber(metrics.total_return_percent)}%
+                        </div>
+                    </div>
+                    <div class="performance-metric">
+                        <div class="label">Max Drawdown</div>
+                        <div class="value negative">
+                            ${this.formatNumber(metrics.max_drawdown_percent)}%
+                        </div>
+                    </div>
+                    <div class="performance-metric">
+                        <div class="label">Win Rate</div>
+                        <div class="value">
+                            ${metrics.win_rate ? this.formatNumber(metrics.win_rate) + '%' : 'N/A'}
+                        </div>
+                    </div>
+                    <div class="performance-metric">
+                        <div class="label">Total Trades</div>
+                        <div class="value">
+                            ${metrics.total_trades}
+                        </div>
+                    </div>
+                `;
+            }
+
+            handleUpdate(updateType, data) {
+                console.log(`Handling update: ${updateType}`, data);
+                
+                for (const [widgetId, widgetData] of Object.entries(data)) {
+                    this.updateWidget(widgetId, widgetData);
+                }
+            }
+
+            showError(message) {
+                const errorContainer = document.getElementById('errorContainer');
+                errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+            }
+
+            formatNumber(num) {
+                return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).format(num);
+            }
+
+            formatPrice(price) {
+                return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 5,
+                    maximumFractionDigits: 5
+                }).format(price);
+            }
+
+            formatTime(timeString) {
+                return new Date(timeString).toLocaleTimeString();
+            }
+
+            camelToSnake(str) {
+                return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new DashboardClient();
+        });
+    </script>
+</body>
+</html>
