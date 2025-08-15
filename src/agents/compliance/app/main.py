@@ -18,6 +18,9 @@ from .models import (
 )
 from .rules_engine import RulesEngine, ComplianceMonitor
 from .prop_firm_configs import PropFirm, get_all_prop_firms
+from .us_regulatory import (
+    USRegulatoryComplianceEngine, OrderRequest, ComplianceResult
+)
 from ..shared.health import HealthChecker
 from .config import get_settings
 
@@ -35,6 +38,7 @@ async def lifespan(app: FastAPI):
     # Initialize components
     app.state.rules_engine = RulesEngine()
     app.state.compliance_monitor = ComplianceMonitor(app.state.rules_engine)
+    app.state.us_regulatory_engine = USRegulatoryComplianceEngine()
     app.state.health_checker = HealthChecker(
         service_name="compliance-agent",
         version="1.0.0"
@@ -77,6 +81,11 @@ def get_compliance_monitor() -> ComplianceMonitor:
 def get_health_checker() -> HealthChecker:
     """Get health checker dependency"""
     return app.state.health_checker
+
+
+def get_us_regulatory_engine() -> USRegulatoryComplianceEngine:
+    """Get US regulatory compliance engine dependency"""
+    return app.state.us_regulatory_engine
 
 
 async def _get_account_from_database(account_id: str) -> Optional[TradingAccount]:
@@ -337,6 +346,193 @@ async def reset_daily_pnl(
     except Exception as e:
         logger.error(f"Error resetting daily P&L: {e}")
         raise HTTPException(status_code=500, detail=f"Reset error: {str(e)}")
+
+
+# US Regulatory Compliance Endpoints
+
+@app.post("/api/v1/compliance/us-regulatory/validate-order", response_model=dict)
+async def validate_us_order(
+    order_request: dict,
+    account_balance: float,
+    current_margin_used: float = 0.0,
+    us_engine: USRegulatoryComplianceEngine = Depends(get_us_regulatory_engine)
+):
+    """
+    Validate order against US regulatory requirements (FIFO, anti-hedging, leverage)
+    
+    For US-based retail traders who must comply with NFA regulations.
+    """
+    try:
+        from decimal import Decimal
+        
+        # Convert request to OrderRequest object
+        order = OrderRequest(
+            instrument=order_request["instrument"],
+            units=order_request["units"],
+            side=order_request["side"],
+            order_type=order_request["order_type"],
+            price=Decimal(str(order_request.get("price", "1.0"))),
+            account_id=order_request["account_id"],
+            account_region=order_request.get("account_region", "US")
+        )
+        
+        result = await us_engine.validate_order_compliance(
+            order, Decimal(str(account_balance)), Decimal(str(current_margin_used))
+        )
+        
+        return {
+            "valid": result.valid,
+            "violation_type": result.violation_type.value if result.violation_type else None,
+            "reason": result.reason,
+            "suggested_action": result.suggested_action,
+            "metadata": result.metadata
+        }
+        
+    except Exception as e:
+        logger.error(f"Error validating US order: {e}")
+        raise HTTPException(status_code=500, detail=f"US validation error: {str(e)}")
+
+
+@app.post("/api/v1/compliance/us-regulatory/add-position")
+async def add_fifo_position(
+    position_data: dict,
+    us_engine: USRegulatoryComplianceEngine = Depends(get_us_regulatory_engine)
+):
+    """
+    Add position to FIFO tracking queue
+    
+    Called when a new position is opened to maintain FIFO compliance.
+    """
+    try:
+        from decimal import Decimal
+        from datetime import datetime
+        from .us_regulatory import Position
+        
+        position = Position(
+            id=position_data["id"],
+            instrument=position_data["instrument"],
+            units=position_data["units"],
+            side=position_data["side"],
+            entry_price=Decimal(str(position_data["entry_price"])),
+            timestamp=datetime.fromisoformat(position_data["timestamp"]),
+            account_id=position_data["account_id"]
+        )
+        
+        us_engine.fifo_engine.add_position(position)
+        
+        return {
+            "success": True,
+            "message": f"Position {position.id} added to FIFO queue"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error adding FIFO position: {e}")
+        raise HTTPException(status_code=500, detail=f"Position add error: {str(e)}")
+
+
+@app.post("/api/v1/compliance/us-regulatory/auto-select-positions")
+async def auto_select_fifo_positions(
+    request_data: dict,
+    us_engine: USRegulatoryComplianceEngine = Depends(get_us_regulatory_engine)
+):
+    """
+    Automatically select positions for FIFO-compliant closing
+    
+    Returns the positions that should be closed to maintain FIFO order.
+    """
+    try:
+        selected_positions = us_engine.fifo_engine.auto_select_fifo_positions(
+            account_id=request_data["account_id"],
+            instrument=request_data["instrument"],
+            units_to_close=request_data["units_to_close"],
+            closing_side=request_data["closing_side"]
+        )
+        
+        return {
+            "selected_positions": [
+                {
+                    "id": pos.id,
+                    "units": pos.units,
+                    "entry_price": str(pos.entry_price),
+                    "timestamp": pos.timestamp.isoformat(),
+                    "side": pos.side
+                }
+                for pos in selected_positions
+            ],
+            "total_units": sum(pos.units for pos in selected_positions)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error selecting FIFO positions: {e}")
+        raise HTTPException(status_code=500, detail=f"Position selection error: {str(e)}")
+
+
+@app.get("/api/v1/compliance/us-regulatory/leverage-limits")
+async def get_leverage_limits():
+    """Get US leverage limits for major and minor currency pairs"""
+    return {
+        "major_pairs": [
+            "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", 
+            "USD_CAD", "AUD_USD", "NZD_USD"
+        ],
+        "leverage_limits": {
+            "major": "50:1",
+            "minor": "20:1"
+        },
+        "description": "US NFA regulatory leverage limits for retail traders"
+    }
+
+
+@app.post("/api/v1/compliance/us-regulatory/calculate-max-position")
+async def calculate_max_position_size(
+    request_data: dict,
+    us_engine: USRegulatoryComplianceEngine = Depends(get_us_regulatory_engine)
+):
+    """
+    Calculate maximum position size given leverage limits
+    
+    Helps traders determine the largest position they can open.
+    """
+    try:
+        from decimal import Decimal
+        
+        max_units = us_engine.leverage_validator.calculate_max_position_size(
+            instrument=request_data["instrument"],
+            price=Decimal(str(request_data["price"])),
+            available_margin=Decimal(str(request_data["available_margin"]))
+        )
+        
+        return {
+            "instrument": request_data["instrument"],
+            "max_units": max_units,
+            "price": request_data["price"],
+            "available_margin": request_data["available_margin"],
+            "pair_type": "major" if request_data["instrument"] in us_engine.leverage_validator.major_pairs else "minor"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating max position: {e}")
+        raise HTTPException(status_code=500, detail=f"Position calculation error: {str(e)}")
+
+
+@app.get("/api/v1/compliance/us-regulatory/summary/{account_id}")
+async def get_us_compliance_summary(
+    account_id: str,
+    us_engine: USRegulatoryComplianceEngine = Depends(get_us_regulatory_engine)
+):
+    """
+    Get US regulatory compliance summary for account
+    
+    Returns FIFO positions, compliance checks, and violation history.
+    """
+    try:
+        summary = us_engine.get_compliance_summary(account_id)
+        
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error getting US compliance summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Summary error: {str(e)}")
 
 
 if __name__ == "__main__":
