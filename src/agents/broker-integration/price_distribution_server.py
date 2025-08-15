@@ -6,6 +6,10 @@ import asyncio
 import websockets
 import json
 import logging
+import secrets
+import hashlib
+import hmac
+import jwt
 from typing import Dict, Set, Optional, List, Any, Callable
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, asdict
@@ -13,6 +17,7 @@ from enum import Enum
 import gzip
 import time
 from collections import defaultdict, deque
+import re
 
 from oanda_price_stream import PriceTick, OandaStreamManager
 from market_session_handler import MarketSessionHandler, SessionEvent
@@ -49,7 +54,148 @@ class ClientConnection:
     compression_level: CompressionLevel = CompressionLevel.NONE
     update_frequency: float = 1.0  # Updates per second
     last_ping: Optional[datetime] = None
+    authenticated: bool = False
+    auth_token: Optional[str] = None
+    connection_time: datetime = None
+    message_count: int = 0
+    error_count: int = 0
     
+    def __post_init__(self):
+        if self.connection_time is None:
+            self.connection_time = datetime.now(timezone.utc)
+    
+class ClientCircuitBreaker:
+    """Circuit breaker for client connections"""
+    
+    def __init__(self, max_errors: int = 10, max_queue_size: int = 1000, max_message_rate: int = 100):
+        self.max_errors = max_errors
+        self.max_queue_size = max_queue_size
+        self.max_message_rate = max_message_rate
+        self.error_count = 0
+        self.is_open = False
+        self.last_reset = datetime.now(timezone.utc)
+        self.message_timestamps = deque(maxlen=max_message_rate)
+        
+    def record_error(self) -> bool:
+        """Record an error and check if circuit should open"""
+        self.error_count += 1
+        if self.error_count >= self.max_errors:
+            self.is_open = True
+            return True
+        return False
+        
+    def record_message(self) -> bool:
+        """Record a message and check rate limit"""
+        now = datetime.now(timezone.utc)
+        self.message_timestamps.append(now)
+        
+        # Check rate limit (messages per minute)
+        one_minute_ago = now - timedelta(minutes=1)
+        recent_messages = sum(1 for ts in self.message_timestamps if ts > one_minute_ago)
+        return recent_messages <= self.max_message_rate
+        
+    def can_process(self) -> bool:
+        """Check if circuit breaker allows processing"""
+        if not self.is_open:
+            return True
+            
+        # Auto-reset circuit breaker after 5 minutes
+        if (datetime.now(timezone.utc) - self.last_reset).total_seconds() > 300:
+            self.is_open = False
+            self.error_count = 0
+            self.last_reset = datetime.now(timezone.utc)
+            return True
+            
+        return False
+
+class SecurityManager:
+    """Handles authentication and security"""
+    
+    def __init__(self, jwt_secret: str):
+        self.jwt_secret = jwt_secret
+        self.valid_api_keys = set()  # In production, load from secure storage
+        self.blocked_ips = set()
+        self.rate_limits: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
+        
+    def generate_secure_client_id(self) -> str:
+        """Generate cryptographically secure client ID"""
+        random_bytes = secrets.token_bytes(16)
+        timestamp = str(int(time.time()))
+        combined = random_bytes + timestamp.encode()
+        return hashlib.sha256(combined).hexdigest()[:32]
+        
+    def validate_jwt_token(self, token: str) -> Optional[Dict]:
+        """Validate JWT authentication token"""
+        try:
+            payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'])
+            # Check expiration
+            if payload.get('exp', 0) < time.time():
+                return None
+            return payload
+        except jwt.InvalidTokenError:
+            return None
+            
+    def validate_api_key(self, api_key: str) -> bool:
+        """Validate API key authentication"""
+        return api_key in self.valid_api_keys
+        
+    def is_ip_blocked(self, ip: str) -> bool:
+        """Check if IP is blocked"""
+        return ip in self.blocked_ips
+        
+    def check_rate_limit(self, client_ip: str, limit_per_minute: int = 60) -> bool:
+        """Check if client exceeds rate limit"""
+        now = datetime.now(timezone.utc)
+        client_requests = self.rate_limits[client_ip]
+        
+        # Remove old requests
+        one_minute_ago = now - timedelta(minutes=1)
+        while client_requests and client_requests[0] < one_minute_ago:
+            client_requests.popleft()
+            
+        # Check limit
+        if len(client_requests) >= limit_per_minute:
+            return False
+            
+        client_requests.append(now)
+        return True
+        
+    def validate_message_input(self, message: str) -> bool:
+        """Validate input message for security"""
+        # Check message size
+        if len(message) > 10000:  # 10KB limit
+            return False
+            
+        try:
+            data = json.loads(message)
+            
+            # Validate required fields
+            if not isinstance(data, dict):
+                return False
+                
+            action = data.get('action')
+            if not isinstance(action, str) or len(action) > 50:
+                return False
+                
+            # Validate action types
+            valid_actions = {'subscribe', 'unsubscribe', 'set_frequency', 'set_compression', 'set_filter', 'ping'}
+            if action not in valid_actions:
+                return False
+                
+            # Validate instruments list
+            if 'instruments' in data:
+                instruments = data['instruments']
+                if not isinstance(instruments, list) or len(instruments) > 100:
+                    return False
+                for instrument in instruments:
+                    if not isinstance(instrument, str) or not re.match(r'^[A-Z]{3}_[A-Z]{3}$', instrument):
+                        return False
+                        
+            return True
+            
+        except (json.JSONDecodeError, ValueError):
+            return False
+
 class PriceMessage:
     """Price update message"""
     
@@ -192,16 +338,29 @@ class PriceDistributionServer:
                  stream_manager: OandaStreamManager,
                  session_handler: Optional[MarketSessionHandler] = None,
                  host: str = "localhost",
-                 port: int = 8765):
+                 port: int = 8765,
+                 jwt_secret: str = None,
+                 require_authentication: bool = True,
+                 max_connections: int = 1000,
+                 enable_health_check: bool = True):
         
         self.stream_manager = stream_manager
         self.session_handler = session_handler
         self.host = host
         self.port = port
+        self.require_authentication = require_authentication
+        self.max_connections = max_connections
+        self.enable_health_check = enable_health_check
+        
+        # Security management
+        self.security_manager = SecurityManager(
+            jwt_secret or secrets.token_urlsafe(32)
+        )
         
         # Client management
         self.clients: Dict[str, ClientConnection] = {}
         self.websocket_to_client_id: Dict[websockets.WebSocketServerProtocol, str] = {}
+        self.client_circuit_breakers: Dict[str, ClientCircuitBreaker] = {}
         
         # Update management
         self.frequency_manager = UpdateFrequencyManager()
@@ -210,6 +369,7 @@ class PriceDistributionServer:
         # Server state
         self.server: Optional[websockets.WebSocketServer] = None
         self.is_running = False
+        self.shutdown_event = asyncio.Event()
         
         # Message queues for batching
         self.message_queues: Dict[str, List[PriceMessage]] = defaultdict(list)
@@ -225,13 +385,19 @@ class PriceDistributionServer:
             'bytes_saved_compression': 0,
             'update_frequency_violations': 0,
             'filtered_updates': 0,
-            'latency_measurements': deque(maxlen=1000)
+            'latency_measurements': deque(maxlen=1000),
+            'authentication_failures': 0,
+            'rate_limit_violations': 0,
+            'circuit_breaker_trips': 0,
+            'invalid_messages': 0
         }
         
         # Background tasks
         self.batch_processor_task: Optional[asyncio.Task] = None
         self.ping_task: Optional[asyncio.Task] = None
         self.metrics_task: Optional[asyncio.Task] = None
+        self.health_check_task: Optional[asyncio.Task] = None
+        self.cleanup_task: Optional[asyncio.Task] = None
         
         # Setup callbacks
         self._setup_callbacks()
@@ -271,6 +437,11 @@ class PriceDistributionServer:
         self.ping_task = asyncio.create_task(self._ping_loop())
         self.metrics_task = asyncio.create_task(self._metrics_loop())
         
+        if self.enable_health_check:
+            self.health_check_task = asyncio.create_task(self._health_check_loop())
+        
+        self.cleanup_task = asyncio.create_task(self._cleanup_loop())
+        
         logger.info("Price distribution server started successfully")
         
     async def stop(self):
@@ -281,13 +452,24 @@ class PriceDistributionServer:
         logger.info("Stopping price distribution server")
         self.is_running = False
         
+        # Signal shutdown
+        self.shutdown_event.set()
+        
         # Cancel background tasks
-        if self.batch_processor_task:
-            self.batch_processor_task.cancel()
-        if self.ping_task:
-            self.ping_task.cancel()
-        if self.metrics_task:
-            self.metrics_task.cancel()
+        tasks_to_cancel = [
+            self.batch_processor_task,
+            self.ping_task, 
+            self.metrics_task,
+            self.health_check_task,
+            self.cleanup_task
+        ]
+        
+        for task in tasks_to_cancel:
+            if task:
+                task.cancel()
+                
+        # Wait for tasks to complete
+        await asyncio.gather(*[task for task in tasks_to_cancel if task], return_exceptions=True)
             
         # Close all client connections
         if self.clients:
@@ -372,6 +554,23 @@ class PriceDistributionServer:
             logger.error(f"Invalid JSON from client {client_id}: {message}")
         except Exception as e:
             logger.error(f"Error handling message from client {client_id}: {e}")
+            if client_id in self.clients:
+                self.clients[client_id].error_count += 1
+            if client_id in self.client_circuit_breakers:
+                if self.client_circuit_breakers[client_id].record_error():
+                    self.metrics['circuit_breaker_trips'] += 1
+                    logger.warning(f"Circuit breaker opened for client {client_id}")
+    
+    async def _send_error_message(self, client_id: str, error_message: str):
+        """Send error message to client"""
+        error_msg = PriceMessage(
+            MessageType.ERROR,
+            {
+                'error': error_message,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        )
+        await self._send_message_to_client(client_id, error_msg)
             
     async def _handle_subscribe(self, client_id: str, data: Dict):
         """Handle subscription request"""
@@ -624,6 +823,115 @@ class PriceDistributionServer:
                 # Calculate ping latency (simplified)
                 latency = (datetime.now(timezone.utc) - client.last_ping).total_seconds() * 1000
                 self.metrics['latency_measurements'].append(latency)
+    
+    async def _health_check_loop(self):
+        """Health check and monitoring loop"""
+        while self.is_running and not self.shutdown_event.is_set():
+            try:
+                # Check server health
+                health_status = await self._check_server_health()
+                
+                if health_status['status'] != 'healthy':
+                    logger.warning(f"Server health check failed: {health_status}")
+                
+                await asyncio.sleep(30)  # Health check every 30 seconds
+                
+            except Exception as e:
+                logger.error(f"Error in health check loop: {e}")
+                await asyncio.sleep(5)
+    
+    async def _cleanup_loop(self):
+        """Background cleanup tasks"""
+        while self.is_running and not self.shutdown_event.is_set():
+            try:
+                # Clean up inactive clients
+                await self._cleanup_inactive_clients()
+                
+                # Clean up circuit breakers
+                await self._cleanup_circuit_breakers()
+                
+                # Clean up message queues
+                await self._cleanup_message_queues()
+                
+                await asyncio.sleep(60)  # Cleanup every minute
+                
+            except Exception as e:
+                logger.error(f"Error in cleanup loop: {e}")
+                await asyncio.sleep(10)
+    
+    async def _check_server_health(self) -> Dict:
+        """Check server health status"""
+        try:
+            active_connections = len(self.clients)
+            total_messages = self.metrics['total_messages_sent']
+            error_rate = (self.metrics['authentication_failures'] + 
+                         self.metrics['invalid_messages']) / max(total_messages, 1)
+            
+            # Determine health status
+            if active_connections > self.max_connections * 0.9:
+                status = 'degraded'
+                reason = 'High connection load'
+            elif error_rate > 0.1:  # 10% error rate
+                status = 'degraded'
+                reason = 'High error rate'
+            else:
+                status = 'healthy'
+                reason = 'All systems normal'
+            
+            return {
+                'status': status,
+                'reason': reason,
+                'active_connections': active_connections,
+                'error_rate': error_rate,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            return {
+                'status': 'unhealthy',
+                'reason': f'Health check error: {e}',
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def _cleanup_inactive_clients(self):
+        """Remove inactive clients"""
+        current_time = datetime.now(timezone.utc)
+        inactive_threshold = timedelta(minutes=30)
+        
+        inactive_clients = []
+        for client_id, client in self.clients.items():
+            if current_time - client.last_activity > inactive_threshold:
+                inactive_clients.append(client_id)
+        
+        for client_id in inactive_clients:
+            logger.info(f"Removing inactive client {client_id}")
+            client = self.clients.get(client_id)
+            if client:
+                try:
+                    await client.websocket.close(code=4000, reason="Inactive")
+                except:
+                    pass
+                self.clients.pop(client_id, None)
+                self.client_circuit_breakers.pop(client_id, None)
+                self.message_queues.pop(client_id, None)
+    
+    async def _cleanup_circuit_breakers(self):
+        """Clean up unused circuit breakers"""
+        active_client_ids = set(self.clients.keys())
+        breaker_client_ids = set(self.client_circuit_breakers.keys())
+        
+        for client_id in breaker_client_ids - active_client_ids:
+            self.client_circuit_breakers.pop(client_id, None)
+    
+    async def _cleanup_message_queues(self):
+        """Clean up empty message queues"""
+        empty_queues = [
+            client_id for client_id, queue in self.message_queues.items()
+            if not queue and client_id not in self.clients
+        ]
+        
+        for client_id in empty_queues:
+            self.message_queues.pop(client_id, None)
                 
     def get_metrics(self) -> Dict:
         """Get server metrics"""

@@ -206,7 +206,8 @@ class NetworkPerformanceMonitor:
             return {
                 'connection_success_rate': 0.0,
                 'avg_latency_ms': 0.0,
-                'tests_count': 0
+                'tests_count': 0,
+                'last_test': None
             }
             
         successful_tests = [test for test in self.connection_tests if test['success']]

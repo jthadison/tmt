@@ -207,9 +207,9 @@ class OandaStreamManager:
     def _build_stream_url(self) -> str:
         """Build OANDA streaming URL"""
         if self.environment == 'live':
-            base_url = "wss://stream-fxpractice.oanda.com"
+            base_url = "wss://stream-fxtrade.oanda.com"  # Correct live URL
         else:
-            base_url = "wss://stream-fxpractice.oanda.com"
+            base_url = "wss://stream-fxpractice.oanda.com"  # Practice URL
             
         return f"{base_url}/v3/accounts/{self.account_id}/pricing/stream"
         
