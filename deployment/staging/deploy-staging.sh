@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 STAGING_DIR="/opt/tmt/staging"
 BACKUP_DIR="/opt/tmt/backups/staging"
-LOG_FILE="/var/log/tmt-staging-deployment.log"
+LOG_FILE="tmt-staging-deployment.log"
 COMPOSE_FILE="docker-compose.staging.yml"
 
 # Colors for output
