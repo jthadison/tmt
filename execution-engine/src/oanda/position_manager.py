@@ -14,6 +14,9 @@ import asyncio
 import logging
 from enum import Enum
 
+from .client import OandaClientInterface
+from .stream_manager import StreamManagerInterface
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,7 +76,7 @@ class OandaPositionManager:
     Handles position data fetching, modification, and monitoring.
     """
     
-    def __init__(self, client: Any, price_stream: Any):
+    def __init__(self, client: OandaClientInterface, price_stream: StreamManagerInterface):
         """
         Initialize position manager
         
