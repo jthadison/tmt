@@ -3,7 +3,7 @@ Tests for Audit Trail System
 Story 8.8 - Task 5 tests
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import sys
@@ -255,8 +255,8 @@ class TestAuditTrailManager:
         account_id = "account_123"
         
         # Mock old timestamps
-        old_time = datetime.utcnow() - timedelta(days=3000)  # Very old
-        recent_time = datetime.utcnow()
+        old_time = datetime.now(timezone.utc) - timedelta(days=3000)  # Very old
+        recent_time = datetime.now(timezone.utc)
         
         # Create records
         await audit_manager.record_signal_generated(old_signal_id, account_id, {"test": "old"})
@@ -352,8 +352,8 @@ class TestAuditTrailManager:
         trails = [
             SignalExecutionTrail(
                 signal_id="high_latency_signal",
-                signal_timestamp=datetime.utcnow(),
-                execution_timestamp=datetime.utcnow(),
+                signal_timestamp=datetime.now(timezone.utc),
+                execution_timestamp=datetime.now(timezone.utc),
                 transaction_ids=["txn_1"],
                 risk_checks=[],
                 compliance_checks=[],
@@ -362,7 +362,7 @@ class TestAuditTrailManager:
             ),
             SignalExecutionTrail(
                 signal_id="failed_signal",
-                signal_timestamp=datetime.utcnow(),
+                signal_timestamp=datetime.now(timezone.utc),
                 execution_timestamp=None,
                 transaction_ids=[],
                 risk_checks=[],

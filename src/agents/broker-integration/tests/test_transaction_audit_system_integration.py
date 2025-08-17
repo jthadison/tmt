@@ -3,10 +3,11 @@ Integration Tests for Transaction Audit System
 Story 8.8 - Complete system integration tests
 """
 import pytest
+import pytest_asyncio
 import asyncio
 import tempfile
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 import os
@@ -40,8 +41,8 @@ class TestTransactionAuditSystemIntegration:
             environment=Environment.PRACTICE,
             api_key="test_api_key",
             base_url="https://api-fxpractice.oanda.com",
-            authenticated_at=datetime.utcnow(),
-            last_refresh=datetime.utcnow()
+            authenticated_at=datetime.now(timezone.utc),
+            last_refresh=datetime.now(timezone.utc)
         )
         
         auth_handler.active_sessions = {"test_account_123": context}
@@ -120,13 +121,22 @@ class TestTransactionAuditSystemIntegration:
         response.status = 200
         response.json = AsyncMock(return_value=sample_transactions)
         
-        session.get = AsyncMock(return_value=response)
-        pool.get_session.return_value.__aenter__ = AsyncMock(return_value=session)
-        pool.get_session.return_value.__aexit__ = AsyncMock(return_value=None)
+        # Create properly configured async context manager for response
+        async_context_manager = AsyncMock()
+        async_context_manager.__aenter__ = AsyncMock(return_value=response)
+        async_context_manager.__aexit__ = AsyncMock(return_value=None)
+        
+        session.get = AsyncMock(return_value=async_context_manager)
+        
+        # Mock the session context manager
+        session_context = AsyncMock()
+        session_context.__aenter__ = AsyncMock(return_value=session)
+        session_context.__aexit__ = AsyncMock(return_value=None)
+        pool.get_session = MagicMock(return_value=session_context)
         
         return pool
         
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def audit_system(self, mock_auth_handler, mock_connection_pool, temp_storage):
         """Initialized audit system"""
         system = TransactionAuditSystem(

@@ -5,7 +5,7 @@ Transaction History & Audit Trail - Complete validation
 import asyncio
 import sys
 import os
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock
 import tempfile
@@ -78,11 +78,11 @@ class Story88Validator:
             assert result['count'] > 0
             
             self.results['AC1'] = "PASS - Transaction history retrieval works"
-            print("   ✓ Can retrieve transactions for date range")
+            print("   [PASS] Can retrieve transactions for date range")
             
         except Exception as e:
             self.results['AC1'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac2_transaction_filtering(self):
         """AC2: Filter transactions by type"""
@@ -107,11 +107,11 @@ class Story88Validator:
             assert len(filtered) < len(transactions)  # Should be fewer
             
             self.results['AC2'] = "PASS - Transaction filtering by type works"
-            print("   ✓ Can filter transactions by type")
+            print("   [PASS] Can filter transactions by type")
             
         except Exception as e:
             self.results['AC2'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac3_export_functionality(self):
         """AC3: Export transactions to CSV for tax reporting"""
@@ -143,11 +143,11 @@ class Story88Validator:
             assert 'transactions' in json_content
             
             self.results['AC3'] = "PASS - Export functionality works"
-            print("   ✓ Can export to CSV and JSON")
+            print("   [PASS] Can export to CSV and JSON")
             
         except Exception as e:
             self.results['AC3'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac4_transaction_details(self):
         """AC4: Show transaction details: time, type, instrument, P&L"""
@@ -170,11 +170,11 @@ class Story88Validator:
                 assert 'pl' in data
                 
             self.results['AC4'] = "PASS - Transaction details are complete"
-            print("   ✓ All transaction details available")
+            print("   [PASS] All transaction details available")
             
         except Exception as e:
             self.results['AC4'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac5_pl_summaries(self):
         """AC5: Calculate daily/weekly/monthly P&L summaries"""
@@ -210,11 +210,11 @@ class Story88Validator:
             assert monthly_summary.sharpe_ratio is not None
             
             self.results['AC5'] = "PASS - P&L summaries work"
-            print("   ✓ Daily, weekly, and monthly P&L calculations work")
+            print("   [PASS] Daily, weekly, and monthly P&L calculations work")
             
         except Exception as e:
             self.results['AC5'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac6_commission_tracking(self):
         """AC6: Track commission and financing charges"""
@@ -240,11 +240,11 @@ class Story88Validator:
             assert abs(daily_summary.net_pl - expected_net) < Decimal('0.01')
             
             self.results['AC6'] = "PASS - Commission and financing tracking works"
-            print("   ✓ Commission and financing charges tracked separately")
+            print("   [PASS] Commission and financing charges tracked separately")
             
         except Exception as e:
             self.results['AC6'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac7_audit_trail(self):
         """AC7: Audit trail links TMT signals to OANDA transactions"""
@@ -281,11 +281,11 @@ class Story88Validator:
             assert transaction_id in trail.transaction_ids
             
             self.results['AC7'] = "PASS - Audit trail system works"
-            print("   ✓ Signal to transaction audit trail works")
+            print("   [PASS] Signal to transaction audit trail works")
             
         except Exception as e:
             self.results['AC7'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     async def validate_ac8_data_retention(self):
         """AC8: 7-year retention of all transaction records"""
@@ -317,11 +317,11 @@ class Story88Validator:
             assert 'retention_policies' in stats
             
             self.results['AC8'] = "PASS - Data retention system works"
-            print("   ✓ 7-year retention policy and archiving system works")
+            print("   [PASS] 7-year retention policy and archiving system works")
             
         except Exception as e:
             self.results['AC8'] = f"FAIL - {str(e)}"
-            print(f"   ✗ Error: {e}")
+            print(f"   [FAIL] Error: {e}")
             
     def create_mock_auth_handler(self):
         """Create mock authentication handler"""
@@ -333,8 +333,8 @@ class Story88Validator:
             environment=Environment.PRACTICE,
             api_key="test_key",
             base_url="https://api-fxpractice.oanda.com",
-            authenticated_at=datetime.utcnow(),
-            last_refresh=datetime.utcnow()
+            authenticated_at=datetime.now(timezone.utc),
+            last_refresh=datetime.now(timezone.utc)
         )
         
         auth_handler.active_sessions = {"test_account": context}
@@ -362,14 +362,44 @@ class Story88Validator:
                     'time': '2024-01-15T10:00:00.000000Z',
                     'accountBalance': '1025.50',
                     'reason': 'MARKET_ORDER'
+                },
+                {
+                    'id': '2',
+                    'type': 'TRADE_CLOSE',
+                    'instrument': 'GBP_USD',
+                    'units': '-1500',
+                    'price': '1.2500',
+                    'pl': '-15.75',
+                    'commission': '1.50',
+                    'financing': '0.25',
+                    'time': '2024-01-16T14:30:00.000000Z',
+                    'accountBalance': '1009.00',
+                    'reason': 'STOP_LOSS'
                 }
             ],
-            'lastTransactionID': '1'
+            'lastTransactionID': '2'
         })
         
-        session.get = AsyncMock(return_value=response)
-        pool.get_session.return_value.__aenter__ = AsyncMock(return_value=session)
-        pool.get_session.return_value.__aexit__ = AsyncMock(return_value=None)
+        # Create properly configured async context manager for response
+        class ResponseContext:
+            async def __aenter__(self):
+                return response
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+        
+        def mock_get(*args, **kwargs):
+            return ResponseContext()
+            
+        session.get = mock_get
+        
+        # Mock the session context manager
+        class SessionContext:
+            async def __aenter__(self):
+                return session
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+                
+        pool.get_session = MagicMock(return_value=SessionContext())
         
         return pool
         
@@ -437,10 +467,10 @@ class Story88Validator:
         print(f"\nOverall: {passed}/{total} acceptance criteria passed")
         
         if passed == total:
-            print("\n🎉 ALL ACCEPTANCE CRITERIA PASSED!")
+            print("\n[SUCCESS] ALL ACCEPTANCE CRITERIA PASSED!")
             print("Story 8.8 implementation is COMPLETE and VALIDATED")
         else:
-            print(f"\n⚠️  {total - passed} acceptance criteria failed")
+            print(f"\n[WARNING] {total - passed} acceptance criteria failed")
             print("Story 8.8 implementation needs fixes")
 
 

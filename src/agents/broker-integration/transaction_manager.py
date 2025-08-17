@@ -5,7 +5,7 @@ Story 8.8 - Task 1: Build transaction data fetcher
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -16,8 +16,13 @@ try:
     from .oanda_auth_handler import OandaAuthHandler, AccountContext
     from .connection_pool import OandaConnectionPool
 except ImportError:
-    from oanda_auth_handler import OandaAuthHandler, AccountContext
-    from connection_pool import OandaConnectionPool
+    try:
+        from oanda_auth_handler import OandaAuthHandler, AccountContext
+        from connection_pool import OandaConnectionPool
+    except ImportError:
+        # Use mock implementations for testing
+        from mock_oanda_auth_handler import OandaAuthHandler, AccountContext
+        from mock_connection_pool import OandaConnectionPool
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +154,7 @@ class OandaTransactionManager:
             # Store in cache
             cache_key = f"{account_id}:{start_date.isoformat()}:{end_date.isoformat()}"
             self.transaction_cache[cache_key] = transactions
-            self.last_cache_update[cache_key] = datetime.utcnow()
+            self.last_cache_update[cache_key] = datetime.now(timezone.utc)
             
             return {
                 'transactions': transactions,

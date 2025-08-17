@@ -4,7 +4,7 @@ Story 8.8 - Task 5: Build audit trail system
 """
 import logging
 from typing import Dict, List, Optional, Any, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -161,7 +161,7 @@ class AuditTrailManager:
         audit_record = AuditRecord(
             audit_id=audit_id,
             event_type=AuditEventType.SIGNAL_GENERATED,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             account_id=account_id,
             signal_id=signal_id,
             event_data=signal_data,
@@ -212,7 +212,7 @@ class AuditTrailManager:
         audit_record = AuditRecord(
             audit_id=audit_id,
             event_type=AuditEventType.RISK_CHECK,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             account_id=account_id,
             signal_id=signal_id,
             event_data=risk_data,
@@ -255,7 +255,7 @@ class AuditTrailManager:
         audit_record = AuditRecord(
             audit_id=audit_id,
             event_type=AuditEventType.COMPLIANCE_CHECK,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             account_id=account_id,
             signal_id=signal_id,
             event_data=compliance_data,
@@ -298,7 +298,7 @@ class AuditTrailManager:
         audit_record = AuditRecord(
             audit_id=audit_id,
             event_type=AuditEventType.SIGNAL_EXECUTED,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             account_id=account_id,
             signal_id=signal_id,
             transaction_id=transaction_id,
@@ -348,7 +348,7 @@ class AuditTrailManager:
         audit_record = AuditRecord(
             audit_id=audit_id,
             event_type=event_type,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             account_id=account_id,
             transaction_id=transaction_id,
             trade_id=trade_data.get('trade_id'),
@@ -448,7 +448,7 @@ class AuditTrailManager:
         
         return AuditReport(
             report_id=report_id,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             period_start=start_date,
             period_end=end_date,
             account_ids=account_ids or [],
@@ -509,7 +509,7 @@ class AuditTrailManager:
         
     async def cleanup_old_records(self):
         """Remove audit records older than retention period"""
-        cutoff_date = datetime.utcnow() - timedelta(days=self.retention_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
         
         # Remove old audit records
         old_records = [
