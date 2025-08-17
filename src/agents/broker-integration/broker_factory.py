@@ -21,6 +21,32 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Circuit breaker integration
+try:
+    import sys
+    from pathlib import Path
+    circuit_breaker_path = Path(__file__).parent.parent / "circuit-breaker" / "app"
+    sys.path.insert(0, str(circuit_breaker_path))
+    from breaker_logic import CircuitBreakerManager
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    logger.warning("Circuit breaker not available - operating without circuit protection")
+    CircuitBreakerManager = None
+    CIRCUIT_BREAKER_AVAILABLE = False
+
+# Transaction recording integration
+try:
+    from .transaction_manager import OandaTransactionManager
+    TRANSACTION_RECORDING_AVAILABLE = True
+except ImportError:
+    try:
+        from transaction_manager import OandaTransactionManager
+        TRANSACTION_RECORDING_AVAILABLE = True
+    except ImportError:
+        logger.warning("Transaction manager not available - operating without transaction recording")
+        OandaTransactionManager = None
+        TRANSACTION_RECORDING_AVAILABLE = False
+
 
 class BrokerStatus(Enum):
     """Broker instance status"""
@@ -111,6 +137,20 @@ class BrokerFactory:
         self._health_check_task = None
         self._shutdown_event = asyncio.Event()
         self._tasks: List[asyncio.Task] = []
+        
+        # Circuit breaker integration
+        self._circuit_breaker = CircuitBreakerManager() if CIRCUIT_BREAKER_AVAILABLE else None
+        if self._circuit_breaker:
+            logger.info("Circuit breaker protection enabled")
+        else:
+            logger.warning("Circuit breaker protection disabled")
+            
+        # Transaction recording integration
+        self._transaction_manager = None
+        if TRANSACTION_RECORDING_AVAILABLE:
+            logger.info("Transaction recording available")
+        else:
+            logger.warning("Transaction recording disabled")
         
     async def initialize(self):
         """Initialize async components - call this after creation"""
@@ -279,6 +319,15 @@ class BrokerFactory:
         if config is None:
             raise ValueError("Configuration is required")
             
+        # Check circuit breaker before proceeding
+        if not self.is_operation_allowed(broker_name, 'create_adapter'):
+            raise StandardBrokerError(
+                error_code=StandardErrorCode.SERVICE_UNAVAILABLE,
+                message=f"Circuit breaker is open for broker {broker_name}",
+                severity=ErrorSeverity.HIGH,
+                context=ErrorContext(broker_name=broker_name, operation='create_adapter')
+            )
+            
         if broker_name not in self._registrations:
             raise UnsupportedBrokerError(broker_name)
             
@@ -304,6 +353,7 @@ class BrokerFactory:
             self._instance_counter += 1
             instance_id = f"{broker_name}_{self._instance_counter}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
+        operation_start = time.time()
         try:
             # Create adapter instance
             adapter_class = registration.adapter_class
@@ -351,10 +401,21 @@ class BrokerFactory:
             # Store instance
             self._instances[instance_id] = instance
             
+            # Set up transaction recording if available
+            await self._setup_transaction_recording(adapter, broker_name)
+            
+            # Record successful operation
+            operation_time = (time.time() - operation_start) * 1000  # Convert to ms
+            await self.record_operation_result(broker_name, 'create_adapter', True, operation_time)
+            
             logger.info(f"Created broker adapter instance: {instance_id} ({broker_name})")
             return adapter
             
         except Exception as e:
+            # Record failed operation
+            operation_time = (time.time() - operation_start) * 1000  # Convert to ms
+            await self.record_operation_result(broker_name, 'create_adapter', False, operation_time)
+            
             logger.error(f"Failed to create adapter for {broker_name}: {e}")
             raise
             
@@ -602,6 +663,84 @@ class BrokerFactory:
             await self._cleanup_instance(instance_id)
             
         logger.info("Broker factory shutdown complete")
+        
+    def is_operation_allowed(self, broker_name: str, operation: str) -> bool:
+        """
+        Check if operation is allowed by circuit breaker
+        
+        Args:
+            broker_name: Name of the broker
+            operation: Type of operation (e.g., 'create_adapter', 'authenticate')
+            
+        Returns:
+            True if operation is allowed, False if circuit is open
+        """
+        if not self._circuit_breaker:
+            return True
+            
+        # Check system-level circuit breaker
+        if self._circuit_breaker.system_breaker.state.value == 'OPEN':
+            logger.warning(f"System circuit breaker is OPEN - blocking {operation} for {broker_name}")
+            return False
+            
+        # Check broker-specific circuit breaker (treat as agent-level)
+        agent_key = f"broker_{broker_name}"
+        if agent_key in self._circuit_breaker.agent_breakers:
+            agent_breaker = self._circuit_breaker.agent_breakers[agent_key]
+            if agent_breaker.state.value == 'OPEN':
+                logger.warning(f"Broker circuit breaker is OPEN - blocking {operation} for {broker_name}")
+                return False
+                
+        return True
+        
+    async def record_operation_result(self, broker_name: str, operation: str, success: bool, response_time_ms: float = 0):
+        """
+        Record operation result for circuit breaker monitoring
+        
+        Args:
+            broker_name: Name of the broker
+            operation: Type of operation
+            success: Whether operation succeeded
+            response_time_ms: Response time in milliseconds
+        """
+        if not self._circuit_breaker:
+            return
+            
+        # Record metrics for circuit breaker
+        agent_key = f"broker_{broker_name}"
+        
+        if not success:
+            # Record error
+            self._circuit_breaker.error_counters[agent_key].append(time.time())
+            
+        # Record response time
+        self._circuit_breaker.response_times[agent_key].append(response_time_ms)
+        
+    async def _setup_transaction_recording(self, adapter: BrokerAdapter, broker_name: str):
+        """
+        Set up transaction recording for the adapter
+        
+        Args:
+            adapter: Broker adapter instance
+            broker_name: Name of the broker
+        """
+        if not TRANSACTION_RECORDING_AVAILABLE:
+            return
+            
+        # Create a transaction recorder function
+        async def transaction_recorder(transaction_data: Dict[str, Any]):
+            """Record transaction to transaction manager"""
+            try:
+                logger.debug(f"Recording transaction: {transaction_data.get('transaction_id', 'unknown')}")
+                # Here you would integrate with the actual transaction manager
+                # For now, just log the transaction
+                logger.info(f"Transaction recorded for {broker_name}: {transaction_data['transaction_type']}")
+            except Exception as e:
+                logger.error(f"Failed to record transaction for {broker_name}: {e}")
+        
+        # Add the recorder to the adapter
+        adapter.add_transaction_recorder(transaction_recorder)
+        logger.info(f"Transaction recording enabled for broker adapter: {broker_name}")
 
 
 # Global factory instance

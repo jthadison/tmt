@@ -5,7 +5,7 @@ Story 8.10 - Task 1: Design abstract broker interface
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any, Set, AsyncIterator, Union
+from typing import Dict, List, Optional, Any, Set, AsyncIterator, Union, Callable
 from decimal import Decimal
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -212,6 +212,9 @@ class BrokerAdapter(ABC):
         self.connection_status = 'disconnected'
         self.last_heartbeat = None
         self._capabilities: Optional[Set[BrokerCapability]] = None
+        
+        # Transaction recording hooks
+        self._transaction_recorders: List[Callable] = []
         
     @property
     @abstractmethod
@@ -588,6 +591,73 @@ class BrokerAdapter(ABC):
             errors.append("Stop orders require price")
             
         return errors
+        
+    def add_transaction_recorder(self, recorder: Callable):
+        """
+        Add a transaction recorder callback
+        
+        Args:
+            recorder: Callable that accepts transaction data
+        """
+        self._transaction_recorders.append(recorder)
+        
+    def remove_transaction_recorder(self, recorder: Callable):
+        """
+        Remove a transaction recorder callback
+        
+        Args:
+            recorder: Callable to remove
+        """
+        if recorder in self._transaction_recorders:
+            self._transaction_recorders.remove(recorder)
+            
+    async def _record_transaction(self, transaction_data: Dict[str, Any]):
+        """
+        Record transaction to all registered recorders
+        
+        Args:
+            transaction_data: Transaction data to record
+        """
+        for recorder in self._transaction_recorders:
+            try:
+                if asyncio.iscoroutinefunction(recorder):
+                    await recorder(transaction_data)
+                else:
+                    recorder(transaction_data)
+            except Exception as e:
+                logger.error(f"Error recording transaction with {recorder}: {e}")
+                
+    async def _record_order_transaction(self, order: UnifiedOrder, result: OrderResult, transaction_type: str = "ORDER_PLACE"):
+        """
+        Record order-related transaction
+        
+        Args:
+            order: The order that was placed/modified/cancelled
+            result: The result of the operation
+            transaction_type: Type of transaction (ORDER_PLACE, ORDER_MODIFY, ORDER_CANCEL)
+        """
+        transaction_data = {
+            'transaction_id': result.order_id or order.order_id,
+            'transaction_type': transaction_type,
+            'broker_name': self.broker_name,
+            'account_id': self.account_id,
+            'instrument': order.instrument,
+            'order_type': order.order_type.value,
+            'side': order.side.value,
+            'units': float(order.units),
+            'price': float(order.price) if order.price else None,
+            'stop_loss': float(order.stop_loss) if order.stop_loss else None,
+            'take_profit': float(order.take_profit) if order.take_profit else None,
+            'time_in_force': order.time_in_force.value,
+            'success': result.success,
+            'error_message': result.error_message if not result.success else None,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'client_order_id': order.client_order_id,
+            'fill_price': float(result.fill_price) if result.fill_price else None,
+            'commission': float(result.commission) if result.commission else None
+        }
+        
+        await self._record_transaction(transaction_data)
         
     async def get_trading_status(self, instrument: str) -> Dict[str, Any]:
         """
