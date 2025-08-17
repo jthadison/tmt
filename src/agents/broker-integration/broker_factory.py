@@ -107,20 +107,38 @@ class BrokerFactory:
         self._auto_discovery_enabled = True
         self._discovery_paths = ['src.agents.broker_integration.adapters']
         
-        # Start background tasks
+        # Background task management
         self._health_check_task = None
-        self._start_background_tasks()
+        self._shutdown_event = asyncio.Event()
+        self._tasks: List[asyncio.Task] = []
         
-    def _start_background_tasks(self):
+    async def initialize(self):
+        """Initialize async components - call this after creation"""
+        await self._start_background_tasks()
+        
+    async def _start_background_tasks(self):
         """Start background maintenance tasks"""
         if self._health_check_task is None:
-            self._health_check_task = asyncio.create_task(self._health_check_loop())
+            try:
+                self._health_check_task = asyncio.create_task(self._health_check_loop())
+                self._tasks.append(self._health_check_task)
+            except RuntimeError as e:
+                # No event loop running, tasks will be started when needed
+                logger.debug(f"Background tasks will be started on demand: {e}")
             
     async def _health_check_loop(self):
         """Background task for health checking instances"""
-        while True:
+        while not self._shutdown_event.is_set():
             try:
-                await asyncio.sleep(self._health_check_interval)
+                # Use wait_for to allow interruption on shutdown
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(), 
+                    timeout=self._health_check_interval
+                )
+                if self._shutdown_event.is_set():
+                    break
+            except asyncio.TimeoutError:
+                # Timeout means we should perform health check
                 await self._perform_health_checks()
             except Exception as e:
                 logger.error(f"Health check loop error: {e}")
@@ -251,7 +269,16 @@ class BrokerFactory:
             
         Returns:
             Configured BrokerAdapter instance
+            
+        Raises:
+            ValueError: If broker_name or config is None
+            UnsupportedBrokerError: If broker not registered
         """
+        if not broker_name:
+            raise ValueError("Broker name is required")
+        if config is None:
+            raise ValueError("Configuration is required")
+            
         if broker_name not in self._registrations:
             raise UnsupportedBrokerError(broker_name)
             
@@ -303,14 +330,21 @@ class BrokerFactory:
                             "Authentication returned False"
                         )
                     instance.status = BrokerStatus.CONNECTED
-                except Exception as e:
+                except BrokerAuthenticationError:
+                    # Already a properly formatted error, just re-raise
                     instance.status = BrokerStatus.ERROR
-                    instance.last_error = StandardBrokerError(
-                        error_code=StandardErrorCode.AUTHENTICATION_FAILED,
-                        message=str(e),
-                        context=ErrorContext(broker_name=broker_name)
-                    )
-                    raise BrokerAuthenticationError(broker_name, str(e))
+                    raise
+                except StandardBrokerError as e:
+                    # Already a broker error, store and re-raise
+                    instance.status = BrokerStatus.ERROR
+                    instance.last_error = e
+                    raise
+                except Exception as e:
+                    # Wrap generic exceptions
+                    instance.status = BrokerStatus.ERROR
+                    error = BrokerAuthenticationError(broker_name, str(e))
+                    instance.last_error = error
+                    raise error
             else:
                 instance.status = BrokerStatus.DISCONNECTED
                 
@@ -546,13 +580,21 @@ class BrokerFactory:
         """Shutdown factory and cleanup all resources"""
         logger.info("Shutting down broker factory...")
         
-        # Cancel background tasks
-        if self._health_check_task:
-            self._health_check_task.cancel()
-            try:
-                await self._health_check_task
-            except asyncio.CancelledError:
-                pass
+        # Signal shutdown
+        self._shutdown_event.set()
+        
+        # Cancel all background tasks
+        for task in self._tasks:
+            if not task.done():
+                task.cancel()
+        
+        # Wait for all tasks to complete
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        
+        # Clear task references
+        self._tasks.clear()
+        self._health_check_task = None
                 
         # Cleanup all instances
         instance_ids = list(self._instances.keys())

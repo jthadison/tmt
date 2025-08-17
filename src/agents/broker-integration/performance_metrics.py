@@ -159,6 +159,10 @@ class PerformanceMetricsCollector:
         self.execution_history: Dict[str, List[OrderExecution]] = {}  # broker_name -> executions
         self.price_feed_history: Dict[str, List[Tuple[datetime, float]]] = {}  # broker_name -> (timestamp, latency)
         
+        # Thread-safety locks
+        self._metrics_lock = asyncio.Lock()
+        self._history_lock = asyncio.Lock()
+        
         # Collection settings
         self.max_history_size = 10000
         self.collection_interval = 60  # seconds
@@ -234,7 +238,7 @@ class PerformanceMetricsCollector:
             latency_ms = (datetime.now() - latency_start).total_seconds() * 1000
             
             # Record latency metric
-            self._add_metric_snapshot(
+            await self._add_metric_snapshot(
                 broker_name,
                 MetricSnapshot(
                     broker_name=broker_name,
@@ -248,7 +252,7 @@ class PerformanceMetricsCollector:
             
             # Record availability
             availability = 1.0 if health_status.get('status') == 'healthy' else 0.0
-            self._add_metric_snapshot(
+            await self._add_metric_snapshot(
                 broker_name,
                 MetricSnapshot(
                     broker_name=broker_name,
@@ -261,7 +265,7 @@ class PerformanceMetricsCollector:
             
         except asyncio.TimeoutError:
             # Record timeout as high latency and unavailability
-            self._add_metric_snapshot(
+            await self._add_metric_snapshot(
                 broker_name,
                 MetricSnapshot(
                     broker_name=broker_name,
@@ -273,7 +277,7 @@ class PerformanceMetricsCollector:
                 )
             )
             
-            self._add_metric_snapshot(
+            await self._add_metric_snapshot(
                 broker_name,
                 MetricSnapshot(
                     broker_name=broker_name,
@@ -288,7 +292,7 @@ class PerformanceMetricsCollector:
         await self._test_price_feed_latency(broker_name, adapter)
         
         # Calculate success/error rates from recent executions
-        self._calculate_reliability_metrics(broker_name, timestamp)
+        await self._calculate_reliability_metrics(broker_name, timestamp)
         
     async def _test_price_feed_latency(self, broker_name: str, adapter: BrokerAdapter):
         """Test price feed latency"""
@@ -318,7 +322,7 @@ class PerformanceMetricsCollector:
         except Exception as e:
             logger.debug(f"Price feed test failed for {broker_name}: {e}")
             
-    def _calculate_reliability_metrics(self, broker_name: str, timestamp: datetime):
+    async def _calculate_reliability_metrics(self, broker_name: str, timestamp: datetime):
         """Calculate reliability metrics from execution history"""
         executions = self.execution_history[broker_name]
         
@@ -336,7 +340,7 @@ class PerformanceMetricsCollector:
         success_count = sum(1 for exec in recent_executions if exec.success)
         success_rate = success_count / len(recent_executions)
         
-        self._add_metric_snapshot(
+        await self._add_metric_snapshot(
             broker_name,
             MetricSnapshot(
                 broker_name=broker_name,
@@ -349,7 +353,7 @@ class PerformanceMetricsCollector:
         
         # Calculate error rate
         error_rate = 1.0 - success_rate
-        self._add_metric_snapshot(
+        await self._add_metric_snapshot(
             broker_name,
             MetricSnapshot(
                 broker_name=broker_name,
@@ -365,7 +369,7 @@ class PerformanceMetricsCollector:
             time_span = (recent_executions[-1].execution_time - recent_executions[0].execution_time).total_seconds()
             if time_span > 0:
                 throughput = len(recent_executions) / time_span
-                self._add_metric_snapshot(
+                await self._add_metric_snapshot(
                     broker_name,
                     MetricSnapshot(
                         broker_name=broker_name,
@@ -376,23 +380,25 @@ class PerformanceMetricsCollector:
                     )
                 )
                 
-    def _add_metric_snapshot(self, broker_name: str, snapshot: MetricSnapshot):
-        """Add metric snapshot to history"""
-        self.metric_history[broker_name].append(snapshot)
-        
-        # Keep history bounded
-        if len(self.metric_history[broker_name]) > self.max_history_size:
-            self.metric_history[broker_name] = self.metric_history[broker_name][-self.max_history_size:]
-            
-    def record_execution(self, execution: OrderExecution):
-        """Record order execution for metrics"""
-        broker_name = execution.broker_name
-        if broker_name in self.execution_history:
-            self.execution_history[broker_name].append(execution)
+    async def _add_metric_snapshot(self, broker_name: str, snapshot: MetricSnapshot):
+        """Add metric snapshot to history (thread-safe)"""
+        async with self._metrics_lock:
+            self.metric_history[broker_name].append(snapshot)
             
             # Keep history bounded
-            if len(self.execution_history[broker_name]) > self.max_history_size:
-                self.execution_history[broker_name] = self.execution_history[broker_name][-self.max_history_size:]
+            if len(self.metric_history[broker_name]) > self.max_history_size:
+                self.metric_history[broker_name] = self.metric_history[broker_name][-self.max_history_size:]
+            
+    async def record_execution(self, execution: OrderExecution):
+        """Record order execution for metrics (thread-safe)"""
+        broker_name = execution.broker_name
+        async with self._history_lock:
+            if broker_name in self.execution_history:
+                self.execution_history[broker_name].append(execution)
+                
+                # Keep history bounded
+                if len(self.execution_history[broker_name]) > self.max_history_size:
+                    self.execution_history[broker_name] = self.execution_history[broker_name][-self.max_history_size:]
                 
     async def generate_broker_benchmark(self, 
                                        broker_name: str,

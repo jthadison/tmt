@@ -448,7 +448,12 @@ class BrokerAdapter(ABC):
             
         Returns:
             PriceTick object or None if not available
+            
+        Raises:
+            ValueError: If instrument is None or empty
         """
+        if not instrument:
+            raise ValueError("Instrument is required")
         pass
         
     @abstractmethod
@@ -461,7 +466,12 @@ class BrokerAdapter(ABC):
             
         Returns:
             Dictionary mapping instrument to PriceTick
+            
+        Raises:
+            ValueError: If instruments is None or empty
         """
+        if not instruments:
+            raise ValueError("Instruments list is required and cannot be empty")
         pass
         
     @abstractmethod
