@@ -1,0 +1,309 @@
+# Rolling Update Configuration for Broker Integration
+# This provides an alternative to blue-green for smaller, less risky updates
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broker-integration-rolling
+  namespace: tmt-production
+  labels:
+    app: broker-integration
+    deployment-strategy: rolling
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1      # Only 1 pod can be unavailable during update
+      maxSurge: 1           # Only 1 additional pod can be created during update
+  selector:
+    matchLabels:
+      app: broker-integration
+      deployment-strategy: rolling
+  template:
+    metadata:
+      labels:
+        app: broker-integration
+        deployment-strategy: rolling
+        component: agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        deployment.kubernetes.io/revision: "1"
+    spec:
+      serviceAccountName: broker-integration-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: broker-service
+        image: tmt/broker-integration:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: DEPLOYMENT_STRATEGY
+          value: "rolling"
+        - name: VAULT_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: broker-integration-config
+              key: vault_addr
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: broker-integration-secrets
+              key: vault_token
+        - name: PROMETHEUS_PORT
+          value: "9090"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        # Graceful shutdown configuration
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Initiating graceful shutdown..."
+                # Send SIGTERM to the application
+                kill -TERM 1
+                # Wait for connections to drain
+                sleep 15
+        terminationGracePeriodSeconds: 30
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: data
+          mountPath: /app/data
+        - name: temp-retention
+          mountPath: /app/temp_retention
+        - name: transaction-data
+          mountPath: /app/transaction_data
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: data
+        persistentVolumeClaim:
+          claimName: broker-integration-data
+      - name: temp-retention
+        persistentVolumeClaim:
+          claimName: broker-integration-temp
+      - name: transaction-data
+        persistentVolumeClaim:
+          claimName: broker-integration-transactions
+      # Pod disruption budget to ensure availability during updates
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - broker-integration
+              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: "tmt.com/broker-integration"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: broker-integration-pdb
+  namespace: tmt-production
+  labels:
+    app: broker-integration
+spec:
+  minAvailable: 2  # Ensure at least 2 pods are always available
+  selector:
+    matchLabels:
+      app: broker-integration
+---
+# Rolling Update Configuration Script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rolling-update-script
+  namespace: tmt-production
+  labels:
+    app: broker-integration
+data:
+  rolling-update.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    NEW_IMAGE=${1:-""}
+    TIMEOUT=${2:-"600"}
+    
+    if [ -z "$NEW_IMAGE" ]; then
+        echo "Usage: $0 <new-image> [timeout-seconds]"
+        exit 1
+    fi
+    
+    echo "Starting rolling update for broker-integration"
+    echo "New image: $NEW_IMAGE"
+    echo "Timeout: $TIMEOUT seconds"
+    
+    # Pre-deployment validation
+    echo "Validating image availability..."
+    if ! docker manifest inspect "$NEW_IMAGE" > /dev/null 2>&1; then
+        echo "Error: Image $NEW_IMAGE not found or not accessible"
+        exit 1
+    fi
+    
+    # Record deployment in annotation
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    kubectl annotate deployment broker-integration-rolling -n tmt-production \
+        deployment.kubernetes.io/last-update="$TIMESTAMP" \
+        deployment.kubernetes.io/updated-image="$NEW_IMAGE" \
+        --overwrite
+    
+    # Update the deployment with new image
+    kubectl set image deployment/broker-integration-rolling -n tmt-production \
+        broker-service="$NEW_IMAGE"
+    
+    # Wait for rollout to complete
+    echo "Waiting for rolling update to complete..."
+    kubectl rollout status deployment/broker-integration-rolling -n tmt-production --timeout=${TIMEOUT}s
+    
+    # Verify deployment health
+    echo "Verifying deployment health..."
+    sleep 30  # Allow metrics to populate
+    
+    # Check that all pods are ready
+    READY_PODS=$(kubectl get deployment broker-integration-rolling -n tmt-production -o jsonpath='{.status.readyReplicas}')
+    DESIRED_PODS=$(kubectl get deployment broker-integration-rolling -n tmt-production -o jsonpath='{.spec.replicas}')
+    
+    if [ "$READY_PODS" != "$DESIRED_PODS" ]; then
+        echo "Error: Only $READY_PODS/$DESIRED_PODS pods are ready"
+        exit 1
+    fi
+    
+    # Test health endpoints
+    SERVICE_URL="http://broker-integration-service.tmt-production.svc.cluster.local"
+    for i in {1..3}; do
+        if kubectl run test-pod-$i --rm -i --restart=Never --image=curlimages/curl:latest -- \
+           curl -f "$SERVICE_URL/health" > /dev/null 2>&1; then
+            echo "Health check $i/3 passed"
+        else
+            echo "Health check $i/3 failed"
+            exit 1
+        fi
+        sleep 5
+    done
+    
+    echo "Rolling update completed successfully!"
+    echo "Deployment status:"
+    kubectl get deployment broker-integration-rolling -n tmt-production
+    echo ""
+    echo "Pod status:"
+    kubectl get pods -n tmt-production -l app=broker-integration,deployment-strategy=rolling
+    
+  rollback.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    REVISION=${1:-""}
+    
+    echo "Rolling back broker-integration deployment..."
+    
+    if [ -n "$REVISION" ]; then
+        echo "Rolling back to revision: $REVISION"
+        kubectl rollout undo deployment/broker-integration-rolling -n tmt-production --to-revision="$REVISION"
+    else
+        echo "Rolling back to previous revision"
+        kubectl rollout undo deployment/broker-integration-rolling -n tmt-production
+    fi
+    
+    # Wait for rollback to complete
+    kubectl rollout status deployment/broker-integration-rolling -n tmt-production --timeout=300s
+    
+    echo "Rollback completed successfully!"
+    
+  check-health.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    SERVICE_URL="http://broker-integration-service.tmt-production.svc.cluster.local"
+    CHECKS=${1:-5}
+    
+    echo "Running $CHECKS health checks..."
+    
+    for i in $(seq 1 $CHECKS); do
+        echo "Health check $i/$CHECKS..."
+        
+        # Check health endpoint
+        if kubectl run health-check-$i --rm -i --restart=Never --image=curlimages/curl:latest -- \
+           curl -f "$SERVICE_URL/health"; then
+            echo "✓ Health check passed"
+        else
+            echo "✗ Health check failed"
+            exit 1
+        fi
+        
+        # Check metrics endpoint
+        if kubectl run metrics-check-$i --rm -i --restart=Never --image=curlimages/curl:latest -- \
+           curl -f "$SERVICE_URL:9090/metrics" | grep -q "broker_requests_total"; then
+            echo "✓ Metrics check passed"
+        else
+            echo "✗ Metrics check failed"
+            exit 1
+        fi
+        
+        sleep 10
+    done
+    
+    echo "All health checks passed!"

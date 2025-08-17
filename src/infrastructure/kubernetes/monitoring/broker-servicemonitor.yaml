@@ -1,0 +1,228 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: broker-integration-metrics
+  namespace: monitoring
+  labels:
+    app: broker-integration
+    component: monitoring
+    team: platform
+spec:
+  selector:
+    matchLabels:
+      app: broker-integration
+  namespaceSelector:
+    matchNames:
+    - tmt-production
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scrapeTimeout: 10s
+    honorLabels: true
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: "broker_(requests|connections|errors|latency).*"
+      action: keep
+    - sourceLabels: [__name__]
+      regex: "python_.*"
+      action: drop
+    - sourceLabels: [job]
+      targetLabel: job
+      replacement: "broker-integration"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: broker-integration-rules
+  namespace: monitoring
+  labels:
+    app: broker-integration
+    component: monitoring
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: broker-integration.performance
+    interval: 30s
+    rules:
+    # Request rate calculation
+    - record: broker:request_rate_5m
+      expr: sum(rate(broker_requests_total[5m])) by (instance, pod, namespace)
+      
+    # Error rate calculation
+    - record: broker:error_rate_5m
+      expr: |
+        sum(rate(broker_errors_total[5m])) by (instance, pod, namespace) /
+        sum(rate(broker_requests_total[5m])) by (instance, pod, namespace)
+        
+    # Success rate calculation
+    - record: broker:success_rate_5m
+      expr: |
+        (sum(rate(broker_requests_total{status!~"5.."}[5m])) by (instance, pod, namespace)) /
+        (sum(rate(broker_requests_total[5m])) by (instance, pod, namespace))
+        
+    # Average response time
+    - record: broker:avg_response_time_5m
+      expr: |
+        sum(rate(broker_request_duration_seconds_sum[5m])) by (instance, pod, namespace) /
+        sum(rate(broker_request_duration_seconds_count[5m])) by (instance, pod, namespace)
+        
+    # 95th percentile response time
+    - record: broker:response_time_p95_5m
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(broker_request_duration_seconds_bucket[5m])) by (instance, pod, namespace, le)
+        )
+        
+    # 99th percentile response time  
+    - record: broker:response_time_p99_5m
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(broker_request_duration_seconds_bucket[5m])) by (instance, pod, namespace, le)
+        )
+        
+    # Connection utilization
+    - record: broker:connection_utilization
+      expr: |
+        broker_active_connections / 
+        (broker_active_connections + on(instance) group_left() vector(20))
+        
+    # Authentication success rate
+    - record: broker:auth_success_rate_5m
+      expr: |
+        sum(rate(broker_auth_attempts_total{status="success"}[5m])) by (instance, pod, namespace) /
+        sum(rate(broker_auth_attempts_total[5m])) by (instance, pod, namespace)
+
+  - name: broker-integration.alerts
+    rules:
+    # High error rate alert
+    - alert: BrokerHighErrorRate
+      expr: broker:error_rate_5m > 0.05
+      for: 2m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "High error rate in broker integration"
+        description: "Broker integration error rate is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-high-error-rate"
+        
+    # Critical error rate alert
+    - alert: BrokerCriticalErrorRate
+      expr: broker:error_rate_5m > 0.10
+      for: 1m
+      labels:
+        severity: critical
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "Critical error rate in broker integration"
+        description: "Broker integration error rate is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-critical-error-rate"
+        
+    # High response time alert
+    - alert: BrokerHighLatency
+      expr: broker:response_time_p95_5m > 2.0
+      for: 3m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "High latency in broker integration"
+        description: "95th percentile response time is {{ $value }}s for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-high-latency"
+        
+    # Service down alert
+    - alert: BrokerServiceDown
+      expr: up{job="broker-integration"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "Broker integration service is down"
+        description: "Broker integration service is down for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-service-down"
+        
+    # Low success rate alert
+    - alert: BrokerLowSuccessRate
+      expr: broker:success_rate_5m < 0.95
+      for: 2m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "Low success rate in broker integration"
+        description: "Success rate is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-low-success-rate"
+        
+    # Connection pool exhaustion
+    - alert: BrokerConnectionPoolExhaustion
+      expr: broker:connection_utilization > 0.90
+      for: 1m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "Broker connection pool near exhaustion"
+        description: "Connection pool utilization is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-connection-pool-exhaustion"
+        
+    # Authentication failures
+    - alert: BrokerAuthenticationFailures
+      expr: broker:auth_success_rate_5m < 0.95
+      for: 2m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "High authentication failure rate"
+        description: "Authentication success rate is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-auth-failures"
+        
+    # Memory usage high
+    - alert: BrokerHighMemoryUsage
+      expr: |
+        (container_memory_working_set_bytes{container="broker-service"} / 
+         container_spec_memory_limit_bytes{container="broker-service"}) > 0.85
+      for: 3m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "High memory usage in broker integration"
+        description: "Memory usage is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-high-memory"
+        
+    # CPU usage high
+    - alert: BrokerHighCPUUsage
+      expr: |
+        (rate(container_cpu_usage_seconds_total{container="broker-service"}[5m]) /
+         container_spec_cpu_quota{container="broker-service"} * 
+         container_spec_cpu_period{container="broker-service"}) > 0.80
+      for: 5m
+      labels:
+        severity: warning
+        team: platform
+        component: broker-integration
+      annotations:
+        summary: "High CPU usage in broker integration"
+        description: "CPU usage is {{ $value | humanizePercentage }} for pod {{ $labels.pod }}"
+        runbook_url: "https://docs.tmt.internal/runbooks/broker-high-cpu"

@@ -10,10 +10,11 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from pydantic import BaseModel
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 from credential_manager import OandaCredentialManager, CredentialValidationError, VaultConnectionError
 from oanda_auth_handler import OandaAuthHandler, AuthenticationError
@@ -28,6 +29,15 @@ logger = logging.getLogger(__name__)
 
 # Security
 security = HTTPBearer()
+
+# Prometheus metrics
+REQUEST_COUNT = Counter('broker_requests_total', 'Total broker API requests', ['method', 'endpoint', 'status'])
+REQUEST_DURATION = Histogram('broker_request_duration_seconds', 'Request duration in seconds', ['method', 'endpoint'])
+ACTIVE_CONNECTIONS = Gauge('broker_active_connections', 'Number of active broker connections')
+AUTHENTICATION_ATTEMPTS = Counter('broker_auth_attempts_total', 'Authentication attempts', ['status'])
+SESSION_COUNT = Gauge('broker_active_sessions', 'Number of active sessions')
+ERROR_COUNT = Counter('broker_errors_total', 'Total broker errors', ['error_type'])
+RECONNECTION_ATTEMPTS = Counter('broker_reconnection_attempts_total', 'Reconnection attempts', ['status'])
 
 # Pydantic models for API
 class CredentialRequest(BaseModel):
@@ -123,6 +133,7 @@ async def shutdown_components():
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
+    app.state.start_time = datetime.utcnow()
     await initialize_components()
     yield
     # Shutdown
@@ -146,34 +157,157 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    health_status = {}
-    
-    if credential_manager:
-        health_status['credential_manager'] = credential_manager.health_check()
-    
-    if connection_pool:
-        pool_stats = connection_pool.get_pool_stats()
-        health_status['connection_pool'] = {
-            'active_connections': pool_stats['active_connections'],
-            'pool_size': pool_stats['pool_size']
+    """Health check endpoint for Docker/Kubernetes liveness probe"""
+    try:
+        health_status = {}
+        overall_status = 'healthy'
+        
+        # Check credential manager
+        if credential_manager:
+            try:
+                health_status['credential_manager'] = credential_manager.health_check()
+            except Exception as e:
+                health_status['credential_manager'] = {'status': 'unhealthy', 'error': str(e)}
+                overall_status = 'degraded'
+        
+        # Check connection pool
+        if connection_pool:
+            try:
+                pool_stats = connection_pool.get_pool_stats()
+                health_status['connection_pool'] = {
+                    'status': 'healthy',
+                    'active_connections': pool_stats['active_connections'],
+                    'pool_size': pool_stats['pool_size']
+                }
+                # Mark as unhealthy if no connections available
+                if pool_stats['available_connections'] == 0:
+                    health_status['connection_pool']['status'] = 'warning'
+                    overall_status = 'degraded'
+            except Exception as e:
+                health_status['connection_pool'] = {'status': 'unhealthy', 'error': str(e)}
+                overall_status = 'unhealthy'
+        
+        # Check reconnection manager
+        if reconnection_manager:
+            try:
+                health_status['reconnection_manager'] = reconnection_manager.get_system_health()
+                if not health_status['reconnection_manager'].get('operational', True):
+                    overall_status = 'degraded'
+            except Exception as e:
+                health_status['reconnection_manager'] = {'status': 'unhealthy', 'error': str(e)}
+                overall_status = 'degraded'
+        
+        # Check session manager
+        if session_manager:
+            try:
+                session_stats = session_manager.get_session_statistics()
+                health_status['session_manager'] = {
+                    'status': 'healthy',
+                    'total_sessions': session_stats['total_sessions'],
+                    'active_sessions': session_stats['session_states']['active']
+                }
+            except Exception as e:
+                health_status['session_manager'] = {'status': 'unhealthy', 'error': str(e)}
+                overall_status = 'degraded'
+        
+        return {
+            'status': overall_status,
+            'timestamp': datetime.utcnow().isoformat(),
+            'components': health_status,
+            'uptime_seconds': (datetime.utcnow() - app.state.start_time).total_seconds() if hasattr(app.state, 'start_time') else 0
         }
-    
-    if reconnection_manager:
-        health_status['reconnection_manager'] = reconnection_manager.get_system_health()
-    
-    if session_manager:
-        session_stats = session_manager.get_session_statistics()
-        health_status['session_manager'] = {
-            'total_sessions': session_stats['total_sessions'],
-            'active_sessions': session_stats['session_states']['active']
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            'status': 'unhealthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'error': str(e)
         }
-    
-    return {
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'components': health_status
-    }
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check endpoint for Kubernetes readiness probe"""
+    try:
+        # Check if all critical components are ready
+        ready_status = {}
+        is_ready = True
+        
+        # Critical: Credential manager must be functional
+        if not credential_manager:
+            ready_status['credential_manager'] = {'ready': False, 'reason': 'Not initialized'}
+            is_ready = False
+        else:
+            try:
+                health = credential_manager.health_check()
+                if health.get('vault_connected', False):
+                    ready_status['credential_manager'] = {'ready': True}
+                else:
+                    ready_status['credential_manager'] = {'ready': False, 'reason': 'Vault not connected'}
+                    is_ready = False
+            except Exception as e:
+                ready_status['credential_manager'] = {'ready': False, 'reason': str(e)}
+                is_ready = False
+        
+        # Critical: Connection pool must be available
+        if not connection_pool:
+            ready_status['connection_pool'] = {'ready': False, 'reason': 'Not initialized'}
+            is_ready = False
+        else:
+            try:
+                pool_stats = connection_pool.get_pool_stats()
+                if pool_stats['available_connections'] > 0:
+                    ready_status['connection_pool'] = {'ready': True}
+                else:
+                    ready_status['connection_pool'] = {'ready': False, 'reason': 'No available connections'}
+                    is_ready = False
+            except Exception as e:
+                ready_status['connection_pool'] = {'ready': False, 'reason': str(e)}
+                is_ready = False
+        
+        # Non-critical: Auth handler should be ready but service can start without it
+        if auth_handler:
+            ready_status['auth_handler'] = {'ready': True}
+        else:
+            ready_status['auth_handler'] = {'ready': False, 'reason': 'Not initialized'}
+        
+        status_code = 200 if is_ready else 503
+        
+        return {
+            'ready': is_ready,
+            'timestamp': datetime.utcnow().isoformat(),
+            'components': ready_status
+        }
+        
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return {
+            'ready': False,
+            'timestamp': datetime.utcnow().isoformat(),
+            'error': str(e)
+        }
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus metrics endpoint"""
+    try:
+        # Update current metrics before serving
+        if connection_pool:
+            pool_stats = connection_pool.get_pool_stats()
+            ACTIVE_CONNECTIONS.set(pool_stats['active_connections'])
+        
+        if session_manager:
+            session_stats = session_manager.get_session_statistics()
+            SESSION_COUNT.set(session_stats['session_states']['active'])
+        
+        # Generate Prometheus format
+        metrics_data = generate_latest()
+        return Response(content=metrics_data, media_type=CONTENT_TYPE_LATEST)
+        
+    except Exception as e:
+        logger.error(f"Error generating metrics: {e}")
+        ERROR_COUNT.labels(error_type='metrics_generation').inc()
+        raise HTTPException(status_code=500, detail='Failed to generate metrics')
 
 @app.post("/api/credentials/store")
 async def store_credentials(request: CredentialRequest, user: str = Depends(get_current_user)):
