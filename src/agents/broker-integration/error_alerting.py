@@ -762,7 +762,7 @@ def error_handled(operation: str,
                 
                 # Handle error
                 await error_handler.handle_error(
-                    error, operation, service_name,
+                    e, operation, service_name,
                     account_id=account_id,
                     request_id=request_id,
                     correlation_id=correlation_id,
