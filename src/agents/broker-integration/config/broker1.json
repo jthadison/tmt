@@ -1,0 +1,19 @@
+{
+  "broker_name": "broker1",
+  "display_name": "Broker 1",
+  "enabled": true,
+  "credentials": {
+    "api_key": "test_key",
+    "secret_key": null,
+    "access_token": null,
+    "account_id": null,
+    "environment": "practice",
+    "additional_params": {}
+  },
+  "endpoints": null,
+  "limits": null,
+  "settings": null,
+  "metadata": {},
+  "version": "1.0.0",
+  "last_updated": "2025-08-17T15:48:28.643066+00:00"
+}

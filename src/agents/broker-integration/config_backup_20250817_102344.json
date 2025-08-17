@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "backup_timestamp": "2025-08-17T15:23:44.511644+00:00",
+    "environment": "development",
+    "total_configurations": 1
+  },
+  "configurations": {
+    "test_broker": {
+      "broker_name": "test_broker",
+      "display_name": "Test Broker",
+      "enabled": true,
+      "credentials": null,
+      "endpoints": null,
+      "limits": null,
+      "settings": null,
+      "metadata": {},
+      "version": "1.0.0",
+      "last_updated": "2025-08-17T15:23:44.509589+00:00"
+    }
+  },
+  "history": {
+    "test_broker": [
+      {
+        "configuration": {
+          "broker_name": "test_broker",
+          "display_name": "Test Broker",
+          "enabled": true,
+          "credentials": null,
+          "endpoints": null,
+          "limits": null,
+          "settings": null,
+          "metadata": {},
+          "version": "1.0.0",
+          "last_updated": "2025-08-17T15:23:44.509589+00:00"
+        },
+        "timestamp": "2025-08-17T15:23:44.509627+00:00",
+        "source": "programmatic"
+      }
+    ]
+  }
+}
