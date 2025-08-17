@@ -252,7 +252,7 @@ class TestBrokerAdapter:
     def test_adapter_properties(self, mock_adapter):
         """Test adapter basic properties"""
         assert mock_adapter.broker_name == 'test_broker'
-        assert mock_adapter.broker_display_name == 'Mock Test_broker'
+        assert mock_adapter.broker_display_name == 'Mock Test_Broker'
         assert mock_adapter.api_version == '1.0.0'
         assert BrokerCapability.MARKET_ORDERS in mock_adapter.capabilities
         assert 'EUR_USD' in mock_adapter.supported_instruments
@@ -885,7 +885,7 @@ class TestPerformanceMetrics:
         collector.register_broker('test_broker', adapter)
         
         # Add some mock metrics
-        from ..performance_metrics import MetricSnapshot, MetricType
+        from performance_metrics import MetricSnapshot, MetricType
         
         timestamp = datetime.now(timezone.utc)
         collector.metric_history['test_broker'] = [
@@ -927,7 +927,7 @@ class TestPerformanceMetrics:
             collector.register_broker(broker_name, adapter)
             
             # Add mock metrics
-            from ..performance_metrics import MetricSnapshot, MetricType
+            from performance_metrics import MetricSnapshot, MetricType
             
             timestamp = datetime.now(timezone.utc)
             collector.metric_history[broker_name] = [
@@ -983,7 +983,7 @@ async def test_integration_multi_broker_workflow():
     for i in range(2):
         broker_name = f'broker{i+1}'
         config = config_manager.get_configuration(broker_name)
-        adapter = await factory.create_adapter(broker_name, config.to_dict())
+        adapter = await factory.create_adapter(broker_name, config.to_dict(include_secrets=True))
         adapters[broker_name] = adapter
         
         # Register for A/B testing and metrics

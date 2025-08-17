@@ -1,6 +1,6 @@
 {
-  "broker_name": "broker2",
-  "display_name": "Broker 2",
+  "broker_name": "test_broker",
+  "display_name": "Test Broker",
   "enabled": true,
   "credentials": {
     "api_key": "test_key",
@@ -15,5 +15,5 @@
   "settings": null,
   "metadata": {},
   "version": "1.0.0",
-  "last_updated": "2025-08-17T15:48:28.645329+00:00"
+  "last_updated": "2025-08-17T15:48:12.750115+00:00"
 }
