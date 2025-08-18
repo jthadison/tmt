@@ -202,14 +202,14 @@ services:
     image: prom/alertmanager:v0.26.0
     container_name: trading-alertmanager
     ports:
-      - "9093:9093"
+      - "9094:9093"
     volumes:
       - ./src/infrastructure/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
-      - '--web.external-url=http://localhost:9093'
+      - '--web.external-url=http://localhost:9094'
     networks:
       - trading-network
     healthcheck:
