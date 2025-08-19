@@ -29,11 +29,11 @@ export default function Sidebar() {
         </div>
         <div className="mb-6">
           <h2 className="text-xs uppercase text-gray-500 dark:text-gray-500 font-semibold mb-3">Analytics</h2>
-          <a href="#" className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+          <a href="/performance-analytics" className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
             </svg>
-            <span>Performance</span>
+            <span>Performance Analytics</span>
           </a>
           <a href="#" className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
