@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { TradingPersonality, PersonalityArchetype } from '@/types/personality'
+import { TradingPersonality } from '@/types/personality'
 
 /**
  * Mock personality data for development
@@ -256,7 +256,7 @@ export function PersonalityManager({
       filtered = filtered.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.metadata.archetype.toLowerCase().includes(searchTerm.toLowerCase())
+        p.metadata?.archetype?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -268,9 +268,9 @@ export function PersonalityManager({
         case 'created':
           return b.createdAt.getTime() - a.createdAt.getTime()
         case 'performance':
-          return b.metadata.performance.winRate - a.metadata.performance.winRate
+          return (b.metadata?.performance?.winRate || 0) - (a.metadata?.performance?.winRate || 0)
         case 'experience':
-          return b.evolution.experienceLevel - a.evolution.experienceLevel
+          return (b.evolution?.experienceLevel || 0) - (a.evolution?.experienceLevel || 0)
         default:
           return 0
       }
@@ -282,9 +282,9 @@ export function PersonalityManager({
   // Calculate summary statistics
   const stats = useMemo(() => {
     const active = personalities.filter(p => p.isActive).length
-    const avgWinRate = personalities.reduce((sum, p) => sum + p.metadata.performance.winRate, 0) / personalities.length
-    const avgExperience = personalities.reduce((sum, p) => sum + p.evolution.experienceLevel, 0) / personalities.length
-    const totalTrades = personalities.reduce((sum, p) => sum + p.metadata.performance.totalTrades, 0)
+    const avgWinRate = personalities.reduce((sum, p) => sum + (p.metadata?.performance?.winRate || 0), 0) / personalities.length
+    const avgExperience = personalities.reduce((sum, p) => sum + (p.evolution?.experienceLevel || 0), 0) / personalities.length
+    const totalTrades = personalities.reduce((sum, p) => sum + (p.metadata?.performance?.totalTrades || 0), 0)
 
     return {
       total: personalities.length,
@@ -315,8 +315,8 @@ export function PersonalityManager({
   //   }).format(value / 100)
   // }
 
-  const getArchetypeIcon = (archetype: PersonalityArchetype): string => {
-    const icons: Record<PersonalityArchetype, string> = {
+  const getArchetypeIcon = (archetype: string): string => {
+    const icons: Record<string, string> = {
       conservative_scalper: '🛡️',
       aggressive_swing_trader: '⚡',
       morning_momentum_trader: '🌅',
@@ -516,7 +516,7 @@ export function PersonalityManager({
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
-                <div className="text-2xl">{getArchetypeIcon(personality.metadata.archetype)}</div>
+                <div className="text-2xl">{getArchetypeIcon(personality.metadata?.archetype || '')}</div>
                 <div>
                   <h3 className="text-white font-medium">{personality.name}</h3>
                   <div className="text-gray-400 text-sm">{personality.accountId}</div>
@@ -524,8 +524,8 @@ export function PersonalityManager({
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${personality.isActive ? 'bg-green-400' : 'bg-gray-500'}`}></div>
-                <span className={getTrendColor(personality.metadata.performance.trend)}>
-                  {getTrendIcon(personality.metadata.performance.trend)}
+                <span className={getTrendColor(personality.metadata?.performance?.trend || '')}>
+                  {getTrendIcon(personality.metadata?.performance?.trend || '')}
                 </span>
               </div>
             </div>
@@ -539,20 +539,20 @@ export function PersonalityManager({
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <div className="text-gray-400 text-xs">Win Rate</div>
-                <div className="text-white font-medium">{personality.metadata.performance.winRate.toFixed(1)}%</div>
+                <div className="text-white font-medium">{(personality.metadata?.performance?.winRate || 0).toFixed(1)}%</div>
               </div>
               <div>
                 <div className="text-gray-400 text-xs">Experience</div>
-                <div className="text-white font-medium">{personality.evolution.experienceLevel}/100</div>
+                <div className="text-white font-medium">{personality.evolution?.experienceLevel || 0}/100</div>
               </div>
               <div>
                 <div className="text-gray-400 text-xs">Trades</div>
-                <div className="text-white font-medium">{personality.metadata.performance.totalTrades}</div>
+                <div className="text-white font-medium">{personality.metadata?.performance?.totalTrades || 0}</div>
               </div>
               <div>
                 <div className="text-gray-400 text-xs">Avg P&L</div>
-                <div className={`font-medium ${personality.metadata.performance.avgProfitPerTrade >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {formatCurrency(personality.metadata.performance.avgProfitPerTrade)}
+                <div className={`font-medium ${(personality.metadata?.performance?.avgProfitPerTrade || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {formatCurrency(personality.metadata?.performance?.avgProfitPerTrade || 0)}
                 </div>
               </div>
             </div>
@@ -562,15 +562,15 @@ export function PersonalityManager({
               <div className="text-gray-400 text-xs mb-2">Risk Profile</div>
               <div className="flex justify-between items-center">
                 <span className="text-white text-sm">
-                  {personality.riskAppetite.baseRiskPerTrade.toFixed(1)}% per trade
+                  {(personality.riskAppetite?.baseRiskPerTrade || 0).toFixed(1)}% per trade
                 </span>
                 <span className={`px-2 py-1 rounded text-xs ${
-                  personality.riskAppetite.baseRiskPerTrade > 1.5 ? 'bg-red-900/30 text-red-400' :
-                  personality.riskAppetite.baseRiskPerTrade > 1.0 ? 'bg-yellow-900/30 text-yellow-400' :
+                  (personality.riskAppetite?.baseRiskPerTrade || 0) > 1.5 ? 'bg-red-900/30 text-red-400' :
+                  (personality.riskAppetite?.baseRiskPerTrade || 0) > 1.0 ? 'bg-yellow-900/30 text-yellow-400' :
                   'bg-green-900/30 text-green-400'
                 }`}>
-                  {personality.riskAppetite.baseRiskPerTrade > 1.5 ? 'Aggressive' :
-                   personality.riskAppetite.baseRiskPerTrade > 1.0 ? 'Moderate' : 'Conservative'}
+                  {(personality.riskAppetite?.baseRiskPerTrade || 0) > 1.5 ? 'Aggressive' :
+                   (personality.riskAppetite?.baseRiskPerTrade || 0) > 1.0 ? 'Moderate' : 'Conservative'}
                 </span>
               </div>
             </div>
@@ -598,7 +598,7 @@ export function PersonalityManager({
             <div className="mt-4 pt-4 border-t border-gray-600">
               <div className="text-gray-400 text-xs mb-2">Active Sessions</div>
               <div className="flex gap-1">
-                {personality.timePreferences.preferredSessions.map((session) => (
+                {(personality.timePreferences?.preferredSessions || []).map((session) => (
                   <span
                     key={session}
                     className="px-2 py-1 bg-blue-900/30 text-blue-400 rounded text-xs capitalize"
@@ -629,10 +629,10 @@ export function PersonalityManager({
             {/* Modal Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="text-2xl">{getArchetypeIcon(selectedPersonality.metadata.archetype)}</div>
+                <div className="text-2xl">{getArchetypeIcon(selectedPersonality.metadata?.archetype || '')}</div>
                 <div>
                   <h3 className="text-xl font-bold text-white">{selectedPersonality.name}</h3>
-                  <div className="text-gray-400 text-sm">{selectedPersonality.metadata.archetype.replace(/_/g, ' ')}</div>
+                  <div className="text-gray-400 text-sm">{(selectedPersonality.metadata?.archetype || '').replace(/_/g, ' ')}</div>
                 </div>
               </div>
               <button
@@ -681,15 +681,15 @@ export function PersonalityManager({
                     </div>
                     <div className="bg-gray-750 rounded-lg p-4">
                       <div className="text-gray-400 text-sm">Win Rate</div>
-                      <div className="text-white font-medium">{selectedPersonality.metadata.performance.winRate.toFixed(1)}%</div>
+                      <div className="text-white font-medium">{(selectedPersonality.metadata?.performance?.winRate || 0).toFixed(1)}%</div>
                     </div>
                     <div className="bg-gray-750 rounded-lg p-4">
                       <div className="text-gray-400 text-sm">Total Trades</div>
-                      <div className="text-white font-medium">{selectedPersonality.metadata.performance.totalTrades}</div>
+                      <div className="text-white font-medium">{selectedPersonality.metadata?.performance?.totalTrades || 0}</div>
                     </div>
                     <div className="bg-gray-750 rounded-lg p-4">
                       <div className="text-gray-400 text-sm">Experience</div>
-                      <div className="text-white font-medium">{selectedPersonality.evolution.experienceLevel}/100</div>
+                      <div className="text-white font-medium">{selectedPersonality.evolution?.experienceLevel || 0}/100</div>
                     </div>
                   </div>
 
@@ -731,7 +731,7 @@ export function PersonalityManager({
                       <div>
                         <h5 className="text-green-400 font-medium mb-3">Primary Pairs</h5>
                         <div className="space-y-3">
-                          {selectedPersonality.pairPreferences.primary.map((pair) => (
+                          {(selectedPersonality.pairPreferences?.primary || []).map((pair) => (
                             <div key={pair.symbol} className="flex justify-between items-center bg-gray-700 rounded p-3">
                               <div>
                                 <div className="text-white font-medium">{pair.symbol}</div>
@@ -748,7 +748,7 @@ export function PersonalityManager({
                       <div>
                         <h5 className="text-blue-400 font-medium mb-3">Secondary Pairs</h5>
                         <div className="space-y-3">
-                          {selectedPersonality.pairPreferences.secondary.map((pair) => (
+                          {(selectedPersonality.pairPreferences?.secondary || []).map((pair) => (
                             <div key={pair.symbol} className="flex justify-between items-center bg-gray-700 rounded p-3">
                               <div>
                                 <div className="text-white font-medium">{pair.symbol}</div>
@@ -772,7 +772,7 @@ export function PersonalityManager({
                       <div>
                         <h5 className="text-gray-400 text-sm mb-3">Session Activity Levels</h5>
                         <div className="space-y-3">
-                          {Object.entries(selectedPersonality.timePreferences.sessionActivity).map(([session, activity]) => (
+                          {Object.entries(selectedPersonality.timePreferences?.sessionActivity || {}).map(([session, activity]) => (
                             <div key={session} className="space-y-2">
                               <div className="flex justify-between">
                                 <span className="text-gray-300 capitalize">{session}</span>
@@ -792,20 +792,20 @@ export function PersonalityManager({
                         <h5 className="text-gray-400 text-sm mb-3">Active Hours</h5>
                         <div className="bg-gray-700 rounded p-3">
                           <div className="text-white text-lg">
-                            {selectedPersonality.timePreferences.activeHours.start}:00 - {selectedPersonality.timePreferences.activeHours.end}:00
+                            {selectedPersonality.timePreferences?.activeHours?.start}:00 - {selectedPersonality.timePreferences?.activeHours?.end}:00
                           </div>
                           <div className="text-gray-400 text-sm">
-                            {selectedPersonality.timePreferences.activeHours.timezone}
+                            {selectedPersonality.timePreferences?.activeHours?.timezone}
                           </div>
                         </div>
                         <div className="mt-4 space-y-2">
                           <div className="flex justify-between">
                             <span className="text-gray-300">Weekend Activity</span>
-                            <span className="text-white">{selectedPersonality.timePreferences.weekendActivity}%</span>
+                            <span className="text-white">{selectedPersonality.timePreferences?.weekendActivity}%</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-300">Holiday Activity</span>
-                            <span className="text-white">{selectedPersonality.timePreferences.holidayActivity}%</span>
+                            <span className="text-white">{selectedPersonality.timePreferences?.holidayActivity}%</span>
                           </div>
                         </div>
                       </div>

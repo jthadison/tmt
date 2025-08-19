@@ -124,6 +124,14 @@ export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
   )
 }
 
+// Default export for compatibility
+const Toast = {
+  ToastContainer,
+  useToast: () => useToast()
+}
+
+export default Toast
+
 /**
  * Hook for managing toast notifications
  */

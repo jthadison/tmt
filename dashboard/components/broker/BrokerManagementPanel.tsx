@@ -1,8 +1,9 @@
 // Broker management panel with add/remove/configure functionality
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { BrokerAccount, BrokerConfig } from '../../types/broker';
-import { Card } from '../ui/Card';
+import Card from '../ui/Card';
 
 interface BrokerManagementPanelProps {
   brokerAccounts: BrokerAccount[];
@@ -275,10 +276,12 @@ export const BrokerManagementPanel: React.FC<BrokerManagementPanelProps> = ({
               {/* Account Info */}
               <div className="flex items-center space-x-4">
                 {account.logo_url && (
-                  <img 
+                  <Image 
                     src={account.logo_url} 
                     alt={account.broker_name}
-                    className="w-10 h-10 rounded"
+                    width={40}
+                    height={40}
+                    className="rounded"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}

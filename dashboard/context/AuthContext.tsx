@@ -34,7 +34,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      // TODO: Replace with actual API call
+      // In development, simulate successful login
+      if (process.env.NODE_ENV === 'development') {
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Check for demo credentials
+        if (credentials.email === 'demo' && credentials.password === 'demo123') {
+          const mockUser: User = {
+            id: 'user-001',
+            name: 'Demo User',
+            email: 'demo@tradingsystem.com',
+            role: 'admin',
+            two_factor_enabled: false,
+            created_at: new Date().toISOString(),
+            last_login: new Date().toISOString()
+          }
+          
+          const mockResponse: LoginResponse = {
+            success: true,
+            requires_2fa: false,
+            user: mockUser,
+            tokens: {
+              access_token: 'mock-access-token',
+              refresh_token: 'mock-refresh-token',
+              expires_in: 3600
+            }
+          }
+          
+          // Store tokens
+          Cookies.set('access_token', mockResponse.tokens!.access_token, {
+            expires: 1, // 1 day for dev
+            secure: false,
+            sameSite: 'strict'
+          })
+          
+          Cookies.set('refresh_token', mockResponse.tokens!.refresh_token, {
+            expires: 30,
+            secure: false,
+            sameSite: 'strict'
+          })
+
+          setState({
+            user: mockUser,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          })
+          
+          return mockResponse
+        } else {
+          throw new Error('Invalid credentials. Use demo/demo123 for development.')
+        }
+      }
+      
+      // Production API call
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -158,7 +212,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (accessToken) {
         try {
-          // TODO: Replace with actual API call to verify token and get user
+          // In development, use mock user if token exists
+          if (process.env.NODE_ENV === 'development' && accessToken === 'mock-access-token') {
+            const mockUser: User = {
+              id: 'user-001',
+              name: 'Demo User',
+              email: 'demo@tradingsystem.com',
+              role: 'admin',
+              created_at: new Date().toISOString(),
+              last_login: new Date().toISOString(),
+              two_factor_enabled: false
+            }
+            
+            setState({
+              user: mockUser,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            })
+            return
+          }
+          
+          // Production API call
           const response = await fetch('/api/auth/me', {
             headers: {
               'Authorization': `Bearer ${accessToken}`,

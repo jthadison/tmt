@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { AggregateData } from '../../types/broker';
-import { Card } from '../ui/Card';
+import Card from '../ui/Card';
 
 interface AggregateOverviewProps {
   data: AggregateData | null;

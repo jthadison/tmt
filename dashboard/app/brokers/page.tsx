@@ -8,8 +8,8 @@ import { PLChart } from '../../components/broker/PLChart';
 import { ConnectionMonitor } from '../../components/broker/ConnectionMonitor';
 import { BrokerManagementPanel } from '../../components/broker/BrokerManagementPanel';
 import { LoadingSkeleton } from '../../components/ui/LoadingSkeleton';
-import { Toast } from '../../components/ui/Toast';
-import { ErrorBoundary } from '../../components/ui/ErrorBoundary';
+import { ToastContainer } from '../../components/ui/Toast';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
 
 export default function BrokersPage() {
   const {
@@ -36,12 +36,12 @@ export default function BrokersPage() {
     try {
       await reconnectBroker(accountId);
       showToast('Broker reconnection initiated', 'success');
-    } catch (error) {
+    } catch {
       showToast('Failed to reconnect broker', 'error');
     }
   };
 
-  const handleDisconnectBroker = async (accountId: string) => {
+  const handleDisconnectBroker = async () => {
     // For now, we'll just show a message since disconnect isn't implemented in the hook
     showToast('Disconnect functionality coming soon', 'info');
   };
@@ -50,16 +50,21 @@ export default function BrokersPage() {
     try {
       await removeBrokerAccount(accountId);
       showToast('Broker account removed successfully', 'success');
-    } catch (error) {
+    } catch {
       showToast('Failed to remove broker account', 'error');
     }
   };
 
-  const handleAddBroker = async (config: any) => {
+  const handleAddBroker = async (config: {
+    broker_name: string;
+    account_type: 'live' | 'demo';
+    display_name: string;
+    credentials: Record<string, string>;
+  }) => {
     try {
       await addBrokerAccount(config);
       showToast('Broker account added successfully', 'success');
-    } catch (error) {
+    } catch {
       showToast('Failed to add broker account', 'error');
     }
   };
@@ -227,13 +232,10 @@ export default function BrokersPage() {
         </div>
 
         {/* Toast Notifications */}
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            onClose={() => setToast(null)}
-          />
-        )}
+        <ToastContainer
+          toasts={toast ? [{ id: '1', ...toast }] : []}
+          onClose={() => setToast(null)}
+        />
       </div>
     </ErrorBoundary>
   );

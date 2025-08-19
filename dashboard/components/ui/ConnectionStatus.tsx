@@ -13,7 +13,7 @@ interface ConnectionStatusProps {
  * @param className - Additional CSS classes
  * @returns Connection status indicator with icon and text
  */
-export default function ConnectionStatus({ status, className = '' }: ConnectionStatusProps) {
+function ConnectionStatus({ status, className = '' }: ConnectionStatusProps) {
   const getStatusConfig = (status: Status) => {
     switch (status) {
       case Status.CONNECTED:
@@ -68,3 +68,7 @@ export default function ConnectionStatus({ status, className = '' }: ConnectionS
     </div>
   )
 }
+
+export default ConnectionStatus
+export { ConnectionStatus }
+export type { ConnectionStatusProps }

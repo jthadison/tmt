@@ -1,9 +1,10 @@
 // Broker account overview card component
 
 import React from 'react';
+import Image from 'next/image';
 import { BrokerAccount, ConnectionStatus } from '../../types/broker';
-import { Card } from '../ui/Card';
-import { ConnectionStatus as ConnectionStatusComponent } from '../ui/ConnectionStatus';
+import Card from '../ui/Card';
+import ConnectionStatusComponent from '../ui/ConnectionStatus';
 
 interface BrokerOverviewCardProps {
   account: BrokerAccount;
@@ -38,20 +39,7 @@ export const BrokerOverviewCard: React.FC<BrokerOverviewCardProps> = ({
     return 'text-gray-600 dark:text-gray-400';
   };
 
-  const getConnectionStatusColor = (status: ConnectionStatus) => {
-    switch (status) {
-      case ConnectionStatus.CONNECTED:
-        return 'bg-green-500';
-      case ConnectionStatus.DISCONNECTED:
-        return 'bg-gray-500';
-      case ConnectionStatus.RECONNECTING:
-        return 'bg-yellow-500';
-      case ConnectionStatus.ERROR:
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
+  // Helper function removed - using direct status component instead
 
   const marginUtilization = account.margin_used / (account.margin_used + account.margin_available) * 100;
   const plPercentage = (account.unrealized_pl / account.balance) * 100;
@@ -62,10 +50,12 @@ export const BrokerOverviewCard: React.FC<BrokerOverviewCardProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
           {account.logo_url && (
-            <img 
+            <Image 
               src={account.logo_url} 
               alt={account.broker_name}
-              className="w-8 h-8 rounded"
+              width={32}
+              height={32}
+              className="rounded"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}

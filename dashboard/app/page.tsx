@@ -8,16 +8,25 @@ import Grid from '@/components/ui/Grid'
 import ConnectionStatus from '@/components/ui/ConnectionStatus'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { AccountOverviewGrid } from '@/components/dashboard/AccountOverviewGrid'
+import HealthCheckPanel from '@/components/dashboard/HealthCheckPanel'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useAccountData, useAccountWebSocket } from '@/hooks/useAccountData'
+import { useRealTimeStore } from '@/store/realTimeStore'
 
 export default function Home() {
   const router = useRouter()
+  const { state: realTimeState, store } = useRealTimeStore()
   
-  const { connectionStatus, connect } = useWebSocket({
-    url: 'ws://localhost:8080', // Development WebSocket URL
-    reconnectAttempts: 3,
-    reconnectInterval: 3000
+  const { connectionStatus, connect, lastMessage, lastError, reconnectCount } = useWebSocket({
+    url: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080',
+    reconnectAttempts: 5,
+    reconnectInterval: 3000,
+    onError: (error) => {
+      console.error('WebSocket error:', error)
+    },
+    onReconnectFailed: () => {
+      console.error('Failed to reconnect after maximum attempts')
+    }
   })
 
   const { accounts, loading, error, refreshData } = useAccountData()
@@ -27,6 +36,24 @@ export default function Home() {
     // Auto-connect on component mount
     connect()
   }, [connect])
+
+  useEffect(() => {
+    // Process WebSocket messages through real-time store
+    if (lastMessage) {
+      store.processMessage(lastMessage)
+    }
+  }, [lastMessage, store])
+
+  useEffect(() => {
+    // Update connection status in store
+    if (connectionStatus === 'connected') {
+      store.setConnectionStatus('connected')
+    } else if (connectionStatus === 'error') {
+      store.setConnectionStatus('error')
+    } else {
+      store.setConnectionStatus('disconnected')
+    }
+  }, [connectionStatus, store])
 
   // Handle account drill-down navigation
   const handleAccountClick = (accountId: string) => {
@@ -104,54 +131,65 @@ export default function Home() {
 
           {/* System Status */}
           <Grid cols={{ default: 1, lg: 2 }}>
-            <Card title="System Status" className="h-64">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span>Market Analysis Agent</span>
-                  <span className="text-green-400">● Active</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Risk Management</span>
-                  <span className="text-green-400">● Active</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Circuit Breaker</span>
-                  <span className="text-yellow-400">● Monitoring</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>WebSocket Connection</span>
-                  <ConnectionStatus status={connectionStatus} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Account Updates</span>
-                  <ConnectionStatus status={wsAccountStatus} />
-                </div>
-              </div>
-            </Card>
+            <HealthCheckPanel className="h-64" />
 
-            <Card title="Recent Alerts" className="h-64">
-              <div className="space-y-2">
-                {dangerAccounts > 0 && (
-                  <div className="flex items-center p-2 bg-red-500/10 border border-red-500/20 rounded">
-                    <span className="text-red-400 text-sm">
-                      ⚠️ {dangerAccounts} account{dangerAccounts !== 1 ? 's' : ''} in danger zone
-                    </span>
+            <Card title="Connection Status" className="h-64">
+              <div className="space-y-4">
+                {/* WebSocket Status */}
+                <div className="p-3 bg-gray-800 rounded">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">WebSocket</span>
+                    <ConnectionStatus status={connectionStatus} />
                   </div>
-                )}
-                {warningAccounts > 0 && (
-                  <div className="flex items-center p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
-                    <span className="text-yellow-400 text-sm">
-                      ⚡ {warningAccounts} account{warningAccounts !== 1 ? 's' : ''} need attention
-                    </span>
+                  {reconnectCount > 0 && (
+                    <div className="text-xs text-yellow-400">
+                      Reconnection attempts: {reconnectCount}
+                    </div>
+                  )}
+                  {lastError && (
+                    <div className="text-xs text-red-400 mt-1">
+                      Error: {lastError.message}
+                    </div>
+                  )}
+                </div>
+
+                {/* Account Updates */}
+                <div className="p-3 bg-gray-800 rounded">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Account Updates</span>
+                    <ConnectionStatus status={wsAccountStatus} />
                   </div>
-                )}
-                {dangerAccounts === 0 && warningAccounts === 0 && (
-                  <div className="flex items-center p-2 bg-green-500/10 border border-green-500/20 rounded">
-                    <span className="text-green-400 text-sm">
-                      ✅ All accounts operating normally
-                    </span>
-                  </div>
-                )}
+                  {realTimeState.lastUpdate && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Last update: {new Date(realTimeState.lastUpdate).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Alerts */}
+                <div className="space-y-2">
+                  {dangerAccounts > 0 && (
+                    <div className="flex items-center p-2 bg-red-500/10 border border-red-500/20 rounded">
+                      <span className="text-red-400 text-sm">
+                        {dangerAccounts} account{dangerAccounts !== 1 ? 's' : ''} critical
+                      </span>
+                    </div>
+                  )}
+                  {warningAccounts > 0 && (
+                    <div className="flex items-center p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
+                      <span className="text-yellow-400 text-sm">
+                        {warningAccounts} account{warningAccounts !== 1 ? 's' : ''} warning
+                      </span>
+                    </div>
+                  )}
+                  {dangerAccounts === 0 && warningAccounts === 0 && (
+                    <div className="flex items-center p-2 bg-green-500/10 border border-green-500/20 rounded">
+                      <span className="text-green-400 text-sm">
+                        All accounts healthy
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </Card>
           </Grid>

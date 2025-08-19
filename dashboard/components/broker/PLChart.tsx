@@ -2,20 +2,11 @@
 
 import React, { useMemo } from 'react';
 import { BrokerAccount } from '../../types/broker';
-import { Card } from '../ui/Card';
+import Card from '../ui/Card';
 
 interface PLChartProps {
   brokerAccounts: BrokerAccount[];
   className?: string;
-}
-
-interface PLDataPoint {
-  broker_id: string;
-  broker_name: string;
-  unrealized_pl: number;
-  realized_pl: number;
-  total_pl: number;
-  percentage: number;
 }
 
 export const PLChart: React.FC<PLChartProps> = ({
