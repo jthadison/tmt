@@ -9,6 +9,9 @@ interface UseWebSocketOptions {
   reconnectAttempts?: number
   reconnectInterval?: number
   heartbeatInterval?: number
+  onError?: (error: Event | Error) => void
+  onReconnectFailed?: () => void
+  enableHeartbeat?: boolean
 }
 
 interface UseWebSocketReturn {
@@ -17,6 +20,9 @@ interface UseWebSocketReturn {
   sendMessage: (message: any) => void
   connect: () => void
   disconnect: () => void
+  isConnected: boolean
+  reconnectCount: number
+  lastError: Error | null
 }
 
 /**
@@ -29,10 +35,15 @@ export function useWebSocket({
   protocols,
   reconnectAttempts = 5,
   reconnectInterval = 5000,
-  heartbeatInterval = 30000
+  heartbeatInterval = 30000,
+  onError,
+  onReconnectFailed,
+  enableHeartbeat = true
 }: UseWebSocketOptions): UseWebSocketReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(ConnectionStatus.DISCONNECTED)
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+  const [lastError, setLastError] = useState<Error | null>(null)
+  const [reconnectCount, setReconnectCount] = useState(0)
   
   const ws = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
@@ -41,21 +52,28 @@ export function useWebSocket({
   const isManualDisconnect = useRef(false)
 
   const startHeartbeat = useCallback(() => {
+    if (!enableHeartbeat) return
+    
     if (heartbeatTimeoutRef.current) {
       clearTimeout(heartbeatTimeoutRef.current)
     }
     
     heartbeatTimeoutRef.current = setTimeout(() => {
       if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: MessageType.HEARTBEAT,
-          timestamp: new Date().toISOString(),
-          correlation_id: crypto.randomUUID()
-        }))
-        startHeartbeat()
+        try {
+          ws.current.send(JSON.stringify({
+            type: MessageType.HEARTBEAT,
+            timestamp: new Date().toISOString(),
+            correlation_id: crypto.randomUUID()
+          }))
+          startHeartbeat()
+        } catch (error) {
+          console.error('Failed to send heartbeat:', error)
+          setLastError(error as Error)
+        }
       }
     }, heartbeatInterval)
-  }, [heartbeatInterval])
+  }, [heartbeatInterval, enableHeartbeat])
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return
@@ -67,8 +85,11 @@ export function useWebSocket({
       ws.current = new WebSocket(url, protocols)
       
       ws.current.onopen = () => {
+        console.log('WebSocket connected to:', url)
         setConnectionStatus(ConnectionStatus.CONNECTED)
+        setLastError(null)
         reconnectAttemptsRef.current = 0
+        setReconnectCount(0)
         startHeartbeat()
       }
       
@@ -76,8 +97,14 @@ export function useWebSocket({
         try {
           const message: WebSocketMessage = JSON.parse(event.data)
           setLastMessage(message)
+          
+          // Reset error on successful message
+          if (lastError) {
+            setLastError(null)
+          }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error)
+          setLastError(error as Error)
         }
       }
       
@@ -91,26 +118,36 @@ export function useWebSocket({
         // Auto-reconnect if not manual disconnect and within retry limit
         if (!isManualDisconnect.current && reconnectAttemptsRef.current < reconnectAttempts) {
           reconnectAttemptsRef.current++
+          setReconnectCount(reconnectAttemptsRef.current)
           setConnectionStatus(ConnectionStatus.RECONNECTING)
           
           const backoffDelay = reconnectInterval * Math.pow(1.5, reconnectAttemptsRef.current - 1)
+          console.log(`Attempting reconnection ${reconnectAttemptsRef.current}/${reconnectAttempts} in ${backoffDelay}ms`)
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()
           }, Math.min(backoffDelay, 30000)) // Max 30 second backoff
+        } else if (!isManualDisconnect.current && reconnectAttemptsRef.current >= reconnectAttempts) {
+          console.error('Maximum reconnection attempts reached')
+          onReconnectFailed?.()
         }
       }
       
       ws.current.onerror = (error) => {
         console.error('WebSocket error:', error)
+        const errorObj = new Error('WebSocket connection failed')
+        setLastError(errorObj)
         setConnectionStatus(ConnectionStatus.ERROR)
+        onError?.(error)
       }
       
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error)
+      setLastError(error as Error)
       setConnectionStatus(ConnectionStatus.ERROR)
+      onError?.(error as Error)
     }
-  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat])
+  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat, onError, onReconnectFailed, lastError])
 
   const disconnect = useCallback(() => {
     isManualDisconnect.current = true
@@ -155,6 +192,9 @@ export function useWebSocket({
     lastMessage,
     sendMessage,
     connect,
-    disconnect
+    disconnect,
+    isConnected: connectionStatus === ConnectionStatus.CONNECTED,
+    reconnectCount,
+    lastError
   }
 }
