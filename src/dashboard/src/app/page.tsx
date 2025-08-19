@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 // Simple interface for account data
 interface AccountData {
@@ -194,6 +195,7 @@ const getHealthStatusText = (status: string): string => {
 }
 
 export default function TradingDashboard() {
+  const router = useRouter()
   const {
     accounts,
     aggregatedMetrics,
@@ -222,8 +224,8 @@ export default function TradingDashboard() {
         setShowSuccessMessage('Trading Controls - Feature coming soon! This would allow manual trading, position management, and risk parameter adjustments.')
         break
       case 'market-data':
-        setShowSuccessMessage('Market Data - Feature coming soon! This would display real-time charts, market analysis, and trading opportunities.')
-        break
+        router.push('/market-data')
+        return
       default:
         console.log('Unknown navigation target')
     }
