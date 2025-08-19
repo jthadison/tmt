@@ -236,6 +236,16 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       DATABASE_URL: postgresql://postgres:password@postgres:5432/trading_system
       REDIS_URL: redis://redis:6379
+      # OANDA Configuration
+      NEXT_PUBLIC_OANDA_API_KEY: 375f337dd8502af3307ce9179f7a373a-48f35175b87682feea1f057950810a09
+      NEXT_PUBLIC_OANDA_ACCOUNT_IDS: 101-001-21040028-001
+      NEXT_PUBLIC_OANDA_API_URL: https://api-fxpractice.oanda.com
+      NEXT_PUBLIC_OANDA_STREAM_URL: https://stream-fxpractice.oanda.com
+      NEXT_PUBLIC_OANDA_ENVIRONMENT: practice
+      NEXT_PUBLIC_OANDA_RATE_LIMIT: 100
+      NEXT_PUBLIC_OANDA_RATE_WINDOW: 60000
+      NEXT_PUBLIC_OANDA_RETRY_ATTEMPTS: 3
+      NEXT_PUBLIC_OANDA_RETRY_DELAY: 1000
     networks:
       - trading-network
     depends_on:
