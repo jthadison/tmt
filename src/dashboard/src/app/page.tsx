@@ -218,11 +218,13 @@ export default function TradingDashboard() {
     // In a real app, this would use Next.js router
     switch (page) {
       case 'analytics':
-        setShowSuccessMessage('Performance Analytics - Feature coming soon! This would show detailed P&L charts, win/loss ratios, and trading performance metrics.')
-        break
+        // Navigate to the actual Performance Analytics page
+        router.push('/performance-analytics')
+        return
       case 'controls':
-        setShowSuccessMessage('Trading Controls - Feature coming soon! This would allow manual trading, position management, and risk parameter adjustments.')
-        break
+        // Check if trading controls page exists
+        router.push('/trading-controls')
+        return
       case 'market-data':
         router.push('/market-data')
         return
