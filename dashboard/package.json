@@ -15,14 +15,17 @@
     "test:all": "npm run test && npm run test:e2e"
   },
   "dependencies": {
+    "@types/d3": "^7.4.3",
     "@types/js-cookie": "^3.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",
     "@types/ws": "^8.18.1",
     "chart.js": "^4.5.0",
+    "d3": "^7.9.0",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
+    "lightweight-charts": "^5.0.8",
     "next": "^14.2.31",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
