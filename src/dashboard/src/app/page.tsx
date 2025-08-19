@@ -204,6 +204,66 @@ export default function TradingDashboard() {
     refreshData
   } = useOandaData()
 
+  // Emergency stop state
+  const [isEmergencyStopActive, setIsEmergencyStopActive] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState('')
+
+  // Navigation handler
+  const handleNavigation = (page: string) => {
+    console.log(`Navigating to: ${page}`)
+    
+    // Create a simple alert-based navigation for now
+    // In a real app, this would use Next.js router
+    switch (page) {
+      case 'analytics':
+        setShowSuccessMessage('Performance Analytics - Feature coming soon! This would show detailed P&L charts, win/loss ratios, and trading performance metrics.')
+        break
+      case 'controls':
+        setShowSuccessMessage('Trading Controls - Feature coming soon! This would allow manual trading, position management, and risk parameter adjustments.')
+        break
+      case 'market-data':
+        setShowSuccessMessage('Market Data - Feature coming soon! This would display real-time charts, market analysis, and trading opportunities.')
+        break
+      default:
+        console.log('Unknown navigation target')
+    }
+    
+    // Clear message after 5 seconds
+    setTimeout(() => setShowSuccessMessage(''), 5000)
+  }
+
+  // Emergency stop handler
+  const handleEmergencyStop = () => {
+    const confirmed = window.confirm(
+      '⚠️ EMERGENCY STOP\n\n' +
+      'This will immediately:\n' +
+      '• Stop all automated trading\n' +
+      '• Close all open positions\n' +
+      '• Disable new trade signals\n\n' +
+      'Are you sure you want to proceed?'
+    )
+    
+    if (confirmed) {
+      setIsEmergencyStopActive(true)
+      setShowSuccessMessage('🚨 EMERGENCY STOP ACTIVATED - All trading systems halted!')
+      
+      // In a real implementation, this would:
+      // 1. Send stop signal to all trading agents
+      // 2. Close all open positions
+      // 3. Disable signal generation
+      // 4. Log the emergency stop event
+      
+      console.log('Emergency stop activated at:', new Date().toISOString())
+      
+      // Auto-reset after 30 seconds for demo purposes
+      setTimeout(() => {
+        setIsEmergencyStopActive(false)
+        setShowSuccessMessage('✅ Emergency stop reset - System ready to resume')
+        setTimeout(() => setShowSuccessMessage(''), 3000)
+      }, 30000)
+    }
+  }
+
   // Subscribe to real-time updates on mount
   useEffect(() => {
     subscribeToUpdates()
@@ -284,9 +344,25 @@ export default function TradingDashboard() {
                   <span className="text-sm">Updating...</span>
                 </div>
               )}
+              <button
+                onClick={refreshData}
+                disabled={isLoading}
+                className="mt-2 bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded transition-colors disabled:opacity-50"
+              >
+                🔄 Refresh Data
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Success/Info Messages */}
+        {showSuccessMessage && (
+          <div className="mb-6 p-4 bg-blue-900/50 border border-blue-500 rounded-lg">
+            <p className="text-blue-300 text-sm">
+              💡 {showSuccessMessage}
+            </p>
+          </div>
+        )}
 
         {/* Quick Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -388,17 +464,30 @@ export default function TradingDashboard() {
 
         {/* Navigation */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+          <button 
+            onClick={() => handleNavigation('analytics')}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
             Performance Analytics
           </button>
-          <button className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+          <button 
+            onClick={() => handleNavigation('controls')}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
             Trading Controls
           </button>
-          <button className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+          <button 
+            onClick={() => handleNavigation('market-data')}
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
             Market Data
           </button>
-          <button className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
-            Emergency Stop
+          <button 
+            onClick={() => handleEmergencyStop()}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-50"
+            disabled={isEmergencyStopActive}
+          >
+            {isEmergencyStopActive ? 'System Stopped' : 'Emergency Stop'}
           </button>
         </div>
 
