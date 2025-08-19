@@ -40,15 +40,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 500))
         
         // Check for demo credentials
-        if (credentials.username === 'demo' && credentials.password === 'demo123') {
+        if (credentials.email === 'demo' && credentials.password === 'demo123') {
           const mockUser: User = {
             id: 'user-001',
-            username: 'demo',
+            name: 'Demo User',
             email: 'demo@tradingsystem.com',
             role: 'admin',
+            two_factor_enabled: false,
             created_at: new Date().toISOString(),
-            last_login: new Date().toISOString(),
-            two_factor_enabled: false
+            last_login: new Date().toISOString()
           }
           
           const mockResponse: LoginResponse = {
@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (process.env.NODE_ENV === 'development' && accessToken === 'mock-access-token') {
             const mockUser: User = {
               id: 'user-001',
-              username: 'demo',
+              name: 'Demo User',
               email: 'demo@tradingsystem.com',
               role: 'admin',
               created_at: new Date().toISOString(),

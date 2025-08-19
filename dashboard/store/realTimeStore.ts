@@ -4,10 +4,10 @@
  */
 
 import { WebSocketMessage, MessageType, AccountUpdate, PositionUpdate, PriceUpdate, SystemStatus } from '@/types/websocket'
-import { Account } from '@/types/account'
+import { AccountOverview, AccountStatus } from '@/types/account'
 
 export interface RealTimeState {
-  accounts: Map<string, Account>
+  accounts: Map<string, AccountOverview>
   positions: Map<string, PositionUpdate>
   prices: Map<string, PriceUpdate>
   systemStatus: Map<string, SystemStatus>
@@ -169,46 +169,45 @@ class RealTimeStore {
     
     if (existing) {
       // Update existing account
-      const updated: Account = {
+      const updated: AccountOverview = {
         ...existing,
         balance: update.balance,
         equity: update.equity,
-        margin: update.margin,
-        freeMargin: update.free_margin,
-        marginLevel: update.margin_level,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: new Date()
       }
       
       this.state.accounts.set(update.account_id, updated)
     } else {
       // Create new account entry (partial data)
-      const newAccount: Account = {
+      const newAccount: AccountOverview = {
         id: update.account_id,
-        name: `Account ${update.account_id}`,
-        broker: 'Unknown',
+        accountName: `Account ${update.account_id}`,
+        propFirm: 'Unknown',
         status: this.determineAccountStatus(update),
         balance: update.balance,
         equity: update.equity,
-        margin: update.margin,
-        freeMargin: update.free_margin,
-        marginLevel: update.margin_level,
         pnl: {
           daily: 0,
           weekly: 0,
-          monthly: 0,
-          total: 0
+          total: 0,
+          percentage: 0
         },
         positions: {
           active: 0,
-          pending: 0,
-          total: 0
+          long: 0,
+          short: 0
         },
         drawdown: {
           current: 0,
-          max: 0,
-          daily: 0
+          maximum: 0,
+          percentage: 0
         },
-        lastUpdate: new Date().toISOString()
+        exposure: {
+          total: 0,
+          limit: 0,
+          utilization: 0
+        },
+        lastUpdate: new Date()
       }
       
       this.state.accounts.set(update.account_id, newAccount)
@@ -218,7 +217,7 @@ class RealTimeStore {
   /**
    * Determine account status based on metrics
    */
-  private determineAccountStatus(update: AccountUpdate): 'healthy' | 'warning' | 'danger' | 'inactive' {
+  private determineAccountStatus(update: AccountUpdate): AccountStatus {
     if (update.margin_level < 100) {
       return 'danger'
     } else if (update.margin_level < 200) {
@@ -288,7 +287,7 @@ class RealTimeStore {
   /**
    * Get specific account
    */
-  getAccount(accountId: string): Account | undefined {
+  getAccount(accountId: string): AccountOverview | undefined {
     return this.state.accounts.get(accountId)
   }
 

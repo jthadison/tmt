@@ -230,13 +230,13 @@ export function SystemLogViewer({
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div>
-            <label className="block text-gray-300 text-sm mb-2">Severity</label>
+            <label className="block text-gray-300 text-sm mb-2">Level</label>
             <select
-              value={filter.severity || ''}
-              onChange={(e) => setFilter(prev => ({ ...prev, severity: e.target.value as LogSeverity || undefined }))}
+              value={filter.level?.[0] || ''}
+              onChange={(e) => setFilter(prev => ({ ...prev, level: e.target.value ? [e.target.value as LogLevel] : undefined }))}
               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
             >
-              <option value="">All Severities</option>
+              <option value="">All Levels</option>
               {severityOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -248,8 +248,8 @@ export function SystemLogViewer({
           <div>
             <label className="block text-gray-300 text-sm mb-2">Component</label>
             <select
-              value={filter.component || ''}
-              onChange={(e) => setFilter(prev => ({ ...prev, component: e.target.value || undefined }))}
+              value={filter.component?.[0] || ''}
+              onChange={(e) => setFilter(prev => ({ ...prev, component: e.target.value ? [e.target.value] : undefined }))}
               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
             >
               <option value="">All Components</option>
@@ -298,10 +298,10 @@ export function SystemLogViewer({
               value={filter.timeRange?.start?.toISOString().slice(0, 16) || ''}
               onChange={(e) => setFilter(prev => ({
                 ...prev,
-                timeRange: {
-                  ...prev.timeRange,
-                  start: e.target.value ? new Date(e.target.value) : undefined
-                }
+                timeRange: e.target.value ? {
+                  start: new Date(e.target.value),
+                  end: prev.timeRange?.end || new Date()
+                } : undefined
               }))}
               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
             />
@@ -314,10 +314,10 @@ export function SystemLogViewer({
               value={filter.timeRange?.end?.toISOString().slice(0, 16) || ''}
               onChange={(e) => setFilter(prev => ({
                 ...prev,
-                timeRange: {
-                  ...prev.timeRange,
-                  end: e.target.value ? new Date(e.target.value) : undefined
-                }
+                timeRange: e.target.value ? {
+                  start: prev.timeRange?.start || new Date(),
+                  end: new Date(e.target.value)
+                } : undefined
               }))}
               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
             />
@@ -393,12 +393,12 @@ export function SystemLogViewer({
                   
                   <div className="flex-shrink-0">
                     <span className="text-sm">
-                      {getSeverityIcon(entry.severity)}
+                      {getSeverityIcon(entry.level)}
                     </span>
                   </div>
                   
-                  <div className={`flex-shrink-0 text-xs font-medium w-16 ${getSeverityColor(entry.severity)}`}>
-                    {entry.severity.toUpperCase()}
+                  <div className={`flex-shrink-0 text-xs font-medium w-16 ${getSeverityColor(entry.level)}`}>
+                    {entry.level.toUpperCase()}
                   </div>
                   
                   <div className="flex-shrink-0 text-xs text-blue-400 w-24 truncate">
@@ -431,8 +431,8 @@ export function SystemLogViewer({
               </div>
               <div>
                 <span className="text-gray-400">Severity:</span>
-                <span className={`ml-2 ${getSeverityColor(selectedEntry.severity)}`}>
-                  {selectedEntry.severity.toUpperCase()}
+                <span className={`ml-2 ${getSeverityColor(selectedEntry.level)}`}>
+                  {selectedEntry.level.toUpperCase()}
                 </span>
               </div>
               <div>
@@ -454,11 +454,11 @@ export function SystemLogViewer({
               </div>
             </div>
             
-            {selectedEntry.details && (
+            {selectedEntry.context && (
               <div className="mt-3">
                 <div className="text-gray-400 text-sm mb-1">Additional Details:</div>
                 <pre className="text-white bg-gray-800 rounded p-3 font-mono text-xs overflow-x-auto">
-                  {JSON.stringify(selectedEntry.details, null, 2)}
+                  {JSON.stringify(selectedEntry.context, null, 2)}
                 </pre>
               </div>
             )}
@@ -488,7 +488,7 @@ export function SystemLogViewer({
                       : 'All time'
                   }</div>
                   <div>Filters applied: {
-                    [filter.severity, filter.component, filter.accountId, filter.searchQuery]
+                    [filter.level, filter.component, filter.accountId, filter.searchQuery]
                       .filter(Boolean).length || 'None'
                   }</div>
                 </div>

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { BrokerAccount, ConnectionStatus } from '../../types/broker';
-import { Card } from '../ui/Card';
+import Card from '../ui/Card';
 
 interface ConnectionMonitorProps {
   brokerAccounts: BrokerAccount[];
@@ -44,21 +44,6 @@ export const ConnectionMonitor: React.FC<ConnectionMonitorProps> = ({
         return 'bg-red-500';
       default:
         return 'bg-gray-500';
-    }
-  };
-
-  const getStatusIcon = (status: ConnectionStatus) => {
-    switch (status) {
-      case ConnectionStatus.CONNECTED:
-        return '🟢';
-      case ConnectionStatus.DISCONNECTED:
-        return '⚫';
-      case ConnectionStatus.RECONNECTING:
-        return '🟡';
-      case ConnectionStatus.ERROR:
-        return '🔴';
-      default:
-        return '⚫';
     }
   };
 
