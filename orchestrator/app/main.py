@@ -15,6 +15,9 @@ from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
 import uvicorn
 
 from .orchestrator import TradingOrchestrator
@@ -24,6 +27,10 @@ from .models import (
 )
 from .config import get_settings
 from .exceptions import OrchestratorException
+# Analytics request models
+class RealtimePnLRequest(BaseModel):
+    accountId: str
+    agentId: Optional[str] = None
 
 # Configure logging
 logging.basicConfig(
@@ -71,6 +78,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Analytics endpoints integrated directly
 
 # Add CORS middleware
 app.add_middleware(
@@ -282,6 +291,27 @@ async def process_signal(signal: TradeSignal):
         return {"status": "Signal processed", "result": result}
     except OrchestratorException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# Analytics endpoints
+@app.post("/analytics/realtime-pnl")
+async def get_realtime_pnl(request: RealtimePnLRequest):
+    """Get real-time P&L data for an account"""
+    try:
+        # Return mock data for now - will integrate with OANDA when credentials are ready
+        mock_data = {
+            "currentPnL": 450.75,
+            "realizedPnL": 320.50,
+            "unrealizedPnL": 130.25,
+            "dailyPnL": 85.30,
+            "weeklyPnL": 425.60,
+            "monthlyPnL": 1250.80,
+            "lastUpdate": datetime.now().isoformat()
+        }
+        return mock_data
+    except Exception as e:
+        logger.error(f"Error getting real-time P&L: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # WebSocket endpoint for real-time updates

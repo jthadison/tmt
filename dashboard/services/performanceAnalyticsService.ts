@@ -36,7 +36,7 @@ class PerformanceAnalyticsService {
   private readonly requestTimeout: number = 30000
 
   constructor() {
-    this.apiUrl = process.env.NEXT_PUBLIC_PERFORMANCE_API_URL || 'http://localhost:8001/api'
+    this.apiUrl = process.env.NEXT_PUBLIC_PERFORMANCE_API_URL || '/api'
     this.startCacheCleanup()
     // Connection pooling configuration
     this.maxConcurrentRequests = 10
@@ -333,11 +333,12 @@ class PerformanceAnalyticsService {
       const agentPerformance: AgentPerformance[] = []
       
       for (const agent of agents) {
-        const trades = await this.getTradeBreakdown(undefined, agent.id, dateRange)
+        // Use the first accountId from the request for each agent's trades
+        const trades = await this.getTradeBreakdown(accountIds[0], agent.id, dateRange)
         const winningTrades = trades.filter(t => t.pnl > 0)
         const losingTrades = trades.filter(t => t.pnl < 0)
         
-        const performance = await this.calculateRiskMetrics(agent.accountId, dateRange)
+        const performance = await this.calculateRiskMetrics(accountIds[0], dateRange)
         
         agentPerformance.push({
           agentId: agent.id,
