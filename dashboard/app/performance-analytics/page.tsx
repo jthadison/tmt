@@ -17,14 +17,12 @@ export default function PerformanceAnalyticsPage() {
     const fetchAccountIds = async () => {
       try {
         setLoading(true)
-        // This would typically come from an account service
-        // For now, using mock data
-        const mockAccountIds = [
-          'account_001',
-          'account_002', 
-          'account_003'
+        // Use real OANDA account ID
+        const accountIds = [
+          '101-001-21040028-001',  // Your real OANDA practice account
+          // Additional accounts can be added here
         ]
-        setAccountIds(mockAccountIds)
+        setAccountIds(accountIds)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load accounts')
       } finally {
