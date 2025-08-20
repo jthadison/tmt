@@ -5,6 +5,13 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 
+# Development and testing artifacts
+test_*.js
+test_*.py
+pr-*-diff.txt
+test-results/
+*.validation*.json
+
 # Python
 __pycache__/
 *.py[cod]
