@@ -12,6 +12,8 @@ import HealthCheckPanel from '@/components/dashboard/HealthCheckPanel'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useAccountData, useAccountWebSocket } from '@/hooks/useAccountData'
 import { useRealTimeStore } from '@/store/realTimeStore'
+import { useOandaData } from '@/hooks/useOandaData'
+import { AccountsGrid } from '@/components/oanda/AccountsGrid'
 
 export default function Home() {
   const router = useRouter()
@@ -31,6 +33,17 @@ export default function Home() {
 
   const { accounts, loading, error, refreshData } = useAccountData()
   const { connectionStatus: wsAccountStatus } = useAccountWebSocket(accounts)
+  
+  // OANDA data integration
+  const {
+    accounts: oandaAccounts,
+    accountMetrics: oandaMetrics,
+    aggregatedMetrics: oandaAggregated,
+    isLoading: oandaLoading,
+    error: oandaError,
+    lastUpdate: oandaLastUpdate,
+    refreshData: refreshOandaData
+  } = useOandaData()
 
   useEffect(() => {
     // Auto-connect on component mount
@@ -60,14 +73,31 @@ export default function Home() {
     router.push(`/accounts/${accountId}`)
   }
 
-  // Calculate summary metrics from accounts
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0)
-  const totalEquity = accounts.reduce((sum, account) => sum + account.equity, 0)
-  const totalDailyPnL = accounts.reduce((sum, account) => sum + account.pnl.daily, 0)
-  const totalActivePositions = accounts.reduce((sum, account) => sum + account.positions.active, 0)
+  // Calculate summary metrics from both mock and OANDA accounts
+  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0) + 
+                      oandaAccounts.reduce((sum, account) => sum + account.balance, 0)
+  const totalEquity = accounts.reduce((sum, account) => sum + account.equity, 0) + 
+                     oandaAccounts.reduce((sum, account) => sum + account.NAV, 0)
+  const totalDailyPnL = accounts.reduce((sum, account) => sum + account.pnl.daily, 0) + 
+                       oandaAccounts.reduce((sum, account) => sum + account.unrealizedPL, 0)
+  const totalActivePositions = accounts.reduce((sum, account) => sum + account.positions.active, 0) + 
+                              oandaAccounts.reduce((sum, account) => sum + account.openPositionCount, 0)
+  
+  // Health status for mock accounts
   const healthyAccounts = accounts.filter(account => account.status === 'healthy').length
   const warningAccounts = accounts.filter(account => account.status === 'warning').length
   const dangerAccounts = accounts.filter(account => account.status === 'danger').length
+  
+  // Health status for OANDA accounts
+  const oandaHealthyAccounts = oandaAccounts.filter(account => account.healthStatus === 'healthy').length
+  const oandaWarningAccounts = oandaAccounts.filter(account => account.healthStatus === 'warning').length
+  const oandaDangerAccounts = oandaAccounts.filter(account => ['danger', 'margin_call'].includes(account.healthStatus)).length
+  
+  // Combined health metrics
+  const totalHealthyAccounts = healthyAccounts + oandaHealthyAccounts
+  const totalWarningAccounts = warningAccounts + oandaWarningAccounts
+  const totalDangerAccounts = dangerAccounts + oandaDangerAccounts
+  const totalAccounts = accounts.length + oandaAccounts.length
 
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
@@ -86,7 +116,9 @@ export default function Home() {
           <Grid cols={{ default: 1, md: 2, xl: 4 }}>
             <Card title="Total Balance">
               <p className="text-2xl font-bold text-green-400">{formatCurrency(totalBalance)}</p>
-              <p className="text-sm text-gray-500 mt-1">{accounts.length} accounts</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {totalAccounts} accounts ({accounts.length} demo, {oandaAccounts.length} OANDA)
+              </p>
             </Card>
             
             <Card title="Total Equity">
@@ -105,17 +137,22 @@ export default function Home() {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1">
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-sm text-green-400">{healthyAccounts}</span>
+                  <span className="text-sm text-green-400">{totalHealthyAccounts}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  <span className="text-sm text-yellow-400">{warningAccounts}</span>
+                  <span className="text-sm text-yellow-400">{totalWarningAccounts}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span className="text-sm text-red-400">{dangerAccounts}</span>
+                  <span className="text-sm text-red-400">{totalDangerAccounts}</span>
                 </div>
               </div>
+              {oandaAccounts.length > 0 && (
+                <div className="text-xs text-gray-400 mt-2">
+                  Includes {oandaAccounts.length} live OANDA account{oandaAccounts.length !== 1 ? 's' : ''}
+                </div>
+              )}
             </Card>
           </Grid>
 
@@ -128,6 +165,71 @@ export default function Home() {
             onRefresh={refreshData}
             refreshInterval={30}
           />
+
+          {/* OANDA Live Accounts Section */}
+          {oandaAccounts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">OANDA Live Accounts</h2>
+                  <p className="text-gray-400">Real-time data from your OANDA trading accounts</p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div className="text-sm text-gray-400">
+                    Last updated: {oandaLastUpdate ? oandaLastUpdate.toLocaleTimeString() : 'Never'}
+                  </div>
+                  <button
+                    onClick={refreshOandaData}
+                    disabled={oandaLoading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1 rounded text-sm transition-colors"
+                  >
+                    {oandaLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
+
+              {oandaError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded">
+                  <span className="text-red-400 text-sm">OANDA Error: {oandaError}</span>
+                </div>
+              )}
+
+              <AccountsGrid
+                accounts={oandaAccounts}
+                accountMetrics={oandaMetrics}
+                loading={oandaLoading}
+                error={oandaError || undefined}
+                onAccountClick={(accountId) => window.open(`/oanda?account=${accountId}`, '_blank')}
+                showFilters={false}
+                columns={2}
+                detailed={true}
+              />
+            </div>
+          )}
+
+          {/* OANDA Connection Prompt */}
+          {oandaAccounts.length === 0 && !oandaLoading && (
+            <Card title="OANDA Integration" className="border-blue-500/20 bg-blue-500/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-300 mb-2">
+                    Connect your OANDA account to see live trading data alongside your other accounts.
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    Real-time balance, positions, and P&L tracking from your OANDA practice or live account.
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => router.push('/oanda')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    View OANDA
+                  </button>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* System Status */}
           <Grid cols={{ default: 1, lg: 2 }}>
@@ -168,24 +270,33 @@ export default function Home() {
 
                 {/* Alerts */}
                 <div className="space-y-2">
-                  {dangerAccounts > 0 && (
+                  {totalDangerAccounts > 0 && (
                     <div className="flex items-center p-2 bg-red-500/10 border border-red-500/20 rounded">
                       <span className="text-red-400 text-sm">
-                        {dangerAccounts} account{dangerAccounts !== 1 ? 's' : ''} critical
+                        {totalDangerAccounts} account{totalDangerAccounts !== 1 ? 's' : ''} critical
+                        {oandaDangerAccounts > 0 && ` (${oandaDangerAccounts} OANDA)`}
                       </span>
                     </div>
                   )}
-                  {warningAccounts > 0 && (
+                  {totalWarningAccounts > 0 && (
                     <div className="flex items-center p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
                       <span className="text-yellow-400 text-sm">
-                        {warningAccounts} account{warningAccounts !== 1 ? 's' : ''} warning
+                        {totalWarningAccounts} account{totalWarningAccounts !== 1 ? 's' : ''} warning
+                        {oandaWarningAccounts > 0 && ` (${oandaWarningAccounts} OANDA)`}
                       </span>
                     </div>
                   )}
-                  {dangerAccounts === 0 && warningAccounts === 0 && (
+                  {oandaAccounts.length > 0 && oandaLastUpdate && (
+                    <div className="flex items-center p-2 bg-blue-500/10 border border-blue-500/20 rounded">
+                      <span className="text-blue-400 text-sm">
+                        OANDA: Last update {oandaLastUpdate.toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
+                  {totalDangerAccounts === 0 && totalWarningAccounts === 0 && (
                     <div className="flex items-center p-2 bg-green-500/10 border border-green-500/20 rounded">
                       <span className="text-green-400 text-sm">
-                        All accounts healthy
+                        All accounts healthy{oandaAccounts.length > 0 ? ' (including OANDA)' : ''}
                       </span>
                     </div>
                   )}
