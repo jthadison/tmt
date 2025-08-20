@@ -50,6 +50,13 @@ export default function RealtimePnLTracker({
 
   // Fetch P&L data
   const fetchPnLData = useCallback(async () => {
+    // Don't fetch if accountId is missing
+    if (!accountId) {
+      setError('Account ID is required')
+      setLoading(false)
+      return
+    }
+
     try {
       const data = await performanceAnalyticsService.getRealtimePnL(accountId, agentId)
       const tradeBreakdown = await performanceAnalyticsService.getTradeBreakdown(accountId, agentId)

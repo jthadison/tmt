@@ -111,7 +111,10 @@
       "Bash(git restore:*)",
       "Bash(git reset:*)",
       "Bash(timeout 10 python:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(powershell:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_wait_for"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
