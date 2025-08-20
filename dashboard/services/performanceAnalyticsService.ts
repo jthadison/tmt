@@ -36,7 +36,7 @@ class PerformanceAnalyticsService {
   private readonly requestTimeout: number = 30000
 
   constructor() {
-    this.apiUrl = process.env.NEXT_PUBLIC_PERFORMANCE_API_URL || 'http://localhost:8001/api'
+    this.apiUrl = process.env.NEXT_PUBLIC_PERFORMANCE_API_URL || '/api'
     this.startCacheCleanup()
     // Connection pooling configuration
     this.maxConcurrentRequests = 10
