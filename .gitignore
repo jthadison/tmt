@@ -216,4 +216,6 @@ grafana_data/
 kafka_data/
 
 # Claude Code
-.claude/settings.local.json
+.claude/settings.local.jsonorchestrator/.env
+orchestrator/.coverage
+orchestrator/htmlcov/
