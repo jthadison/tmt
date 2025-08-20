@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 500))
         
         // Check for demo credentials
-        if (credentials.email === 'demo' && credentials.password === 'demo123') {
+        if (credentials.email === 'demo@trading.com' && credentials.password === 'demo123') {
           const mockUser: User = {
             id: 'user-001',
             name: 'Demo User',
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           return mockResponse
         } else {
-          throw new Error('Invalid credentials. Use demo/demo123 for development.')
+          throw new Error('Invalid credentials. Use demo@trading.com / demo123 for development.')
         }
       }
       
