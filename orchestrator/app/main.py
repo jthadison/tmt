@@ -194,6 +194,48 @@ async def restart_agent(agent_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+# Signal processing endpoint
+@app.post("/api/signals/process")
+async def process_trading_signal(signal: Dict[Any, Any]):
+    """Process a trading signal from market analysis agent"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    try:
+        # Convert dict to TradeSignal model
+        from datetime import datetime
+        signal_obj = TradeSignal(
+            id=signal.get("id"),
+            instrument=signal.get("instrument"),
+            direction=signal.get("direction"),
+            confidence=signal.get("confidence"),
+            entry_price=signal.get("entry_price"),
+            stop_loss=signal.get("stop_loss"),
+            take_profit=signal.get("take_profit"),
+            timestamp=datetime.fromisoformat(signal.get("timestamp").replace("Z", "+00:00")) if signal.get("timestamp") else datetime.utcnow()
+        )
+        
+        # Process the signal through the orchestrator
+        result = await orchestrator.process_signal(signal_obj)
+        
+        return {
+            "status": "processed",
+            "signal_id": signal_obj.id,
+            "result": result.dict() if result else None,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing signal: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+
 # Trading control endpoints
 @app.get("/accounts")
 async def list_accounts():
