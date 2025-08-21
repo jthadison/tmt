@@ -529,3 +529,82 @@ class SafetyMonitor:
             },
             "last_update": datetime.utcnow().isoformat()
         }
+    
+    async def pre_trading_checks(self) -> bool:
+        """Perform pre-trading safety checks before enabling trading"""
+        try:
+            logger.info("Performing pre-trading safety checks...")
+            
+            # Check if there are any emergency alerts
+            emergency_alerts = self.get_active_alerts(AlertLevel.EMERGENCY)
+            if emergency_alerts:
+                logger.error(f"Emergency alerts prevent trading: {len(emergency_alerts)} active")
+                raise SafetyException("Emergency alerts active - trading blocked")
+            
+            # Check critical alerts
+            critical_alerts = self.get_active_alerts(AlertLevel.CRITICAL)
+            if len(critical_alerts) > 3:  # Allow some critical alerts but not too many
+                logger.error(f"Too many critical alerts: {len(critical_alerts)} active")
+                raise SafetyException("Excessive critical alerts - trading blocked")
+            
+            # Check OANDA connection if client is available
+            if self.oanda_client:
+                try:
+                    await self.oanda_client.verify_connection()
+                    logger.info("OANDA connection verified")
+                except Exception as e:
+                    logger.error(f"OANDA connection check failed: {e}")
+                    raise SafetyException(f"OANDA connection failed: {e}")
+            
+            # Check if we have any risk metrics (accounts configured)
+            if not self.risk_metrics:
+                logger.warning("No risk metrics available - first trading session")
+            else:
+                # Check if any accounts are in critical state
+                critical_accounts = [m for m in self.risk_metrics.values() if m.risk_score >= 70]
+                if len(critical_accounts) > len(self.risk_metrics) * 0.5:
+                    logger.error(f"Too many critical accounts: {len(critical_accounts)}/{len(self.risk_metrics)}")
+                    raise SafetyException("Majority of accounts in critical state")
+            
+            logger.info("Pre-trading safety checks passed")
+            return True
+            
+        except SafetyException:
+            raise
+        except Exception as e:
+            logger.error(f"Pre-trading checks failed with unexpected error: {e}")
+            raise SafetyException(f"Pre-trading checks failed: {e}")
+    
+    async def validate_signal(self, signal) -> bool:
+        """Validate a trading signal for safety compliance"""
+        try:
+            # Basic signal validation
+            if not signal.instrument or not signal.direction:
+                logger.warning("Invalid signal: missing required fields")
+                return False
+            
+            # Check confidence level
+            if signal.confidence < 0.3:  # Minimum confidence threshold
+                logger.warning(f"Signal confidence too low: {signal.confidence}")
+                return False
+            
+            # Check if signal has reasonable risk/reward
+            if hasattr(signal, 'stop_loss') and hasattr(signal, 'take_profit') and signal.entry_price:
+                if signal.stop_loss and signal.take_profit:
+                    if signal.direction == "long":
+                        risk = abs(signal.entry_price - signal.stop_loss)
+                        reward = abs(signal.take_profit - signal.entry_price)
+                    else:
+                        risk = abs(signal.stop_loss - signal.entry_price)
+                        reward = abs(signal.entry_price - signal.take_profit)
+                    
+                    if risk > 0 and reward / risk < 1.0:  # Min 1:1 risk/reward
+                        logger.warning(f"Poor risk/reward ratio: {reward/risk:.2f}")
+                        return False
+            
+            logger.debug(f"Signal validation passed for {signal.id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Signal validation failed: {e}")
+            return False
