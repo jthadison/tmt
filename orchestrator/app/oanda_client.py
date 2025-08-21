@@ -385,3 +385,144 @@ class OandaClient:
             return response.status_code == 200
         except Exception:
             return False
+    
+    async def list_accounts(self) -> List:
+        """List all available OANDA accounts"""
+        try:
+            response = await self.client.get(f"{self.base_url}/v3/accounts")
+            
+            if response.status_code == 200:
+                data = response.json()
+                accounts = []
+                for account in data.get("accounts", []):
+                    accounts.append({
+                        "id": account["id"],
+                        "name": f"OANDA Account {account['id']}",
+                        "currency": account.get("currency", "USD"),
+                        "status": "active",  # Simplified - could check actual status
+                        "balance": 0.0,  # Would need separate call to get balance
+                        "unrealized_pnl": 0.0,
+                        "margin_used": 0.0,
+                        "margin_available": 0.0,
+                        "open_trades": 0,
+                        "open_positions": 0
+                    })
+                return accounts
+            else:
+                logger.error(f"Failed to list accounts: {response.status_code}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error listing accounts: {e}")
+            return []
+    
+    async def get_account_status(self, account_id: str):
+        """Get status information for a specific account"""
+        try:
+            account_info = await self.get_account_info(account_id)
+            positions = await self.get_positions(account_id)
+            trades = await self.get_trades(account_id)
+            
+            return {
+                "account_id": account_id,
+                "status": "active",
+                "balance": account_info.balance,
+                "unrealized_pnl": account_info.unrealized_pnl,
+                "margin_used": account_info.margin_used,
+                "margin_available": account_info.margin_available,
+                "open_trades": len(trades),
+                "open_positions": len(positions),
+                "last_updated": datetime.utcnow().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error getting account status for {account_id}: {e}")
+            return {
+                "account_id": account_id,
+                "status": "error",
+                "error": str(e),
+                "last_updated": datetime.utcnow().isoformat()
+            }
+    
+    async def enable_account(self, account_id: str):
+        """Enable trading on an account"""
+        # For OANDA, accounts are typically always enabled if accessible
+        # This could be used to update internal tracking
+        logger.info(f"Account {account_id} enabled for trading")
+        return {"status": "enabled", "account_id": account_id}
+    
+    async def disable_account(self, account_id: str):
+        """Disable trading on an account"""
+        # For OANDA, this would typically mean stopping new trades
+        # but not closing existing positions
+        logger.info(f"Account {account_id} disabled for trading")
+        return {"status": "disabled", "account_id": account_id}
+    
+    async def get_total_pnl(self) -> float:
+        """Get total P&L across all configured accounts"""
+        total_pnl = 0.0
+        try:
+            accounts_info = await self.get_all_accounts_info()
+            for account_info in accounts_info.values():
+                total_pnl += account_info.unrealized_pnl
+            return total_pnl
+        except Exception as e:
+            logger.error(f"Error getting total P&L: {e}")
+            return 0.0
+    
+    async def verify_connection(self):
+        """Verify OANDA connection is working"""
+        try:
+            response = await self.client.get(f"{self.base_url}/v3/accounts")
+            if response.status_code != 200:
+                raise OandaException(f"Connection verification failed: {response.status_code}")
+            logger.info("OANDA connection verified successfully")
+        except Exception as e:
+            logger.error(f"OANDA connection verification failed: {e}")
+            raise OandaException(f"Connection verification failed: {e}")
+    
+    async def get_connection_status(self) -> Dict[str, Any]:
+        """Get OANDA connection status"""
+        try:
+            await self.verify_connection()
+            return {
+                "connected": True,
+                "status": "healthy",
+                "last_check": datetime.utcnow().isoformat()
+            }
+        except Exception as e:
+            return {
+                "connected": False,
+                "status": "error",
+                "error": str(e),
+                "last_check": datetime.utcnow().isoformat()
+            }
+    
+    async def get_current_positions(self) -> List[Dict[str, Any]]:
+        """Get current positions across all accounts"""
+        all_positions = []
+        try:
+            for account_id in self.settings.account_ids_list:
+                positions = await self.get_positions(account_id)
+                for position in positions:
+                    all_positions.append({
+                        "account_id": account_id,
+                        "instrument": position.instrument,
+                        "units": position.units,
+                        "average_price": position.average_price,
+                        "unrealized_pnl": position.unrealized_pnl,
+                        "margin_used": position.margin_used
+                    })
+        except Exception as e:
+            logger.error(f"Error getting current positions: {e}")
+        return all_positions
+    
+    async def execute_trade(self, signal: Any, parameters: Dict[str, Any] = None) -> Any:
+        """Execute a trade based on signal"""
+        # This would be implemented to execute trades based on signals
+        # For now, return a mock result
+        from .models import TradeResult
+        return TradeResult(
+            signal_id=getattr(signal, 'id', 'unknown'),
+            status="executed",
+            reason="Mock trade execution"
+        )

@@ -6,7 +6,7 @@ Handles agent discovery, registration, health monitoring, and communication.
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from datetime import datetime, timedelta
 import httpx
 from pydantic import BaseModel
@@ -121,10 +121,47 @@ class AgentManager:
         except Exception as e:
             logger.warning(f"Failed to register agent {agent_type}: {e}")
     
+    async def list_agents(self) -> List:
+        """List all registered agents with their information"""
+        from .models import AgentInfo
+        agent_list = []
+        for agent_id, agent in self.agents.items():
+            health = self.health_status.get(agent_id)
+            agent_info = {
+                "id": agent_id,
+                "name": f"{agent_id.replace('-', ' ').title()} Agent",
+                "type": agent_id.replace('-', '_'),
+                "status": agent.status.value if hasattr(agent.status, 'value') else str(agent.status),
+                "health": health.status if health else "unknown",
+                "last_seen": health.last_seen.isoformat() if health and health.last_seen else None,
+                "response_time_ms": health.response_time_ms if health else 0,
+                "error_count": health.error_count if health else 0,
+                "success_rate": health.success_rate if health else 0.0
+            }
+            agent_list.append(agent_info)
+        return agent_list
+    
     async def get_agent_status(self, agent_id: str) -> Optional[AgentStatus]:
         """Get current status of an agent"""
         agent = self.agents.get(agent_id)
         return agent.status if agent else None
+    
+    async def get_all_agent_statuses(self) -> List:
+        """Get status of all registered agents"""
+        statuses = []
+        for agent_id, agent in self.agents.items():
+            health = self.health_status.get(agent_id)
+            status = {
+                "agent_id": agent_id,
+                "status": agent.status.value if hasattr(agent.status, 'value') else str(agent.status),
+                "health": health.status if health else "unknown",
+                "last_seen": health.last_seen.isoformat() if health and health.last_seen else None,
+                "response_time_ms": health.response_time_ms if health else 0,
+                "error_count": health.error_count if health else 0,
+                "success_rate": health.success_rate if health else 0.0
+            }
+            statuses.append(status)
+        return statuses
     
     async def get_healthy_agents(self) -> List[str]:
         """Get list of healthy agent IDs"""
@@ -320,3 +357,44 @@ class AgentManager:
         if agent_id in self.health_status:
             del self.health_status[agent_id]
         logger.info(f"Removed agent {agent_id}")
+    
+    async def health_check_all(self):
+        """Perform health check on all agents"""
+        await self._perform_health_checks()
+    
+    async def call_agent(self, agent_id: str, method: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Call a specific method on an agent"""
+        agent = self.agents.get(agent_id)
+        if not agent:
+            raise AgentException(agent_id, "Agent not found")
+        
+        if agent.status != AgentStatus.ACTIVE:
+            raise AgentException(agent_id, f"Agent is not active (status: {agent.status})")
+        
+        try:
+            start_time = datetime.utcnow()
+            
+            response = await self.client.post(
+                f"{agent.endpoint}/{method}",
+                json=data,
+                timeout=self.settings.agent_request_timeout
+            )
+            
+            response_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+            
+            if response.status_code == 200:
+                # Update health status
+                await self._update_agent_health(agent_id, True, response_time)
+                
+                result_data = response.json()
+                return result_data
+            else:
+                await self._update_agent_health(agent_id, False, response_time)
+                raise AgentException(agent_id, f"Method call failed: {response.status_code}")
+                
+        except httpx.TimeoutException:
+            await self._update_agent_health(agent_id, False, None)
+            raise TimeoutException(f"call_{agent_id}_{method}", self.settings.agent_request_timeout)
+        except Exception as e:
+            await self._update_agent_health(agent_id, False, None)
+            raise AgentException(agent_id, f"Communication error: {e}")

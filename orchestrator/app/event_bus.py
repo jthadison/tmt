@@ -360,3 +360,10 @@ class EventBus:
         all_events.sort(key=lambda e: e.timestamp, reverse=True)
         
         return all_events[:limit]
+    
+    async def process_pending_events(self):
+        """Process any pending events (placeholder for orchestrator health check)"""
+        # This method is called by the orchestrator event processing loop
+        # For now, it's just a placeholder since events are processed in real-time
+        # via Redis pub/sub subscriptions
+        pass

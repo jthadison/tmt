@@ -241,38 +241,56 @@ class TradingOrchestrator:
             # Safety checks
             if not await self.safety_monitor.validate_signal(signal):
                 return TradeResult(
+                    success=False,
                     signal_id=signal.id,
-                    status="rejected",
-                    reason="Failed safety validation"
+                    message="Failed safety validation"
                 )
             
             # Circuit breaker check
             if not self.circuit_breaker.can_trade():
                 return TradeResult(
+                    success=False,
                     signal_id=signal.id,
-                    status="rejected",
-                    reason="Circuit breaker active"
+                    message="Circuit breaker active"
                 )
             
-            # Process through disagreement engine
+            # Process through disagreement engine - convert to expected format
+            signal_data = signal.dict()
+            if "timestamp" in signal_data and hasattr(signal_data["timestamp"], "isoformat"):
+                signal_data["timestamp"] = signal_data["timestamp"].isoformat()
+            
+            # Map fields to disagreement engine format
+            disagreement_signal = {
+                "symbol": signal.instrument,
+                "direction": signal.direction,
+                "strength": signal.confidence,
+                "price": signal.entry_price or 1.0,  # Use entry_price or default
+                "stop_loss": signal.stop_loss or 0.0,
+                "take_profit": signal.take_profit or 0.0
+            }
+            
             disagreement_result = await self.agent_manager.call_agent(
                 "disagreement-engine",
-                "process_signal",
-                {"signal": signal.dict()}
+                "signals/process",
+                {
+                    "signal_id": signal.id,
+                    "signal": disagreement_signal,
+                    "accounts": []  # TODO: Get actual accounts from OANDA client
+                }
             )
             
             if not disagreement_result.get("approved", False):
                 return TradeResult(
+                    success=False,
                     signal_id=signal.id,
-                    status="rejected",
-                    reason="Disagreement engine rejection"
+                    message="Disagreement engine rejection"
                 )
             
             # Get optimized parameters
             param_result = await self.agent_manager.call_agent(
                 "parameter-optimization",
-                "optimize_parameters",
-                {"signal": signal.dict()}
+                "optimize",
+                {"signal": signal_data}
             )
             
             # Execute trade
@@ -307,23 +325,28 @@ class TradingOrchestrator:
                 "error": str(e)
             })
             return TradeResult(
+                success=False,
                 signal_id=signal.id,
-                status="error",
-                reason=str(e)
+                message=str(e)
             )
     
     async def get_system_status(self) -> SystemStatus:
         """Get current system status"""
         agent_statuses = await self.agent_manager.get_all_agent_statuses()
         
+        oanda_status = await self.oanda_client.get_connection_status()
+        
+        # Count healthy agents - agent_statuses is a list of dicts
+        healthy_agents = len([s for s in agent_statuses if s.get("health") == "healthy"])
+        
         return SystemStatus(
             running=self.running,
             trading_enabled=self.trading_enabled,
             uptime_seconds=int((datetime.now(timezone.utc) - self.start_time).total_seconds()) if self.start_time else 0,
-            connected_agents=len([s for s in agent_statuses if s.status == "healthy"]),
+            connected_agents=healthy_agents,
             total_agents=len(agent_statuses),
             circuit_breaker_status=await self.circuit_breaker.get_status(),
-            oanda_connection=await self.oanda_client.get_connection_status(),
+            oanda_connection=oanda_status.get("connected", False),
             last_update=datetime.now(timezone.utc)
         )
     
