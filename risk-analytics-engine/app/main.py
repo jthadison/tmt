@@ -27,7 +27,6 @@ from .core.models import (
     RiskAlert,
     ComplianceRecord,
     ReportType,
-    ReportFormat,
     StressTestScenario,
     StressTestResult
 )
@@ -35,7 +34,7 @@ from .portfolio.portfolio_analyzer import PortfolioAnalyticsEngine
 from .risk.risk_calculator import RiskCalculationEngine
 from .analytics.pl_monitor import RealTimePLMonitor
 from .alerts.alert_manager import RiskAlertManager
-from .compliance.compliance_engine import ComplianceEngine, RegulationType
+from .compliance.compliance_engine import ComplianceEngine, RegulationType, ReportFormat
 from .integrations.execution_client import ExecutionEngineClient
 from .integrations.market_data_client import MarketDataClient
 
