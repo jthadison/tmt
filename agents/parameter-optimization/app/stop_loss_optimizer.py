@@ -8,6 +8,7 @@ import math
 import statistics
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
 import logging
 
 from .models import (

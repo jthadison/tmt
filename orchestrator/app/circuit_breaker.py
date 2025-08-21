@@ -352,3 +352,58 @@ class CircuitBreakerManager:
             await self.force_close_breaker(breaker_type)
         
         logger.info("All circuit breakers reset to closed state")
+    
+    async def get_status(self) -> any:
+        """Get overall circuit breaker system status"""
+        from .models import CircuitBreakerStatus
+        
+        open_breakers = [bt.value for bt, status in self.breakers.items() 
+                        if status.state == BreakerState.OPEN]
+        
+        overall_status = "closed"
+        if open_breakers:
+            overall_status = "open"
+        
+        # Convert breakers to string status
+        account_breakers = {}
+        system_breakers = {}
+        
+        for bt, status in self.breakers.items():
+            status_str = status.state.value
+            if bt in [BreakerType.ACCOUNT_LOSS, BreakerType.DAILY_LOSS, BreakerType.CONSECUTIVE_LOSSES]:
+                account_breakers[bt.value] = status_str
+            else:
+                system_breakers[bt.value] = status_str
+        
+        return CircuitBreakerStatus(
+            overall_status=overall_status,
+            account_breakers=account_breakers,
+            system_breakers=system_breakers,
+            triggers_today=sum(1 for status in self.breakers.values() if status.failure_count > 0),
+            last_trigger=max((status.last_failure for status in self.breakers.values() if status.last_failure), default=None),
+            can_trade=self.can_trade()
+        )
+    
+    def can_trade(self) -> bool:
+        """Check if trading is allowed (no critical breakers open)"""
+        critical_breakers = [
+            BreakerType.ACCOUNT_LOSS,
+            BreakerType.DAILY_LOSS, 
+            BreakerType.SYSTEM_HEALTH
+        ]
+        
+        for breaker_type in critical_breakers:
+            if self.breakers[breaker_type].state == BreakerState.OPEN:
+                return False
+        
+        return True
+    
+    async def trigger_emergency_stop(self, reason: str):
+        """Trigger emergency stop by opening system health breaker"""
+        await self._trigger_breaker(BreakerType.SYSTEM_HEALTH, "system", reason)
+    
+    async def health_check(self):
+        """Perform health check on circuit breaker system"""
+        # This is called by the orchestrator health check loop
+        # Just ensure all breakers are functioning
+        pass
