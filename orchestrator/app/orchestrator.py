@@ -48,6 +48,9 @@ class TradingOrchestrator:
         self.circuit_breaker = CircuitBreakerManager(self.event_bus)
         self.safety_monitor = SafetyMonitor(self.event_bus, self.oanda_client)
         
+        # Execution engine integration
+        self.execution_engine_url = "http://localhost:8004"
+        
         # WebSocket connections for real-time updates
         self.websocket_connections: List[WebSocket] = []
         
@@ -293,11 +296,16 @@ class TradingOrchestrator:
                 {"signal": signal_data}
             )
             
-            # Execute trade
-            trade_result = await self.oanda_client.execute_trade(
-                signal,
-                param_result.get("parameters", {})
-            )
+            # Execute trade via execution engine (fallback to OANDA client if unavailable)
+            trade_result = await self._execute_via_execution_engine(signal, param_result.get("parameters", {}))
+            
+            if not trade_result.success:
+                # Fallback to direct OANDA client
+                logger.info("Execution engine unavailable, falling back to direct OANDA execution")
+                trade_result = await self.oanda_client.execute_trade(
+                    signal,
+                    param_result.get("parameters", {})
+                )
             
             # Record metrics
             processing_time = time.time() - signal_start_time
@@ -328,6 +336,61 @@ class TradingOrchestrator:
                 success=False,
                 signal_id=signal.id,
                 message=str(e)
+            )
+    
+    async def _execute_via_execution_engine(self, signal: TradeSignal, parameters: Dict) -> TradeResult:
+        """Execute trade via execution engine service"""
+        try:
+            import aiohttp
+            
+            # Convert signal to execution engine order format
+            order_request = {
+                "account_id": "default",  # Would be configured per account in production
+                "instrument": signal.instrument,
+                "order_type": "market",
+                "side": "buy" if signal.direction == "long" else "sell",
+                "units": parameters.get("position_size", 10000),
+                "take_profit_price": signal.take_profit,
+                "stop_loss_price": signal.stop_loss,
+                "client_extensions": {
+                    "id": signal.id,
+                    "tag": "orchestrator",
+                    "comment": f"Signal {signal.id} - confidence {signal.confidence}"
+                }
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.execution_engine_url}/api/orders",
+                    json=order_request,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status in [200, 201]:
+                        result = await response.json()
+                        return TradeResult(
+                            success=True,
+                            signal_id=signal.id,
+                            order_id=result.get("order_id"),
+                            status="executed",
+                            message="Order submitted to execution engine",
+                            execution_price=result.get("execution_price"),
+                            timestamp=datetime.now(timezone.utc)
+                        )
+                    else:
+                        error_text = await response.text()
+                        logger.warning(f"Execution engine returned {response.status}: {error_text}")
+                        return TradeResult(
+                            success=False,
+                            signal_id=signal.id,
+                            message=f"Execution engine error: {response.status}"
+                        )
+                        
+        except Exception as e:
+            logger.debug(f"Execution engine unavailable: {e}")
+            return TradeResult(
+                success=False,
+                signal_id=signal.id,
+                message=f"Execution engine connection failed: {e}"
             )
     
     async def get_system_status(self) -> SystemStatus:
