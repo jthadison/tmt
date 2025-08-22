@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, validator
@@ -323,14 +323,88 @@ class ExecutionMetrics(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
+class RiskLevel(str, Enum):
+    """Risk level enumeration."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class RiskEventType(str, Enum):
+    """Risk event type enumeration."""
+    POSITION_SIZE_BREACH = "position_size_breach"
+    LEVERAGE_LIMIT_EXCEEDED = "leverage_limit_exceeded"
+    DAILY_LOSS_LIMIT = "daily_loss_limit"
+    MARGIN_CALL_WARNING = "margin_call_warning"
+    DRAWDOWN_LIMIT = "drawdown_limit"
+    KILL_SWITCH_ACTIVATED = "kill_switch_activated"
+    UNUSUAL_MARKET_CONDITIONS = "unusual_market_conditions"
+    CORRELATION_RISK = "correlation_risk"
+    CONCENTRATION_RISK = "concentration_risk"
+
+
+class RiskAlert(BaseModel):
+    """Risk alert model."""
+    id: UUID = Field(default_factory=uuid.uuid4, description="Alert ID")
+    account_id: str = Field(..., description="Account ID")
+    event_type: RiskEventType = Field(..., description="Type of risk event")
+    level: RiskLevel = Field(..., description="Risk level")
+    message: str = Field(..., description="Alert message")
+    current_value: Optional[Decimal] = Field(None, description="Current metric value")
+    limit_value: Optional[Decimal] = Field(None, description="Risk limit value")
+    percentage: Optional[float] = Field(None, description="Percentage of limit breached")
+    instrument: Optional[str] = Field(None, description="Associated instrument")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Alert creation time")
+    acknowledged: bool = Field(default=False, description="Whether alert was acknowledged")
+    acknowledged_at: Optional[datetime] = Field(None, description="Acknowledgment time")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
 class RiskLimits(BaseModel):
-    """Risk management limits."""
+    """Enhanced risk management limits."""
+    # Position limits
     max_position_size: Optional[Decimal] = Field(None, description="Maximum position size")
     max_positions_per_instrument: Optional[int] = Field(None, description="Max positions per instrument")
+    max_total_positions: Optional[int] = Field(None, description="Maximum total positions")
+    
+    # Leverage and margin limits
     max_leverage: Optional[Decimal] = Field(None, description="Maximum leverage")
-    max_daily_loss: Optional[Decimal] = Field(None, description="Maximum daily loss")
-    max_drawdown: Optional[Decimal] = Field(None, description="Maximum drawdown")
     required_margin_ratio: Optional[Decimal] = Field(None, description="Required margin ratio")
+    margin_call_threshold: Optional[Decimal] = Field(None, description="Margin call threshold")
+    
+    # Loss limits
+    max_daily_loss: Optional[Decimal] = Field(None, description="Maximum daily loss")
+    max_weekly_loss: Optional[Decimal] = Field(None, description="Maximum weekly loss")
+    max_monthly_loss: Optional[Decimal] = Field(None, description="Maximum monthly loss")
+    max_drawdown: Optional[Decimal] = Field(None, description="Maximum drawdown")
+    
+    # Risk exposure limits
+    max_instrument_exposure: Optional[Decimal] = Field(None, description="Max exposure per instrument")
+    max_currency_exposure: Optional[Decimal] = Field(None, description="Max exposure per currency")
+    max_sector_exposure: Optional[Decimal] = Field(None, description="Max exposure per sector")
+    
+    # Time-based limits
+    max_orders_per_minute: Optional[int] = Field(None, description="Max orders per minute")
+    max_orders_per_hour: Optional[int] = Field(None, description="Max orders per hour")
+    
+    # Correlation limits
+    max_correlation_exposure: Optional[Decimal] = Field(None, description="Max correlated position exposure")
+    correlation_threshold: Optional[float] = Field(None, description="Correlation threshold for risk")
+    
+    # Warning thresholds (percentage of limit)
+    warning_threshold: float = Field(default=0.8, description="Warning threshold as percentage")
+    critical_threshold: float = Field(default=0.95, description="Critical threshold as percentage")
+    
+    # Emergency controls
+    kill_switch_enabled: bool = Field(default=True, description="Whether kill switch is enabled")
+    auto_close_on_limit: bool = Field(default=False, description="Auto-close positions on limit breach")
+    
+    @validator('warning_threshold', 'critical_threshold')
+    def validate_thresholds(cls, v: float) -> float:
+        if not 0 < v <= 1:
+            raise ValueError("Thresholds must be between 0 and 1")
+        return v
 
 
 class AccountSummary(BaseModel):
@@ -343,3 +417,140 @@ class AccountSummary(BaseModel):
     open_positions: int = Field(default=0, description="Number of open positions")
     pending_orders: int = Field(default=0, description="Number of pending orders")
     last_updated: datetime = Field(default_factory=datetime.utcnow, description="Last update time")
+
+
+class RiskMetrics(BaseModel):
+    """Comprehensive risk metrics."""
+    account_id: str = Field(..., description="Account ID")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Metrics timestamp")
+    
+    # Leverage and margin metrics
+    current_leverage: Decimal = Field(default=Decimal("0"), description="Current leverage ratio")
+    margin_utilization: Decimal = Field(default=Decimal("0"), description="Margin utilization percentage")
+    margin_available: Decimal = Field(default=Decimal("0"), description="Available margin")
+    
+    # Position metrics
+    position_count: int = Field(default=0, description="Total open positions")
+    total_exposure: Decimal = Field(default=Decimal("0"), description="Total notional exposure")
+    largest_position: Decimal = Field(default=Decimal("0"), description="Largest position size")
+    
+    # P&L metrics
+    daily_pl: Decimal = Field(default=Decimal("0"), description="Daily P&L")
+    weekly_pl: Decimal = Field(default=Decimal("0"), description="Weekly P&L")
+    monthly_pl: Decimal = Field(default=Decimal("0"), description="Monthly P&L")
+    unrealized_pl: Decimal = Field(default=Decimal("0"), description="Unrealized P&L")
+    max_drawdown: Decimal = Field(default=Decimal("0"), description="Current drawdown")
+    
+    # Risk scores
+    overall_risk_score: float = Field(default=0.0, description="Overall risk score (0-100)")
+    leverage_risk_score: float = Field(default=0.0, description="Leverage risk score")
+    concentration_risk_score: float = Field(default=0.0, description="Concentration risk score")
+    correlation_risk_score: float = Field(default=0.0, description="Correlation risk score")
+    
+    # Exposure by category
+    currency_exposures: Dict[str, Decimal] = Field(default_factory=dict, description="Currency exposures")
+    instrument_exposures: Dict[str, Decimal] = Field(default_factory=dict, description="Instrument exposures")
+    
+    # Trading activity
+    orders_per_hour: int = Field(default=0, description="Orders per hour")
+    orders_per_day: int = Field(default=0, description="Orders per day")
+    
+    # Market condition metrics
+    volatility_exposure: Decimal = Field(default=Decimal("0"), description="Volatility-adjusted exposure")
+    beta_weighted_exposure: Decimal = Field(default=Decimal("0"), description="Beta-weighted exposure")
+
+
+class RiskConfiguration(BaseModel):
+    """Risk management configuration."""
+    account_id: str = Field(..., description="Account ID")
+    name: str = Field(..., description="Configuration name")
+    description: Optional[str] = Field(None, description="Configuration description")
+    
+    # Risk limits
+    limits: RiskLimits = Field(..., description="Risk limits")
+    
+    # Monitoring settings
+    monitoring_enabled: bool = Field(default=True, description="Enable risk monitoring")
+    alert_frequency_minutes: int = Field(default=5, description="Alert check frequency in minutes")
+    
+    # Kill switch settings
+    kill_switch_conditions: List[Dict[str, Any]] = Field(default_factory=list, description="Kill switch trigger conditions")
+    auto_recovery_enabled: bool = Field(default=False, description="Enable automatic recovery")
+    recovery_conditions: List[Dict[str, Any]] = Field(default_factory=list, description="Recovery conditions")
+    
+    # Notification settings
+    notification_channels: List[str] = Field(default_factory=list, description="Notification channels")
+    escalation_rules: List[Dict[str, Any]] = Field(default_factory=list, description="Alert escalation rules")
+    
+    # Time settings
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Configuration creation time")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update time")
+    effective_from: datetime = Field(default_factory=datetime.utcnow, description="Effective from time")
+    effective_until: Optional[datetime] = Field(None, description="Effective until time")
+    
+    # Status
+    is_active: bool = Field(default=True, description="Whether configuration is active")
+    version: int = Field(default=1, description="Configuration version")
+
+
+class ValidationResult(BaseModel):
+    """Enhanced order validation result."""
+    is_valid: bool = Field(..., description="Whether validation passed")
+    risk_score: float = Field(default=0.0, description="Risk score for this order (0-100)")
+    confidence: float = Field(default=1.0, description="Validation confidence (0-1)")
+    
+    # Error details
+    error_code: Optional[str] = Field(None, description="Error code if validation failed")
+    error_message: Optional[str] = Field(None, description="Error message if validation failed")
+    
+    # Warnings
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    
+    # Risk breakdown
+    risk_factors: Dict[str, float] = Field(default_factory=dict, description="Individual risk factor scores")
+    
+    # Recommendations
+    recommended_position_size: Optional[Decimal] = Field(None, description="Recommended position size")
+    alternative_instruments: List[str] = Field(default_factory=list, description="Alternative instruments")
+    
+    # Timing
+    validation_time_ms: Optional[float] = Field(None, description="Validation time in milliseconds")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Validation timestamp")
+
+
+class RiskEvent(BaseModel):
+    """Risk event for audit trail."""
+    id: UUID = Field(default_factory=uuid.uuid4, description="Event ID")
+    account_id: str = Field(..., description="Account ID")
+    event_type: RiskEventType = Field(..., description="Event type")
+    severity: RiskLevel = Field(..., description="Event severity")
+    
+    # Event details
+    title: str = Field(..., description="Event title")
+    description: str = Field(..., description="Event description")
+    
+    # Associated data
+    order_id: Optional[UUID] = Field(None, description="Associated order ID")
+    position_id: Optional[UUID] = Field(None, description="Associated position ID")
+    instrument: Optional[str] = Field(None, description="Associated instrument")
+    
+    # Metrics at time of event
+    trigger_value: Optional[Decimal] = Field(None, description="Value that triggered the event")
+    limit_value: Optional[Decimal] = Field(None, description="Limit value")
+    percentage_of_limit: Optional[float] = Field(None, description="Percentage of limit")
+    
+    # Actions taken
+    actions_taken: List[str] = Field(default_factory=list, description="Actions taken in response")
+    kill_switch_activated: bool = Field(default=False, description="Whether kill switch was activated")
+    positions_closed: List[UUID] = Field(default_factory=list, description="Positions closed due to event")
+    
+    # Resolution
+    resolved: bool = Field(default=False, description="Whether event is resolved")
+    resolved_at: Optional[datetime] = Field(None, description="Resolution time")
+    resolution_notes: Optional[str] = Field(None, description="Resolution notes")
+    
+    # Timing
+    occurred_at: datetime = Field(default_factory=datetime.utcnow, description="Event occurrence time")
+    
+    # Metadata
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional event metadata")

@@ -114,7 +114,9 @@
       "Bash(timeout:*)",
       "Bash(powershell:*)",
       "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "Bash(git log:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

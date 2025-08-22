@@ -11,33 +11,15 @@ from dataclasses import dataclass
 
 import structlog
 
-from ..core.models import Order, Position, RiskLimits, AccountSummary
+from ..core.models import (
+    Order, Position, RiskLimits, AccountSummary, ValidationResult,
+    RiskMetrics, RiskLevel, RiskEventType, RiskAlert, RiskEvent
+)
 from ..integrations.oanda_client import OandaExecutionClient
 
 logger = structlog.get_logger(__name__)
 
 
-@dataclass
-class ValidationResult:
-    """Result of order validation."""
-    is_valid: bool
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
-    warnings: List[str] = None
-    
-    def __post_init__(self):
-        if self.warnings is None:
-            self.warnings = []
-
-
-class RiskMetrics(NamedTuple):
-    """Risk metrics for an account."""
-    current_leverage: Decimal
-    margin_utilization: Decimal
-    position_count: int
-    daily_pl: Decimal
-    max_position_size: Decimal
-    risk_score: float  # 0-100 scale
 
 
 class RiskManager:
@@ -228,12 +210,13 @@ class RiskManager:
             
             if not account_summary:
                 return RiskMetrics(
+                    account_id=account_id,
                     current_leverage=Decimal("0"),
                     margin_utilization=Decimal("0"),
                     position_count=0,
                     daily_pl=Decimal("0"),
-                    max_position_size=Decimal("0"),
-                    risk_score=0.0
+                    largest_position=Decimal("0"),
+                    overall_risk_score=0.0
                 )
             
             # Calculate leverage
@@ -259,6 +242,10 @@ class RiskManager:
             # Max position size among current positions
             max_position_size = max([abs(p.units) for p in positions if p.is_open()], default=Decimal("0"))
             
+            # Calculate exposure metrics
+            currency_exposures = self._calculate_currency_exposures(positions)
+            instrument_exposures = self._calculate_instrument_exposures(positions)
+            
             # Calculate risk score (0-100)
             risk_score = self._calculate_risk_score(
                 current_leverage,
@@ -269,12 +256,18 @@ class RiskManager:
             )
             
             metrics = RiskMetrics(
+                account_id=account_id,
                 current_leverage=current_leverage,
                 margin_utilization=margin_utilization,
                 position_count=open_position_count,
                 daily_pl=daily_pl,
-                max_position_size=max_position_size,
-                risk_score=risk_score
+                largest_position=max_position_size,
+                overall_risk_score=risk_score,
+                currency_exposures=currency_exposures,
+                instrument_exposures=instrument_exposures,
+                total_exposure=total_notional,
+                unrealized_pl=account_summary.unrealized_pl,
+                margin_available=account_summary.margin_available
             )
             
             # Cache metrics
@@ -285,12 +278,13 @@ class RiskManager:
         except Exception as e:
             logger.error("Risk limit check error", account_id=account_id, error=str(e))
             return RiskMetrics(
+                account_id=account_id,
                 current_leverage=Decimal("0"),
                 margin_utilization=Decimal("0"),
                 position_count=0,
                 daily_pl=Decimal("0"),
-                max_position_size=Decimal("0"),
-                risk_score=100.0  # Max risk on error
+                largest_position=Decimal("0"),
+                overall_risk_score=100.0  # Max risk on error
             )
     
     def activate_kill_switch(self, account_id: str, reason: str) -> None:
@@ -548,3 +542,41 @@ class RiskManager:
         score = leverage_score + margin_score + position_score + pl_score
         
         return min(score, 100.0)
+    
+    def _calculate_currency_exposures(self, positions: List[Position]) -> Dict[str, Decimal]:
+        """Calculate exposure by currency."""
+        exposures = {}
+        
+        for position in positions:
+            if position.is_open():
+                # Extract currencies from instrument (e.g., EUR_USD -> EUR, USD)
+                base_currency, quote_currency = position.instrument.split('_')
+                
+                # Calculate notional exposure (simplified)
+                notional = abs(position.units) * position.average_price
+                
+                # Base currency exposure
+                if base_currency not in exposures:
+                    exposures[base_currency] = Decimal("0")
+                exposures[base_currency] += notional
+                
+                # Quote currency exposure (opposite sign)
+                if quote_currency not in exposures:
+                    exposures[quote_currency] = Decimal("0")
+                exposures[quote_currency] -= notional
+        
+        return exposures
+    
+    def _calculate_instrument_exposures(self, positions: List[Position]) -> Dict[str, Decimal]:
+        """Calculate exposure by instrument."""
+        exposures = {}
+        
+        for position in positions:
+            if position.is_open():
+                notional = abs(position.units) * position.average_price
+                
+                if position.instrument not in exposures:
+                    exposures[position.instrument] = Decimal("0")
+                exposures[position.instrument] += notional
+        
+        return exposures
