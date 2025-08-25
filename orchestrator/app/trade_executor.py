@@ -37,6 +37,17 @@ class TradeExecutor:
         self.api_key = os.getenv("OANDA_API_KEY")
         self.environment = os.getenv("OANDA_ENVIRONMENT", "practice")
         
+        # OANDA API configuration
+        if self.environment == "live":
+            self.base_url = "https://api-fxtrade.oanda.com"
+        else:
+            self.base_url = "https://api-fxpractice.oanda.com"
+        
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
         # Risk management
         self.max_position_size = float(os.getenv("MAX_POSITION_SIZE", "100000"))
         self.risk_per_trade = float(os.getenv("RISK_PER_TRADE", "0.02"))
