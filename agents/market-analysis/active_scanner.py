@@ -29,8 +29,12 @@ class ActiveMarketScanner:
         self.oanda_api_key = os.getenv("OANDA_API_KEY")
         self.oanda_account_id = os.getenv("OANDA_ACCOUNT_ID")
         self.instruments = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CAD", "EUR_GBP"]
-        self.scan_interval = 30  # seconds
+        self.scan_interval = int(os.getenv("SCAN_INTERVAL", "30"))  # seconds, configurable
+        self.signal_probability = float(os.getenv("SIGNAL_PROBABILITY", "0.02"))  # 2% default (reduced from 5%)
+        self.max_daily_trades = int(os.getenv("MAX_DAILY_TRADES", "5"))  # Maximum 5 trades per day
         self.signal_count = 0
+        self.daily_trades = 0
+        self.last_reset_date = datetime.now().date()
         self.running = False
         
         # OANDA API endpoints
@@ -46,6 +50,9 @@ class ActiveMarketScanner:
         logger.info("🚀 Starting Active Market Scanner")
         logger.info(f"📊 Monitoring instruments: {', '.join(self.instruments)}")
         logger.info(f"⏰ Scan interval: {self.scan_interval} seconds")
+        logger.info(f"🎯 Signal probability: {self.signal_probability:.1%}")
+        logger.info(f"📈 Max daily trades: {self.max_daily_trades}")
+        logger.info(f"🗓️ Daily trades today: {self.daily_trades}")
         
         while self.running:
             try:
@@ -106,8 +113,13 @@ class ActiveMarketScanner:
         For now, using simplified logic for demonstration
         """
         
-        # Generate a signal with 5% probability (to avoid spamming)
-        if random.random() > 0.05:
+        # Check daily trade limit
+        self._reset_daily_count_if_needed()
+        if self.daily_trades >= self.max_daily_trades:
+            return None
+        
+        # Generate a signal with configurable probability
+        if random.random() > self.signal_probability:
             return None
         
         # Randomly choose direction
@@ -137,8 +149,19 @@ class ActiveMarketScanner:
             "source": "active_scanner"
         }
         
+        self.signal_count += 1
+        self.daily_trades += 1  # Increment daily trade count
         logger.info(f"📈 Signal generated: {instrument} {direction.upper()} @ {price:.5f}")
+        logger.info(f"🎯 Daily trades: {self.daily_trades}/{self.max_daily_trades}")
         return signal
+    
+    def _reset_daily_count_if_needed(self):
+        """Reset daily trade count if it's a new day"""
+        current_date = datetime.now().date()
+        if current_date != self.last_reset_date:
+            self.daily_trades = 0
+            self.last_reset_date = current_date
+            logger.info(f"🗓️ New day! Daily trade count reset to 0")
     
     async def send_signal_to_orchestrator(self, signal: Dict):
         """Send trading signal to orchestrator"""

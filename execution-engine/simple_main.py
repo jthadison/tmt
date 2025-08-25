@@ -10,6 +10,48 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 
+# Import notification service
+try:
+    sys.path.append('..')
+    from notification_service import notify_trade, notify_alert
+    NOTIFICATIONS_AVAILABLE = True
+except ImportError:
+    print("Notification service not available")
+    NOTIFICATIONS_AVAILABLE = False
+    
+    async def notify_trade(data):
+        """Fallback notification function"""
+        pass
+    
+    async def notify_alert(alert_type, message, severity="info"):
+        """Fallback alert function"""
+        pass
+
+# Import trade journal service
+try:
+    sys.path.append('..')
+    from trade_journal import record_trade_execution, record_trade_close, export_csv, get_trading_summary
+    TRADE_JOURNAL_AVAILABLE = True
+except ImportError:
+    print("Trade journal service not available")
+    TRADE_JOURNAL_AVAILABLE = False
+    
+    def record_trade_execution(data):
+        """Fallback trade journal function"""
+        pass
+    
+    def record_trade_close(trade_id, close_data):
+        """Fallback trade close function"""
+        pass
+    
+    def export_csv(filename=None, days_back=None):
+        """Fallback CSV export function"""
+        return "trade_journal_not_available.csv"
+    
+    def get_trading_summary():
+        """Fallback summary function"""
+        return {"error": "Trade journal not available"}
+
 # Try to load .env file
 try:
     from dotenv import load_dotenv
@@ -154,6 +196,16 @@ class PositionMonitor:
                             # Position was closed (by stop loss, take profit, or manual close)
                             logger.info(f"Position {trade_id} was closed - removing from monitoring")
                             positions_to_remove.append(trade_id)
+                            
+                            # Send notification for closed position
+                            try:
+                                signal_data = monitor_data.get('signal_data', {})
+                                instrument = signal_data.get('instrument', 'Unknown')
+                                await notify_alert("position_auto_closed", 
+                                                 f"Position {trade_id} ({instrument}) automatically closed (Stop Loss/Take Profit triggered)", 
+                                                 "info")
+                            except Exception as e:
+                                logger.error(f"Error sending position close notification: {e}")
                         else:
                             # Position still open - check for pattern invalidation
                             trade = current_trades[trade_id]
@@ -263,6 +315,26 @@ if FASTAPI_AVAILABLE:
             # Paper trading mode - simulate order
             order_id = f"paper_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             
+            # Prepare notification data for paper trading
+            notification_data = {
+                "success": True,
+                "mode": "paper_trading",
+                "instrument": order_data.get("instrument", "Unknown"),
+                "fill_price": order_data.get("price", 1.0000),
+                "units_filled": order_data.get("units", 1000) if order_data.get("side", "buy") == "buy" else -order_data.get("units", 1000),
+                "trade_id": order_id,
+                "stop_loss_set": bool(order_data.get("stop_loss_price")),
+                "take_profit_set": bool(order_data.get("take_profit_price")),
+                "pl": 0.0  # No P&L for paper trades yet
+            }
+            
+            # Send notification and record in journal
+            try:
+                await notify_trade(notification_data)
+                record_trade_execution(notification_data)
+            except Exception as e:
+                logger.error(f"Error sending notification or recording trade: {e}")
+            
             return {
                 "success": True,
                 "mode": "paper_trading",
@@ -351,6 +423,28 @@ if FASTAPI_AVAILABLE:
                                 }
                                 app_state.position_monitor.add_position(trade_id, signal_data)
                         
+                        # Prepare notification data for successful OANDA trade
+                        notification_data = {
+                            "success": True,
+                            "mode": "oanda_practice",
+                            "instrument": order_fill.get("instrument"),
+                            "fill_price": float(order_fill.get("price", 0.0)),
+                            "units_filled": float(order_fill.get("units", 0)),
+                            "trade_id": trade_opened.get("tradeID") if trade_opened else order_fill.get("id", "unknown"),
+                            "stop_loss_set": bool(stop_loss_price),
+                            "take_profit_set": bool(take_profit_price),
+                            "pl": float(order_fill.get("pl", 0.0)),
+                            "commission": float(order_fill.get("commission", 0.0)),
+                            "financing": float(order_fill.get("financing", 0.0))
+                        }
+                        
+                        # Send notification and record in journal
+                        try:
+                            await notify_trade(notification_data)
+                            record_trade_execution(notification_data)
+                        except Exception as e:
+                            logger.error(f"Error sending notification or recording trade: {e}")
+                        
                         return {
                             "success": True,
                             "mode": "oanda_practice",
@@ -372,6 +466,22 @@ if FASTAPI_AVAILABLE:
                         }
                     else:
                         error_text = response.text
+                        
+                        # Prepare notification data for failed trade
+                        notification_data = {
+                            "success": False,
+                            "mode": "oanda_practice",
+                            "instrument": instrument,
+                            "message": f"OANDA order failed: {response.status_code} - {error_text}"
+                        }
+                        
+                        # Send notification and record in journal
+                        try:
+                            await notify_trade(notification_data)
+                            record_trade_execution(notification_data)
+                        except Exception as e:
+                            logger.error(f"Error sending notification or recording trade: {e}")
+                        
                         return {
                             "success": False,
                             "mode": "oanda_practice",
@@ -380,6 +490,21 @@ if FASTAPI_AVAILABLE:
                         }
                         
             except Exception as e:
+                # Prepare notification data for exception error
+                notification_data = {
+                    "success": False,
+                    "mode": "oanda_practice",
+                    "instrument": order_data.get("instrument", "Unknown"),
+                    "message": f"OANDA order error: {str(e)}"
+                }
+                
+                # Send notification
+                try:
+                    await notify_trade(notification_data)
+                    await notify_alert("execution_error", f"Trade execution failed: {str(e)}", "error")
+                except Exception as notify_error:
+                    logger.error(f"Error sending notification: {notify_error}")
+                
                 return {
                     "success": False,
                     "mode": "oanda_practice",
@@ -482,6 +607,12 @@ if FASTAPI_AVAILABLE:
                     # Remove from monitoring
                     if trade_id in app_state.position_monitor.monitoring_positions:
                         del app_state.position_monitor.monitoring_positions[trade_id]
+                    
+                    # Send position close notification
+                    try:
+                        await notify_alert("position_closed", f"Position {trade_id} closed successfully", "info")
+                    except Exception as e:
+                        logger.error(f"Error sending close notification: {e}")
                     
                     return {
                         "success": True,
@@ -677,6 +808,131 @@ if FASTAPI_AVAILABLE:
             return {
                 "success": False,
                 "message": f"Error adding existing positions: {str(e)}"
+            }
+    
+    @app.get("/journal/summary")
+    async def get_journal_summary():
+        """Get trading journal summary"""
+        try:
+            summary = get_trading_summary()
+            return {
+                "success": True,
+                "summary": summary,
+                "journal_available": TRADE_JOURNAL_AVAILABLE
+            }
+        except Exception as e:
+            logger.error(f"Error getting journal summary: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to get summary: {str(e)}"
+            }
+    
+    @app.post("/journal/export")
+    async def export_journal_csv(export_params: dict = {}):
+        """Export trade journal to CSV"""
+        try:
+            filename = export_params.get("filename")
+            days_back = export_params.get("days_back")
+            
+            exported_file = export_csv(filename, days_back)
+            
+            return {
+                "success": True,
+                "message": "Trade journal exported successfully",
+                "filename": exported_file,
+                "journal_available": TRADE_JOURNAL_AVAILABLE
+            }
+        except Exception as e:
+            logger.error(f"Error exporting journal: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to export journal: {str(e)}"
+            }
+    
+    @app.get("/metrics")
+    async def get_metrics():
+        """Comprehensive metrics endpoint for monitoring"""
+        try:
+            # Get current time and uptime
+            current_time = datetime.now()
+            uptime_seconds = (current_time - app_state.start_time).total_seconds()
+            
+            # Get OANDA account info if available
+            oanda_metrics = {"account_balance": "N/A", "unrealized_pl": "N/A", "open_trades": 0}
+            
+            if not app_state.paper_trading_mode and app_state.oanda_configured:
+                try:
+                    import httpx
+                    api_key = os.getenv("OANDA_API_KEY")
+                    account_id = os.getenv("OANDA_ACCOUNT_ID")
+                    
+                    headers = {
+                        'Authorization': f'Bearer {api_key}',
+                        'Content-Type': 'application/json'
+                    }
+                    
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(
+                            f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}',
+                            headers=headers
+                        )
+                        
+                        if response.status_code == 200:
+                            account_data = response.json()
+                            account = account_data.get('account', {})
+                            oanda_metrics = {
+                                "account_balance": float(account.get('balance', 0)),
+                                "unrealized_pl": float(account.get('unrealizedPL', 0)),
+                                "open_trades": int(account.get('openTradeCount', 0)),
+                                "margin_used": float(account.get('marginUsed', 0)),
+                                "margin_available": float(account.get('marginAvailable', 0))
+                            }
+                except Exception as e:
+                    logger.warning(f"Could not fetch OANDA metrics: {e}")
+            
+            # Get trade journal metrics
+            journal_metrics = get_trading_summary()
+            
+            # Position monitoring metrics
+            monitoring_metrics = {
+                "monitoring_active": app_state.position_monitor.running,
+                "positions_monitored": len(app_state.position_monitor.monitoring_positions),
+                "monitoring_uptime_seconds": uptime_seconds if app_state.position_monitor.running else 0
+            }
+            
+            # System health metrics
+            system_metrics = {
+                "service_uptime_seconds": uptime_seconds,
+                "service_uptime_hours": round(uptime_seconds / 3600, 2),
+                "mode": "paper_trading" if app_state.paper_trading_mode else "oanda_practice",
+                "oanda_configured": app_state.oanda_configured,
+                "environment": app_state.environment,
+                "dependencies": {
+                    "fastapi": FASTAPI_AVAILABLE,
+                    "notifications": NOTIFICATIONS_AVAILABLE,
+                    "trade_journal": TRADE_JOURNAL_AVAILABLE
+                },
+                "timestamp": current_time.isoformat(),
+                "start_time": app_state.start_time.isoformat()
+            }
+            
+            return {
+                "success": True,
+                "metrics": {
+                    "system": system_metrics,
+                    "oanda_account": oanda_metrics,
+                    "trading_journal": journal_metrics,
+                    "position_monitoring": monitoring_metrics
+                },
+                "health_status": "healthy" if uptime_seconds > 30 else "starting"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error collecting metrics: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to collect metrics: {str(e)}",
+                "health_status": "error"
             }
 
 def run_http_server():
