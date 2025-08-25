@@ -247,18 +247,57 @@ class SignalGenerator:
     async def _detect_wyckoff_patterns(self, price_data: pd.DataFrame, volume_data: pd.Series) -> List[Dict]:
         """Detect Wyckoff patterns using the phase detector"""
         try:
-            # Use the existing PhaseDetector
-            patterns = self.phase_detector.detect_patterns(price_data, volume_data)
+            # Get current symbol from the data (use EUR_USD as default)
+            symbol = getattr(price_data, 'symbol', 'EUR_USD')
             
-            # Convert to list format if needed
-            if isinstance(patterns, dict):
-                patterns = [patterns] if patterns.get('type') else []
+            # Use the WyckoffPhaseDetector to detect current phase
+            phase_result = self.phase_detector.detect_phase(
+                symbol=symbol,
+                price_data=price_data, 
+                volume_data=volume_data,
+                timeframe='1h'
+            )
             
-            return patterns or []
+            # Convert phase detection result to pattern format
+            patterns = []
+            if phase_result.confidence > 60.0:  # Only use high-confidence detections
+                pattern = {
+                    'type': f'{phase_result.phase}_phase',
+                    'phase': phase_result.phase,
+                    'confidence': float(phase_result.confidence),
+                    'strength': min(100, float(phase_result.confidence) * 1.2),  # Scale confidence to strength
+                    'key_levels': phase_result.key_levels,
+                    'criteria': phase_result.criteria,
+                    'detection_time': phase_result.detection_time,
+                    'timeframe': phase_result.timeframe,
+                    
+                    # Add trading direction based on phase
+                    'direction': self._get_phase_direction(phase_result.phase),
+                    'entry_price': phase_result.key_levels.get('entry'),
+                    'stop_loss': phase_result.key_levels.get('stop'),
+                    'take_profit': phase_result.key_levels.get('target'),
+                    'support': phase_result.key_levels.get('support'),
+                    'resistance': phase_result.key_levels.get('resistance')
+                }
+                patterns.append(pattern)
+            
+            logger.info(f"Wyckoff phase detection: {phase_result.phase} (confidence: {phase_result.confidence})")
+            return patterns
             
         except Exception as e:
             logger.error(f"Error detecting Wyckoff patterns: {e}")
             return []
+    
+    def _get_phase_direction(self, phase: str) -> str:
+        """Get trading direction based on Wyckoff phase"""
+        phase_directions = {
+            'accumulation': 'long',    # Prepare for markup
+            'markup': 'long',          # Continue the uptrend
+            'distribution': 'short',   # Prepare for markdown
+            'markdown': 'short',       # Continue the downtrend
+            'neutral': 'hold'          # No clear direction
+        }
+        return phase_directions.get(phase, 'hold')
     
     async def _enhance_patterns_with_volume(self, 
                                           patterns: List[Dict],

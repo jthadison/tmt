@@ -539,13 +539,13 @@ class SafetyMonitor:
             emergency_alerts = self.get_active_alerts(AlertLevel.EMERGENCY)
             if emergency_alerts:
                 logger.error(f"Emergency alerts prevent trading: {len(emergency_alerts)} active")
-                raise SafetyException("Emergency alerts active - trading blocked")
+                raise SafetyException("emergency_alerts", "Emergency alerts active - trading blocked")
             
             # Check critical alerts
             critical_alerts = self.get_active_alerts(AlertLevel.CRITICAL)
             if len(critical_alerts) > 3:  # Allow some critical alerts but not too many
                 logger.error(f"Too many critical alerts: {len(critical_alerts)} active")
-                raise SafetyException("Excessive critical alerts - trading blocked")
+                raise SafetyException("critical_alerts", "Excessive critical alerts - trading blocked")
             
             # Check OANDA connection if client is available
             if self.oanda_client:
@@ -554,7 +554,7 @@ class SafetyMonitor:
                     logger.info("OANDA connection verified")
                 except Exception as e:
                     logger.error(f"OANDA connection check failed: {e}")
-                    raise SafetyException(f"OANDA connection failed: {e}")
+                    raise SafetyException("oanda_connection", f"OANDA connection failed: {e}")
             
             # Check if we have any risk metrics (accounts configured)
             if not self.risk_metrics:
@@ -564,7 +564,7 @@ class SafetyMonitor:
                 critical_accounts = [m for m in self.risk_metrics.values() if m.risk_score >= 70]
                 if len(critical_accounts) > len(self.risk_metrics) * 0.5:
                     logger.error(f"Too many critical accounts: {len(critical_accounts)}/{len(self.risk_metrics)}")
-                    raise SafetyException("Majority of accounts in critical state")
+                    raise SafetyException("account_risk", "Majority of accounts in critical state")
             
             logger.info("Pre-trading safety checks passed")
             return True
@@ -573,7 +573,7 @@ class SafetyMonitor:
             raise
         except Exception as e:
             logger.error(f"Pre-trading checks failed with unexpected error: {e}")
-            raise SafetyException(f"Pre-trading checks failed: {e}")
+            raise SafetyException("pre_trading_checks", f"Pre-trading checks failed: {e}")
     
     async def validate_signal(self, signal) -> bool:
         """Validate a trading signal for safety compliance"""

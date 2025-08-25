@@ -24,6 +24,7 @@ from .circuit_breaker import CircuitBreakerManager
 from .oanda_client import OandaClient
 from .safety_monitor import SafetyMonitor
 from .exceptions import OrchestratorException
+from .trade_executor import TradeExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class TradingOrchestrator:
         self.settings = get_settings()
         self.running = False
         self.trading_enabled = False
+        self.oanda_connected = False
         self.start_time = None
         
         # Core components
@@ -47,6 +49,7 @@ class TradingOrchestrator:
         self.agent_manager = AgentManager()
         self.circuit_breaker = CircuitBreakerManager(self.event_bus)
         self.safety_monitor = SafetyMonitor(self.event_bus, self.oanda_client)
+        self.trade_executor = TradeExecutor()
         
         # Execution engine integration
         self.execution_engine_url = "http://localhost:8004"
@@ -78,6 +81,9 @@ class TradingOrchestrator:
             await self.event_bus.start()
             await self.agent_manager.start()
             await self.safety_monitor.start()
+            
+            # Test OANDA connection
+            await self._test_oanda_connection()
             
             # Start background tasks
             self.background_tasks = [
@@ -296,15 +302,39 @@ class TradingOrchestrator:
                 {"signal": signal_data}
             )
             
-            # Execute trade via execution engine (fallback to OANDA client if unavailable)
-            trade_result = await self._execute_via_execution_engine(signal, param_result.get("parameters", {}))
+            # Execute trade using the integrated trade executor
+            execution_results = []
             
-            if not trade_result.success:
-                # Fallback to direct OANDA client
-                logger.info("Execution engine unavailable, falling back to direct OANDA execution")
-                trade_result = await self.oanda_client.execute_trade(
-                    signal,
-                    param_result.get("parameters", {})
+            # Execute on all configured accounts
+            for account_id in self.settings.account_ids_list:
+                if await self.is_account_enabled(account_id):
+                    execution_result = await self.trade_executor.execute_signal(signal, account_id)
+                    execution_results.append(execution_result)
+                    
+                    if execution_result["success"]:
+                        logger.info(f"Trade executed successfully on account {account_id}")
+                    else:
+                        logger.warning(f"Trade execution failed on account {account_id}: {execution_result['reason']}")
+            
+            # Create aggregated trade result
+            successful_executions = [r for r in execution_results if r["success"]]
+            
+            if successful_executions:
+                trade_result = TradeResult(
+                    success=True,
+                    signal_id=signal.id,
+                    order_id=successful_executions[0]["order_id"],
+                    status="executed",
+                    message=f"Executed on {len(successful_executions)} account(s)",
+                    execution_price=successful_executions[0].get("fill_price"),
+                    timestamp=datetime.now(timezone.utc)
+                )
+            else:
+                trade_result = TradeResult(
+                    success=False,
+                    signal_id=signal.id,
+                    message="Failed to execute on any account",
+                    timestamp=datetime.now(timezone.utc)
                 )
             
             # Record metrics
@@ -397,7 +427,8 @@ class TradingOrchestrator:
         """Get current system status"""
         agent_statuses = await self.agent_manager.get_all_agent_statuses()
         
-        oanda_status = await self.oanda_client.get_connection_status()
+        # Use our tracked connection status
+        oanda_status = {"connected": self.oanda_connected}
         
         # Count healthy agents - agent_statuses is a list of dicts
         healthy_agents = len([s for s in agent_statuses if s.get("health") == "healthy"])
@@ -510,6 +541,50 @@ class TradingOrchestrator:
         )
         await self.event_bus.publish(event_obj)
     
+    async def _test_oanda_connection(self):
+        """Test OANDA API connection and update connection status"""
+        try:
+            logger.info("🔌 Testing OANDA API connection...")
+            
+            # Test connection with first account
+            if self.settings.account_ids_list:
+                account_id = self.settings.account_ids_list[0]
+                
+                # Get account details to test connection
+                account_info = await self.oanda_client.get_account(account_id)
+                
+                if account_info:
+                    self.oanda_connected = True
+                    logger.info(f"✅ OANDA connection successful - Account: {account_id}")
+                    logger.info(f"   Balance: {account_info.get('balance', 'N/A')} {account_info.get('currency', 'USD')}")
+                    logger.info(f"   Environment: {self.settings.oanda_environment}")
+                    
+                    # Enable trading if connection successful
+                    self.trading_enabled = True
+                    
+                    await self._emit_event("oanda.connected", {
+                        "account_id": account_id,
+                        "environment": self.settings.oanda_environment,
+                        "balance": account_info.get('balance'),
+                        "currency": account_info.get('currency')
+                    })
+                else:
+                    self.oanda_connected = False
+                    logger.error("❌ OANDA connection failed - no account data returned")
+                    
+            else:
+                self.oanda_connected = False
+                logger.error("❌ No OANDA account IDs configured")
+                
+        except Exception as e:
+            self.oanda_connected = False
+            logger.error(f"❌ OANDA connection test failed: {e}")
+            
+            await self._emit_event("oanda.connection_failed", {
+                "error": str(e),
+                "environment": self.settings.oanda_environment
+            })
+    
     async def _health_check_loop(self):
         """Background task for health monitoring"""
         while self.running:
@@ -606,3 +681,9 @@ class TradingOrchestrator:
             
         except Exception as e:
             logger.error(f"Error updating performance metrics: {e}")
+    
+    async def is_account_enabled(self, account_id: str) -> bool:
+        """Check if trading is enabled for an account"""
+        # For now, assume all accounts are enabled if trading is enabled
+        # In production, this would check per-account status
+        return self.trading_enabled and self.oanda_connected

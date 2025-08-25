@@ -1,59 +1,67 @@
 #!/usr/bin/env python3
 """
-Execution Engine Startup Script
-Starts the execution engine service on port 8004
+TMT Trading System - Execution Engine Startup Script
+Starts the execution engine with graceful dependency handling.
 """
 
-import os
 import sys
-import asyncio
-import logging
+import os
+import subprocess
+import time
 from pathlib import Path
 
-# Add execution engine to Python path
-execution_engine_path = Path(__file__).parent / "execution-engine"
-sys.path.insert(0, str(execution_engine_path))
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("execution_engine_startup")
-
-async def main():
+def main():
     """Start the execution engine"""
-    logger.info("🚀 Starting Execution Engine on port 8004")
+    print("Starting TMT Execution Engine...")
     
+    # Change to execution engine directory
+    execution_engine_dir = Path(__file__).parent / "execution-engine"
+    
+    if not execution_engine_dir.exists():
+        print(f"Error: Execution engine directory not found: {execution_engine_dir}")
+        sys.exit(1)
+    
+    os.chdir(execution_engine_dir)
+    
+    # Try to start the simplified execution engine
     try:
-        # Import execution engine main module
-        from app.main import app
-        import uvicorn
+        print("Starting simplified execution engine...")
         
-        # Configure for development
-        config = uvicorn.Config(
-            app,
-            host="0.0.0.0",
-            port=8004,
-            log_level="info",
-            reload=False,  # Set to True for development
-            access_log=True
+        # Start the simplified execution engine
+        process = subprocess.Popen(
+            [sys.executable, "simple_main.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
         )
         
-        server = uvicorn.Server(config)
-        logger.info("✅ Execution Engine starting on http://localhost:8004")
-        await server.serve()
+        # Wait a moment for startup
+        time.sleep(2)
         
-    except ImportError as e:
-        logger.error(f"❌ Failed to import execution engine: {e}")
-        logger.error("Make sure you're in the correct directory and dependencies are installed")
-        sys.exit(1)
+        # Check if process is still running
+        if process.poll() is None:
+            print("✅ Execution engine started successfully on port 8081")
+            print("   Health endpoint: http://localhost:8081/health")
+            print("   Status endpoint: http://localhost:8081/status")
+            
+            # Keep the process running by waiting for it
+            try:
+                process.wait()
+            except KeyboardInterrupt:
+                print("\nShutting down execution engine...")
+                process.terminate()
+                process.wait()
+        else:
+            stdout, stderr = process.communicate()
+            print(f"❌ Execution engine failed to start")
+            print(f"Error: {stderr}")
+            if stdout:
+                print(f"Output: {stdout}")
+            sys.exit(1)
+            
     except Exception as e:
-        logger.error(f"❌ Failed to start execution engine: {e}")
+        print(f"❌ Failed to start execution engine: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("👋 Execution Engine shutdown complete")
+    main()

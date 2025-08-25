@@ -116,7 +116,12 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_wait_for",
       "Bash(git log:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(npm:*)",
+      "Bash(PORT=8080 python -m app.main)",
+      "Bash(PORT=8081 python -m app.main)",
+      "Bash(PORT=8083 python -m app.main)",
+      "Bash(OANDA_API_KEY=375f337dd8502af3307ce9179f7a373a-48f35175b87682feea1f057950810a09 OANDA_ACCOUNT_ID=101-001-21040028-001 python active_scanner.py)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
