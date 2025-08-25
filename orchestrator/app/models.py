@@ -13,7 +13,7 @@ class TradeSignal(BaseModel):
     id: str
     instrument: str
     direction: Literal["long", "short"]
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=100.0)
     entry_price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
@@ -47,6 +47,23 @@ class AgentStatus(str, Enum):
     ERROR = "error"
     STARTING = "starting"
     STOPPING = "stopping"
+
+
+class OrderType(str, Enum):
+    """Order type enumeration"""
+    MARKET = "market"
+    LIMIT = "limit"
+    STOP = "stop"
+    STOP_LIMIT = "stop_limit"
+
+
+class OrderStatus(str, Enum):
+    """Order status enumeration"""
+    PENDING = "pending"
+    FILLED = "filled"
+    PARTIALLY_FILLED = "partially_filled"
+    CANCELLED = "cancelled"
+    REJECTED = "rejected"
 
 
 class AgentInfo(BaseModel):
