@@ -16,6 +16,7 @@ from .models import TradeSignal, OrderType, OrderStatus
 from .config import get_settings
 from .circuit_breaker import TradingCircuitBreaker
 from .execution_client import ExecutionEngineClient
+from .circuit_breaker_client import get_circuit_breaker_client
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,22 @@ class TradeExecutor:
         self.settings = get_settings()
         self.circuit_breaker = TradingCircuitBreaker()
         self.execution_client = ExecutionEngineClient()
+        self.external_circuit_breaker = get_circuit_breaker_client()
         
         # Legacy OANDA configuration (for compatibility)
         self.api_key = os.getenv("OANDA_API_KEY")
         self.environment = os.getenv("OANDA_ENVIRONMENT", "practice")
+        
+        # OANDA API configuration
+        if self.environment == "live":
+            self.base_url = "https://api-fxtrade.oanda.com"
+        else:
+            self.base_url = "https://api-fxpractice.oanda.com"
+        
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
         # Risk management
         self.max_position_size = float(os.getenv("MAX_POSITION_SIZE", "100000"))
@@ -108,6 +121,19 @@ class TradeExecutor:
                 
                 logger.info(f"Trade executed successfully: {order_result['order_id']}")
                 
+                # Report to external circuit breaker
+                try:
+                    await self.external_circuit_breaker.report_trade({
+                        "success": True,
+                        "signal_id": signal.id,
+                        "instrument": signal.instrument,
+                        "account_id": account_id,
+                        "pnl": 0.0,  # Will be updated when trade closes
+                        "timestamp": datetime.now().isoformat()
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to report trade to external circuit breaker: {e}")
+                
                 # Send execution confirmation
                 await self._send_execution_notification(signal, order_result)
             
@@ -124,10 +150,20 @@ class TradeExecutor:
     async def _pre_execution_checks(self, signal: TradeSignal, account_id: str) -> bool:
         """Perform pre-execution safety checks"""
         
-        # Check circuit breaker status
+        # Check internal circuit breaker status
         if self.circuit_breaker.is_tripped(account_id):
-            logger.warning(f"Circuit breaker tripped for account {account_id}")
+            logger.warning(f"Internal circuit breaker tripped for account {account_id}")
             return False
+        
+        # Check external circuit breaker (enhanced safety)
+        try:
+            can_trade = await self.external_circuit_breaker.can_trade(account_id)
+            if not can_trade:
+                logger.warning(f"External circuit breaker blocking trade for account {account_id}")
+                return False
+        except Exception as e:
+            logger.warning(f"External circuit breaker unavailable: {e}")
+            # Continue with internal checks (fail-open behavior)
         
         # Check daily trade limit
         max_trades_per_day = int(os.getenv("MAX_TRADES_PER_DAY", "10"))

@@ -52,7 +52,7 @@ class TradingOrchestrator:
         self.trade_executor = TradeExecutor()
         
         # Execution engine integration
-        self.execution_engine_url = "http://localhost:8004"
+        self.execution_engine_url = "http://localhost:8082"
         
         # WebSocket connections for real-time updates
         self.websocket_connections: List[WebSocket] = []
@@ -385,8 +385,10 @@ class TradingOrchestrator:
             import aiohttp
             
             # Convert signal to execution engine order format
+            # Use the first configured OANDA account ID
+            account_id = self.settings.account_ids_list[0] if self.settings.account_ids_list else "101-001-21040028-001"
             order_request = {
-                "account_id": "default",  # Would be configured per account in production
+                "account_id": account_id,
                 "instrument": signal.instrument,
                 "order_type": "market",
                 "side": "buy" if signal.direction == "long" else "sell",
@@ -562,12 +564,12 @@ class TradingOrchestrator:
                 account_id = self.settings.account_ids_list[0]
                 
                 # Get account details to test connection
-                account_info = await self.oanda_client.get_account(account_id)
+                account_info = await self.oanda_client.get_account_info(account_id)
                 
                 if account_info:
                     self.oanda_connected = True
                     logger.info(f"✅ OANDA connection successful - Account: {account_id}")
-                    logger.info(f"   Balance: {account_info.get('balance', 'N/A')} {account_info.get('currency', 'USD')}")
+                    logger.info(f"   Balance: {account_info.balance} {account_info.currency}")
                     logger.info(f"   Environment: {self.settings.oanda_environment}")
                     
                     # Enable trading if connection successful
@@ -576,8 +578,8 @@ class TradingOrchestrator:
                     await self._emit_event("oanda.connected", {
                         "account_id": account_id,
                         "environment": self.settings.oanda_environment,
-                        "balance": account_info.get('balance'),
-                        "currency": account_info.get('currency')
+                        "balance": account_info.balance,
+                        "currency": account_info.currency
                     })
                 else:
                     self.oanda_connected = False

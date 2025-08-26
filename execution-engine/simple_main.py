@@ -330,10 +330,15 @@ if FASTAPI_AVAILABLE:
             
             # Send notification and record in journal
             try:
+                logger.info(f"Sending notification for trade: {notification_data}")
                 await notify_trade(notification_data)
+                logger.info("Notification sent successfully")
                 record_trade_execution(notification_data)
+                logger.info("Trade recorded in journal")
             except Exception as e:
                 logger.error(f"Error sending notification or recording trade: {e}")
+                import traceback
+                traceback.print_exc()
             
             return {
                 "success": True,
