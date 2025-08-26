@@ -431,10 +431,43 @@ class CircuitBreakerAgent:
     
     async def close_all_positions(self):
         """Close all open positions"""
-        logger.critical("Closing all positions...")
-        # This would call the position closing script
-        # For safety, we'll use the script we created earlier
-        os.system("python scripts/close_all_trades.py")
+        logger.critical("🚨 Closing all positions via emergency script...")
+        try:
+            # Get current directory and construct path to scripts
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            script_path = os.path.join(current_dir, "..", "..", "scripts", "close_all_trades.py")
+            script_path = os.path.abspath(script_path)
+            
+            if not os.path.exists(script_path):
+                logger.error(f"❌ Close all trades script not found: {script_path}")
+                return
+            
+            # Run script with proper environment variables
+            env = os.environ.copy()
+            env.update({
+                "OANDA_API_KEY": self.oanda_api_key,
+                "OANDA_ACCOUNT_ID": self.account_id
+            })
+            
+            # Use asyncio subprocess for non-blocking execution
+            process = await asyncio.create_subprocess_exec(
+                "python", script_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                logger.critical("✅ Emergency position closure completed successfully")
+                if stdout:
+                    logger.info(f"Script output: {stdout.decode()}")
+            else:
+                logger.error(f"❌ Emergency position closure failed: {stderr.decode()}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error executing emergency position closure: {e}")
     
     async def notify_orchestrator_stop(self):
         """Notify orchestrator to stop trading"""
