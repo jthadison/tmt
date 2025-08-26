@@ -218,7 +218,12 @@ class TradingOrchestrator:
             
             # Close all positions if configured to do so
             if self.settings.emergency_close_positions:
-                await self.oanda_client.close_all_positions()
+                for account_id in self.settings.account_ids_list:
+                    try:
+                        logger.warning(f"🚨 Closing all positions for account {account_id}")
+                        await self.oanda_client.close_all_positions(account_id)
+                    except Exception as e:
+                        logger.error(f"Failed to close positions for account {account_id}: {e}")
             
             await self._emit_event("emergency.stop", {
                 "reason": reason,
