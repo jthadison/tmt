@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
@@ -69,6 +70,15 @@ app = FastAPI(
     title="TMT Pattern Detection Agent",
     description="Advanced pattern detection for Wyckoff, VPA, and anti-detection analysis",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Pydantic models

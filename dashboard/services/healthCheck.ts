@@ -212,7 +212,7 @@ class HealthCheckService {
   }
 }
 
-// Default configuration for the trading system
+// Default configuration for the trading system - Updated for 8-agent ecosystem
 export const defaultHealthCheckConfig: HealthCheckConfig = {
   endpoints: {
     'Market Analysis': {
@@ -220,40 +220,50 @@ export const defaultHealthCheckConfig: HealthCheckConfig = {
       timeout: 3000,
       critical: true
     },
-    'Execution Engine': {
+    'Strategy Analysis': {
       url: 'http://localhost:8002/health',
       timeout: 3000,
       critical: true
     },
-    'Risk Management': {
+    'Parameter Optimization': {
       url: 'http://localhost:8003/health',
       timeout: 3000,
       critical: true
     },
-    'Portfolio Optimizer': {
+    'Learning Safety': {
       url: 'http://localhost:8004/health',
       timeout: 3000,
-      critical: false
+      critical: true
     },
-    'Circuit Breaker': {
+    'Disagreement Engine': {
       url: 'http://localhost:8005/health',
       timeout: 3000,
       critical: true
     },
-    'Compliance Engine': {
+    'Data Collection': {
       url: 'http://localhost:8006/health',
       timeout: 3000,
       critical: true
     },
-    'Anti-Correlation': {
+    'Continuous Improvement': {
       url: 'http://localhost:8007/health',
       timeout: 3000,
       critical: false
     },
-    'Human Behavior': {
+    'Pattern Detection': {
       url: 'http://localhost:8008/health',
       timeout: 3000,
       critical: false
+    },
+    'Execution Engine': {
+      url: 'http://localhost:8082/health',
+      timeout: 3000,
+      critical: true
+    },
+    'Orchestrator': {
+      url: 'http://localhost:8086/health',
+      timeout: 3000,
+      critical: true
     }
   },
   checkInterval: 15000 // Check every 15 seconds

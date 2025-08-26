@@ -7,6 +7,7 @@ Temporary version with basic functionality until import issues are resolved
 import os
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 # Create simple FastAPI app
@@ -14,6 +15,15 @@ app = FastAPI(
     title="TMT Strategy Analysis Agent",
     description="Strategy analysis and performance optimization agent",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/health")
