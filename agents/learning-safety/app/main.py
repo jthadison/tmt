@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
@@ -57,6 +58,15 @@ app = FastAPI(
     title="TMT Learning Safety Agent",
     description="Learning safety and circuit breaker management for autonomous trading",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Pydantic models
