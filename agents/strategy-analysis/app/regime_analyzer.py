@@ -17,7 +17,7 @@ from .models import (
 )
 
 # Import data interfaces
-from ...src.shared.python_utils.data_interfaces import MarketDataInterface, MockMarketDataProvider
+from shared.python_utils.data_interfaces import MarketDataInterface, MockMarketDataProvider
 
 logger = logging.getLogger(__name__)
 

@@ -528,3 +528,8 @@ class RollbackResult:
     rollback_duration: Optional[timedelta] = None
     issues_encountered: List[str] = field(default_factory=list)
     recovery_actions: List[str] = field(default_factory=list)
+
+
+# Aliases for backward compatibility
+TestPhase = ImprovementPhase  # Alias for legacy code
+TestDecision = PhaseDecision  # Alias for legacy code

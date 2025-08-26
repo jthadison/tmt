@@ -5,6 +5,14 @@ Starts the strategy analysis agent on the expected port for orchestrator integra
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Add the root directory and src directory to Python path
+root_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_dir))
+sys.path.insert(0, str(root_dir / "src"))
+
 import uvicorn
 from app.main import app
 
