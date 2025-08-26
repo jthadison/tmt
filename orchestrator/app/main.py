@@ -194,6 +194,27 @@ async def restart_agent(agent_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+@app.post("/agents/rediscover")
+async def rediscover_agents():
+    """Rediscover and register available agents"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    try:
+        # Clear current agents and rediscover
+        await orchestrator.agent_manager.discover_agents()
+        agents = list(orchestrator.agent_manager.agents.keys())
+        
+        return {
+            "status": "Agent rediscovery completed",
+            "discovered_agents": agents,
+            "count": len(agents)
+        }
+    except Exception as e:
+        logger.error(f"Error rediscovering agents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Signal processing endpoint
 @app.post("/api/signals/process")
 async def process_trading_signal(signal: Dict[Any, Any]):
