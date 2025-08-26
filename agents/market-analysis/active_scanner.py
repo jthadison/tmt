@@ -139,7 +139,7 @@ class ActiveMarketScanner:
             "id": f"auto_signal_{self.signal_count:04d}",
             "instrument": instrument,
             "direction": direction,
-            "confidence": round(0.75 + random.random() * 0.20, 2),  # 75-95% confidence
+            "confidence": round(75.0 + random.random() * 20.0, 2),  # 75-95% confidence
             "entry_price": price,
             "stop_loss": round(stop_loss, 5),
             "take_profit": round(take_profit, 5),
