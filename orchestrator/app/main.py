@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uvicorn
 
 from .orchestrator import TradingOrchestrator
@@ -199,6 +199,59 @@ async def emergency_stop(request: EmergencyStopRequest):
         return {"status": "Emergency stop executed", "reason": request.reason}
     except OrchestratorException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@app.post("/circuit-breakers/reset")
+async def reset_circuit_breakers():
+    """Reset all circuit breakers to closed state and re-enable trading"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    try:
+        # Reset all circuit breakers
+        await orchestrator.circuit_breaker.reset_all_breakers()
+        
+        # Re-enable trading
+        orchestrator.trading_enabled = True
+        
+        # Log the reset
+        from .event_bus import Event
+        import uuid
+        reset_event = Event(
+            event_id=str(uuid.uuid4()),
+            event_type="circuit_breaker.reset",
+            timestamp=datetime.now(timezone.utc),
+            source="orchestrator",
+            data={"reason": "Manual reset via API"}
+        )
+        await orchestrator.event_bus.publish(reset_event)
+        
+        return {
+            "status": "Circuit breakers reset successfully", 
+            "trading_enabled": True,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error resetting circuit breakers: {e}")
+        raise HTTPException(status_code=500, detail=f"Circuit breaker reset failed: {str(e)}")
+
+
+@app.get("/circuit-breakers/status")
+async def get_circuit_breaker_status():
+    """Get detailed circuit breaker status"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    try:
+        status = await orchestrator.circuit_breaker.get_status()
+        return {
+            "circuit_breaker_status": status,
+            "trading_enabled": orchestrator.trading_enabled,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting circuit breaker status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get circuit breaker status: {str(e)}")
 
 
 # Agent management endpoints
