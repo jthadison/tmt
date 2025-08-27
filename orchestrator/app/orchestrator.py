@@ -521,6 +521,7 @@ class TradingOrchestrator:
         """Handle WebSocket connections for real-time updates"""
         await websocket.accept()
         self.websocket_connections.append(websocket)
+        logger.info(f"WebSocket connected - total connections: {len(self.websocket_connections)}")
         
         try:
             while True:
@@ -532,6 +533,7 @@ class TradingOrchestrator:
         finally:
             if websocket in self.websocket_connections:
                 self.websocket_connections.remove(websocket)
+                logger.info(f"WebSocket disconnected - total connections: {len(self.websocket_connections)}")
     
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
         """Emit a system event"""
@@ -654,22 +656,27 @@ class TradingOrchestrator:
     
     async def _websocket_broadcast_loop(self):
         """Background task for broadcasting updates to WebSocket clients"""
+        logger.info("WebSocket broadcast loop started")
         while self.running:
             try:
+                logger.debug(f"Broadcast check - connections: {len(self.websocket_connections)}")
                 if self.websocket_connections:
                     # Broadcast system status to all connected clients
                     status = await self.get_system_status()
                     message = {
                         "type": "system_status",
-                        "data": status.dict()
+                        "data": json.loads(status.json())  # Use .json() instead of .dict() for proper serialization
                     }
+                    
+                    logger.info(f"Broadcasting to {len(self.websocket_connections)} WebSocket clients")
                     
                     # Send to all connected clients
                     disconnected = []
                     for websocket in self.websocket_connections:
                         try:
                             await websocket.send_json(message)
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(f"Failed to send to WebSocket client: {e}")
                             disconnected.append(websocket)
                     
                     # Remove disconnected clients
