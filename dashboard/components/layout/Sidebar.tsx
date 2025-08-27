@@ -68,14 +68,13 @@ export default function Sidebar() {
             <span>Performance Analytics</span>
           </Link>
           
-          {/* Trading History - Coming Soon */}
-          <div className="flex items-center space-x-3 p-2 rounded opacity-50 cursor-not-allowed">
+          {/* Trading History */}
+          <Link href="/history" className={getLinkClasses('/history')}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>History</span>
-            <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">Soon</span>
-          </div>
+          </Link>
         </div>
         <div className="mb-6">
           <h2 className="text-xs uppercase text-gray-500 dark:text-gray-500 font-semibold mb-3">System</h2>
