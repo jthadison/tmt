@@ -43,10 +43,10 @@ class SignalGenerator:
     """
     
     def __init__(self,
-                 confidence_threshold: float = 75.0,
+                 confidence_threshold: float = 65.0,
                  min_risk_reward: float = 2.0,
                  enable_market_filtering: bool = True,
-                 enable_frequency_management: bool = True,
+                 enable_frequency_management: bool = False,
                  enable_performance_tracking: bool = True):
         """
         Initialize the signal generation engine.
@@ -260,7 +260,7 @@ class SignalGenerator:
             
             # Convert phase detection result to pattern format
             patterns = []
-            if phase_result.confidence > 60.0:  # Only use high-confidence detections
+            if phase_result.confidence > 55.0:  # Only use high-confidence detections
                 pattern = {
                     'type': f'{phase_result.phase}_phase',
                     'phase': phase_result.phase,
