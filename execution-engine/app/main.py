@@ -547,6 +547,299 @@ async def deactivate_kill_switch(
         raise HTTPException(status_code=500, detail=f"Kill switch deactivation failed: {str(e)}")
 
 
+# Emergency Stop Endpoints
+
+@app.post("/api/v1/emergency-stop", tags=["Emergency"])
+async def emergency_stop(
+    background_tasks: BackgroundTasks,
+    reason: str = "Emergency stop triggered",
+    position_manager: PositionManager = Depends(get_position_manager),
+    risk_manager: RiskManager = Depends(get_risk_manager),
+    metrics_collector: ExecutionMetricsCollector = Depends(get_metrics_collector),
+) -> Dict:
+    """
+    Emergency stop - immediately close all positions across all accounts.
+    
+    This is a critical safety endpoint that:
+    1. Activates kill switches for all accounts
+    2. Closes all open positions immediately
+    3. Records emergency stop metrics
+    
+    Use only in emergency situations.
+    """
+    start_time = time.perf_counter()
+    
+    try:
+        logger.critical("🚨 EMERGENCY STOP ACTIVATED", reason=reason)
+        
+        # Get all accounts with open positions
+        all_positions = []
+        for account_id, instruments in position_manager.positions.items():
+            for instrument, position in instruments.items():
+                if position.is_open():
+                    all_positions.append({
+                        "account_id": account_id,
+                        "instrument": instrument, 
+                        "position": position
+                    })
+        
+        logger.warning(f"Emergency stop: Found {len(all_positions)} open positions to close")
+        
+        # Activate kill switches for all accounts
+        affected_accounts = set()
+        for pos_info in all_positions:
+            account_id = pos_info["account_id"]
+            affected_accounts.add(account_id)
+            risk_manager.activate_kill_switch(account_id, f"Emergency stop: {reason}")
+        
+        # Close all positions in parallel for speed
+        close_tasks = []
+        for pos_info in all_positions:
+            close_request = PositionCloseRequest(
+                account_id=pos_info["account_id"],
+                instrument=pos_info["instrument"],
+                units=None,  # Close entire position
+                reason=f"Emergency stop: {reason}"
+            )
+            
+            task = asyncio.create_task(
+                position_manager.close_position(close_request)
+            )
+            close_tasks.append({
+                "task": task,
+                "account_id": pos_info["account_id"], 
+                "instrument": pos_info["instrument"]
+            })
+        
+        # Wait for all position closures with timeout
+        if close_tasks:
+            logger.warning(f"Executing emergency closure of {len(close_tasks)} positions...")
+            
+            results = []
+            for task_info in close_tasks:
+                try:
+                    # Give each position 30 seconds to close
+                    success = await asyncio.wait_for(task_info["task"], timeout=30.0)
+                    results.append({
+                        "account_id": task_info["account_id"],
+                        "instrument": task_info["instrument"],
+                        "success": success
+                    })
+                    
+                    if success:
+                        logger.info(f"✓ Position closed: {task_info['account_id']}/{task_info['instrument']}")
+                    else:
+                        logger.error(f"✗ Failed to close: {task_info['account_id']}/{task_info['instrument']}")
+                        
+                except asyncio.TimeoutError:
+                    logger.error(f"⏱️ Timeout closing: {task_info['account_id']}/{task_info['instrument']}")
+                    results.append({
+                        "account_id": task_info["account_id"],
+                        "instrument": task_info["instrument"], 
+                        "success": False,
+                        "error": "timeout"
+                    })
+                except Exception as e:
+                    logger.error(f"💥 Exception closing: {task_info['account_id']}/{task_info['instrument']}: {e}")
+                    results.append({
+                        "account_id": task_info["account_id"],
+                        "instrument": task_info["instrument"],
+                        "success": False, 
+                        "error": str(e)
+                    })
+            
+            successful_closes = sum(1 for r in results if r["success"])
+            failed_closes = len(results) - successful_closes
+            
+        else:
+            results = []
+            successful_closes = 0
+            failed_closes = 0
+            logger.info("No open positions found during emergency stop")
+        
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Record emergency stop metrics
+        background_tasks.add_task(
+            metrics_collector.record_emergency_stop,
+            reason,
+            len(all_positions),
+            successful_closes,
+            failed_closes,
+            execution_time_ms
+        )
+        
+        logger.critical(
+            "🚨 EMERGENCY STOP COMPLETED",
+            execution_time_ms=execution_time_ms,
+            positions_found=len(all_positions),
+            successful_closes=successful_closes,
+            failed_closes=failed_closes,
+            affected_accounts=len(affected_accounts)
+        )
+        
+        return {
+            "status": "emergency_stop_executed",
+            "reason": reason,
+            "execution_time_ms": execution_time_ms,
+            "summary": {
+                "positions_found": len(all_positions),
+                "successful_closes": successful_closes,
+                "failed_closes": failed_closes,
+                "affected_accounts": list(affected_accounts)
+            },
+            "results": results,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("Emergency stop failed", error=str(e), execution_time_ms=execution_time_ms)
+        
+        # Still try to record the failure
+        background_tasks.add_task(
+            metrics_collector.record_emergency_stop_failure,
+            reason,
+            str(e),
+            execution_time_ms
+        )
+        
+        raise HTTPException(status_code=500, detail=f"Emergency stop failed: {str(e)}")
+
+
+@app.post("/api/v1/emergency-stop/{account_id}", tags=["Emergency"]) 
+async def emergency_stop_account(
+    account_id: str,
+    background_tasks: BackgroundTasks,
+    reason: str = "Emergency stop triggered for account",
+    position_manager: PositionManager = Depends(get_position_manager),
+    risk_manager: RiskManager = Depends(get_risk_manager),
+    metrics_collector: ExecutionMetricsCollector = Depends(get_metrics_collector),
+) -> Dict:
+    """
+    Emergency stop for a specific account - close all positions for the account.
+    """
+    start_time = time.perf_counter()
+    
+    try:
+        logger.critical(f"🚨 EMERGENCY STOP ACTIVATED FOR ACCOUNT {account_id}", reason=reason)
+        
+        # Get all open positions for this account
+        account_positions = []
+        if account_id in position_manager.positions:
+            for instrument, position in position_manager.positions[account_id].items():
+                if position.is_open():
+                    account_positions.append({
+                        "instrument": instrument,
+                        "position": position
+                    })
+        
+        logger.warning(f"Emergency stop: Found {len(account_positions)} open positions for account {account_id}")
+        
+        # Activate kill switch for the account
+        risk_manager.activate_kill_switch(account_id, f"Emergency stop: {reason}")
+        
+        # Close all positions for this account
+        close_tasks = []
+        for pos_info in account_positions:
+            close_request = PositionCloseRequest(
+                account_id=account_id,
+                instrument=pos_info["instrument"],
+                units=None,  # Close entire position
+                reason=f"Emergency stop: {reason}"
+            )
+            
+            task = asyncio.create_task(
+                position_manager.close_position(close_request)
+            )
+            close_tasks.append({
+                "task": task,
+                "instrument": pos_info["instrument"]
+            })
+        
+        # Wait for all position closures
+        if close_tasks:
+            logger.warning(f"Executing emergency closure of {len(close_tasks)} positions for account {account_id}")
+            
+            results = []
+            for task_info in close_tasks:
+                try:
+                    success = await asyncio.wait_for(task_info["task"], timeout=30.0)
+                    results.append({
+                        "instrument": task_info["instrument"],
+                        "success": success
+                    })
+                    
+                    if success:
+                        logger.info(f"✓ Position closed: {account_id}/{task_info['instrument']}")
+                    else:
+                        logger.error(f"✗ Failed to close: {account_id}/{task_info['instrument']}")
+                        
+                except asyncio.TimeoutError:
+                    logger.error(f"⏱️ Timeout closing: {account_id}/{task_info['instrument']}")
+                    results.append({
+                        "instrument": task_info["instrument"],
+                        "success": False,
+                        "error": "timeout"
+                    })
+                except Exception as e:
+                    logger.error(f"💥 Exception closing: {account_id}/{task_info['instrument']}: {e}")
+                    results.append({
+                        "instrument": task_info["instrument"],
+                        "success": False,
+                        "error": str(e)
+                    })
+            
+            successful_closes = sum(1 for r in results if r["success"])
+            failed_closes = len(results) - successful_closes
+        else:
+            results = []
+            successful_closes = 0
+            failed_closes = 0
+            logger.info(f"No open positions found for account {account_id} during emergency stop")
+        
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Record metrics
+        background_tasks.add_task(
+            metrics_collector.record_account_emergency_stop,
+            account_id,
+            reason,
+            len(account_positions),
+            successful_closes,
+            failed_closes,
+            execution_time_ms
+        )
+        
+        logger.critical(
+            f"🚨 EMERGENCY STOP COMPLETED FOR ACCOUNT {account_id}",
+            execution_time_ms=execution_time_ms,
+            positions_found=len(account_positions),
+            successful_closes=successful_closes,
+            failed_closes=failed_closes
+        )
+        
+        return {
+            "status": "emergency_stop_executed",
+            "account_id": account_id,
+            "reason": reason,
+            "execution_time_ms": execution_time_ms,
+            "summary": {
+                "positions_found": len(account_positions),
+                "successful_closes": successful_closes,
+                "failed_closes": failed_closes
+            },
+            "results": results,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
+        logger.error(f"Emergency stop failed for account {account_id}", error=str(e))
+        
+        raise HTTPException(status_code=500, detail=f"Emergency stop failed: {str(e)}")
+
+
 # Performance and Monitoring Endpoints
 
 @app.get("/api/v1/performance/metrics", tags=["Performance"])

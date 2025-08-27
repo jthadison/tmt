@@ -1,6 +1,6 @@
 // Broker management panel with add/remove/configure functionality
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { BrokerAccount, BrokerConfig } from '../../types/broker';
 import Card from '../ui/Card';
@@ -29,33 +29,69 @@ const AddBrokerModal: React.FC<AddBrokerModalProps> = ({ isOpen, onClose, onSubm
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!config.display_name || !config.broker_name) {
-      setError('Display name and broker are required');
-      return;
-    }
-
-    if (config.broker_name === 'oanda' && (!config.credentials?.api_key || !config.credentials?.account_id)) {
-      setError('OANDA API key and account ID are required');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      await onSubmit(config as BrokerConfig);
-      onClose();
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      console.log('Modal opened, resetting form state');
       setConfig({
         broker_name: 'oanda',
         account_type: 'demo',
         display_name: '',
         credentials: {}
       });
+      setError(null);
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Form submission started', { config });
+    
+    // Validation
+    if (!config.display_name?.trim()) {
+      console.log('Validation failed: missing display_name');
+      setError('Display name is required');
+      return;
+    }
+    
+    if (!config.broker_name) {
+      console.log('Validation failed: missing broker_name');
+      setError('Broker selection is required');
+      return;
+    }
+
+    if (config.broker_name === 'oanda' && (!config.credentials?.api_key?.trim() || !config.credentials?.account_id?.trim())) {
+      console.log('Validation failed: missing OANDA credentials', { 
+        api_key: !!config.credentials?.api_key, 
+        account_id: !!config.credentials?.account_id 
+      });
+      setError('OANDA API key and account ID are required');
+      return;
+    }
+
+    console.log('Validation passed, submitting form');
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      console.log('Calling onSubmit with config:', config);
+      await onSubmit(config as BrokerConfig);
+      console.log('onSubmit completed successfully');
+      
+      // Reset form and close modal
+      setConfig({
+        broker_name: 'oanda',
+        account_type: 'demo',
+        display_name: '',
+        credentials: {}
+      });
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add broker');
+      console.error('Form submission error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add broker account');
     } finally {
       setIsSubmitting(false);
     }
@@ -70,7 +106,7 @@ const AddBrokerModal: React.FC<AddBrokerModalProps> = ({ isOpen, onClose, onSubm
           Add Broker Account
         </h3>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           {/* Display Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

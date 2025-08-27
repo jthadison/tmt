@@ -216,21 +216,55 @@ class TradingOrchestrator:
             )
             await self.event_bus.publish(emergency_event)
             
-            # Close all positions if configured to do so
+            # Trigger emergency stop in execution engine (high priority)
+            execution_engine_success = False
+            try:
+                logger.warning("🚨 Triggering execution engine emergency stop...")
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.execution_engine_url}/api/v1/emergency-stop",
+                        params={"reason": f"Orchestrator emergency stop: {reason}"},
+                        timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            execution_engine_success = True
+                            logger.warning(f"✓ Execution engine emergency stop successful: {result.get('summary', {})}")
+                        else:
+                            error_text = await response.text()
+                            logger.error(f"✗ Execution engine emergency stop failed: {response.status}: {error_text}")
+            except Exception as e:
+                logger.error(f"✗ Failed to trigger execution engine emergency stop: {e}")
+            
+            # Also close positions via OANDA client as backup if configured
+            oanda_close_success = False
             if self.settings.emergency_close_positions:
-                for account_id in self.settings.account_ids_list:
-                    try:
-                        logger.warning(f"🚨 Closing all positions for account {account_id}")
-                        await self.oanda_client.close_all_positions(account_id)
-                    except Exception as e:
-                        logger.error(f"Failed to close positions for account {account_id}: {e}")
+                try:
+                    logger.warning("🚨 Backup position closure via OANDA client...")
+                    for account_id in self.settings.account_ids_list:
+                        try:
+                            logger.warning(f"🚨 Closing all positions for account {account_id}")
+                            await self.oanda_client.close_all_positions(account_id)
+                            oanda_close_success = True
+                        except Exception as e:
+                            logger.error(f"Failed to close positions for account {account_id}: {e}")
+                except Exception as e:
+                    logger.error(f"OANDA backup position closure failed: {e}")
             
             await self._emit_event("emergency.stop", {
                 "reason": reason,
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "execution_engine_success": execution_engine_success,
+                "oanda_backup_success": oanda_close_success
             })
             
-            logger.warning("Emergency stop completed")
+            status_msg = "Emergency stop completed"
+            if execution_engine_success or oanda_close_success:
+                status_msg += " ✓ Position closure successful"
+            else:
+                status_msg += " ⚠️ Position closure may have failed"
+                
+            logger.warning(status_msg)
             
         except Exception as e:
             logger.error(f"Error during emergency stop: {e}")

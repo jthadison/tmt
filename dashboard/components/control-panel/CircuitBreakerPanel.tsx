@@ -11,6 +11,8 @@ interface CircuitBreakerPanelProps {
   circuitBreakers: CircuitBreakerInfo[]
   /** Callback when circuit breaker action is requested */
   onCircuitBreakerAction: (request: CircuitBreakerControlRequest) => void
+  /** Callback when reset all circuit breakers is requested */
+  onResetAllBreakers?: () => void
   /** Show compact view */
   compact?: boolean
   /** Loading state indicator */
@@ -24,6 +26,7 @@ interface CircuitBreakerPanelProps {
 export function CircuitBreakerPanel({
   circuitBreakers,
   onCircuitBreakerAction,
+  onResetAllBreakers,
   compact = false,
   loading = false
 }: CircuitBreakerPanelProps) {
@@ -160,8 +163,19 @@ export function CircuitBreakerPanel({
           <h3 className="text-lg font-semibold text-white">
             Circuit Breakers {compact && '(Overview)'}
           </h3>
-          <div className="text-sm text-gray-400">
-            {circuitBreakers.filter(cb => cb.status === 'closed').length} / {circuitBreakers.length} closed
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-400">
+              {circuitBreakers.filter(cb => cb.status === 'closed').length} / {circuitBreakers.length} closed
+            </div>
+            {onResetAllBreakers && circuitBreakers.some(cb => cb.status === 'open') && (
+              <button
+                onClick={onResetAllBreakers}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors flex items-center gap-2"
+                title="Reset all circuit breakers to closed state and re-enable trading"
+              >
+                🔄 Reset All
+              </button>
+            )}
           </div>
         </div>
 
