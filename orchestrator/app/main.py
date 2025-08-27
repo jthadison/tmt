@@ -437,10 +437,30 @@ async def get_current_positions():
     return await orchestrator.get_current_positions()
 
 
-# Signal processing endpoint (for manual testing)
+# Signal processing endpoints
+@app.post("/api/signals")
+async def receive_agent_signal(signal_data: dict):
+    """Receive trading signal from agents and process for execution"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    
+    try:
+        logger.info(f"📨 Received signal from agent: {signal_data.get('agent_id', 'unknown')}")
+        logger.info(f"🎯 Signal: {signal_data.get('signal_type', '').upper()} {signal_data.get('symbol', 'UNKNOWN')} - Confidence: {signal_data.get('confidence', 0)}%")
+        
+        # Process the signal through orchestrator
+        result = await orchestrator.process_agent_signal(signal_data)
+        
+        logger.info(f"✅ Signal processing result: {result.get('status', 'unknown')}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Error processing agent signal: {e}")
+        raise HTTPException(status_code=500, detail=f"Signal processing failed: {str(e)}")
+
 @app.post("/signals/process")
 async def process_signal(signal: TradeSignal):
-    """Process a trading signal (for testing purposes)"""
+    """Process a trading signal (for manual testing)"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
     

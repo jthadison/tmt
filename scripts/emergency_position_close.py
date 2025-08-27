@@ -9,11 +9,20 @@ import aiohttp
 import sys
 import json
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configuration
-OANDA_API_KEY = os.getenv("OANDA_API_KEY", "375f337dd8502af3307ce9179f7a373a-48f35175b87682feea1f057950810a09")
-OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID", "101-001-21040028-001")
-OANDA_BASE_URL = "https://api-fxpractice.oanda.com"
+OANDA_API_KEY = os.getenv("OANDA_API_KEY")
+OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID")
+OANDA_BASE_URL = os.getenv("OANDA_BASE_URL", "https://api-fxpractice.oanda.com")
+
+# Validate credentials
+if not OANDA_API_KEY or not OANDA_ACCOUNT_ID:
+    print("Error: OANDA_API_KEY and OANDA_ACCOUNT_ID must be set in environment variables or .env file")
+    sys.exit(1)
 
 async def get_open_positions():
     """Get all open positions"""

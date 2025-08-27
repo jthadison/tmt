@@ -15,8 +15,8 @@ interface UseBrokerDataReturn {
   refreshData: () => Promise<void>;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8086';
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8086/ws';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8083/ws';
 
 export const useBrokerData = (): UseBrokerDataReturn => {
   const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);

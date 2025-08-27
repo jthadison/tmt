@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { AuthProvider } from '@/context/AuthContext'
+import { SettingsProvider } from '@/context/SettingsContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import './globals.css'
 
@@ -22,9 +23,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <ErrorBoundary>
           <AuthProvider>
-            <ThemeProvider>
-              {children}
-            </ThemeProvider>
+            <SettingsProvider>
+              <ThemeProvider>
+                {children}
+              </ThemeProvider>
+            </SettingsProvider>
           </AuthProvider>
         </ErrorBoundary>
       </body>
