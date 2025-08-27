@@ -15,6 +15,10 @@ import uvicorn
 import aiohttp
 import json
 from decimal import Decimal
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -30,8 +34,12 @@ last_signal_time = None
 async def get_current_market_price(instrument):
     """Get current market price from OANDA for realistic pricing"""
     try:
-        api_key = "375f337dd8502af3307ce9179f7a373a-48f35175b87682feea1f057950810a09"
-        account_id = "101-001-21040028-001"
+        api_key = os.getenv("OANDA_API_KEY")
+        account_id = os.getenv("OANDA_ACCOUNT_ID")
+        
+        if not api_key or not account_id:
+            logger.warning("OANDA credentials not found in environment variables")
+            raise ValueError("Missing OANDA credentials")
         
         async with aiohttp.ClientSession() as session:
             async with session.get(
