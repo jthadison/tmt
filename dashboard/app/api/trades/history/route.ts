@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8086'
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8083'
 
 export async function GET(request: NextRequest) {
   try {
