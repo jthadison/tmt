@@ -98,6 +98,15 @@ class TradingOrchestrator:
             
             logger.info("Trading System Orchestrator started successfully")
             
+            # Auto-enable trading if configured
+            if self.settings.enable_trading:
+                try:
+                    logger.info("ENABLE_TRADING=true detected, automatically enabling trading...")
+                    await self.start_trading()
+                    logger.info("✅ Automated trading enabled successfully")
+                except Exception as auto_enable_error:
+                    logger.warning(f"⚠️ Failed to auto-enable trading: {auto_enable_error}")
+            
         except Exception as e:
             logger.error(f"Failed to start orchestrator: {e}")
             await self.stop()

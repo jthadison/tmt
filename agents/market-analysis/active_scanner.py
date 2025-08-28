@@ -25,7 +25,7 @@ class ActiveMarketScanner:
     """Actively scans markets and generates trading signals"""
     
     def __init__(self):
-        self.orchestrator_url = "http://localhost:8083"
+        self.orchestrator_url = os.getenv("ORCHESTRATOR_URL", "http://localhost:8089")
         self.oanda_api_key = os.getenv("OANDA_API_KEY")
         self.oanda_account_id = os.getenv("OANDA_ACCOUNT_ID")
         self.instruments = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CAD", "EUR_GBP"]

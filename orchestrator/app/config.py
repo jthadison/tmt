@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     max_position_size: float = Field(100000.0, env="MAX_POSITION_SIZE")
     max_trades_per_hour: int = Field(10, env="MAX_TRADES_PER_HOUR")
     
+    # Trading control
+    enable_trading: bool = Field(False, env="ENABLE_TRADING")
+    
     # Message broker configuration
     message_broker_url: str = Field("redis://localhost:6379", env="MESSAGE_BROKER_URL")
     event_retention_hours: int = Field(24, env="EVENT_RETENTION_HOURS")

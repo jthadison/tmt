@@ -37,7 +37,7 @@ class EventHandler:
 
 
 class EventBus:
-    """Redis-based event bus for inter-component communication"""
+    """Redis-based event bus for inter-component communication with in-memory fallback"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -45,13 +45,15 @@ class EventBus:
         self.handlers: Dict[str, List[EventHandler]] = {}
         self.subscribers: Dict[str, asyncio.Task] = {}
         self._shutdown = False
+        self.mock_mode = False
+        self.event_store: List[Event] = []
         
     async def start(self):
         """Start the event bus"""
         logger.info("Starting Event Bus")
         
         try:
-            # Connect to Redis
+            # Try to connect to Redis
             self.redis_client = redis.from_url(
                 self.settings.message_broker_url,
                 decode_responses=True
@@ -65,8 +67,10 @@ class EventBus:
             await self._start_event_processing()
             
         except Exception as e:
-            logger.error(f"Failed to start Event Bus: {e}")
-            raise OrchestratorException(f"Event Bus startup failed: {e}")
+            logger.warning(f"Redis connection failed, using in-memory mock mode: {e}")
+            self.mock_mode = True
+            self.redis_client = None
+            logger.info("Event Bus started in mock mode (no Redis)")
     
     async def stop(self):
         """Stop the event bus"""
@@ -89,8 +93,31 @@ class EventBus:
     
     async def publish(self, event: Event):
         """Publish an event to the bus"""
+        if self.mock_mode:
+            # In-memory mock mode
+            try:
+                # Store event in memory
+                self.event_store.append(event)
+                
+                # Process handlers for this event type
+                if event.event_type in self.handlers:
+                    for handler in self.handlers[event.event_type]:
+                        try:
+                            if handler.filter_func is None or handler.filter_func(event):
+                                await handler.handler(event)
+                        except Exception as handler_error:
+                            logger.error(f"Error in event handler for {event.event_type}: {handler_error}")
+                
+                logger.debug(f"Published event {event.event_id} of type {event.event_type} (mock mode)")
+                return
+                
+            except Exception as e:
+                logger.error(f"Failed to publish event {event.event_id} in mock mode: {e}")
+                return  # Don't raise exception in mock mode
+        
         if not self.redis_client:
-            raise OrchestratorException("Event Bus not initialized")
+            logger.warning(f"Event Bus not initialized, dropping event {event.event_id}")
+            return
         
         try:
             event_data = event.json()
@@ -119,12 +146,13 @@ class EventBus:
         event_handler = EventHandler(event_type, handler, filter_func)
         self.handlers[event_type].append(event_handler)
         
-        # Start subscriber task if not already running
-        if event_type not in self.subscribers:
+        # Start subscriber task if not already running and not in mock mode
+        if not self.mock_mode and event_type not in self.subscribers:
             task = asyncio.create_task(self._subscribe_to_channel(event_type))
             self.subscribers[event_type] = task
         
-        logger.info(f"Subscribed to events of type: {event_type}")
+        mode_info = " (mock mode)" if self.mock_mode else ""
+        logger.info(f"Subscribed to events of type: {event_type}{mode_info}")
     
     async def emit_signal_generated(self, signal_id: str, agent_id: str, signal_data: Dict[str, Any]):
         """Emit a signal generated event"""
