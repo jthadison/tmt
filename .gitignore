@@ -227,3 +227,6 @@ kafka_data/
 .claude/settings.local.jsonorchestrator/.env
 orchestrator/.coverage
 orchestrator/htmlcov/
+
+# Playwright MCP screenshots
+.playwright-mcp/

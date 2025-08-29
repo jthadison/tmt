@@ -1,9 +1,10 @@
 /**
  * Trade History API Endpoint
- * Provides comprehensive trade history with filtering, sorting, and pagination
+ * Direct OANDA integration for comprehensive trade history
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getOandaClient } from '@/lib/oanda-client'
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8083'
 
@@ -45,46 +46,135 @@ export async function GET(request: NextRequest) {
       dateRange: (dateFrom && dateTo) ? { start: dateFrom, end: dateTo } : undefined
     }
 
-    // Try to fetch from orchestrator first
+    // Try to fetch live data from OANDA first
     try {
-      const orchestratorResponse = await fetch(`${ORCHESTRATOR_URL}/analytics/trade-history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestPayload)
+      const oandaClient = getOandaClient()
+      
+      // Get closed trades and transactions
+      const [closedTrades, transactions] = await Promise.all([
+        oandaClient.getClosedTrades(500), // Get up to 500 closed trades
+        oandaClient.getTransactions(dateFrom, dateTo, 1000) // Get transactions for the period
+      ])
+
+      // Transform OANDA trades to our frontend format
+      let oandaTrades = closedTrades.map((trade: any) => {
+        const openTime = new Date(trade.openTime)
+        const closeTime = trade.closeTime ? new Date(trade.closeTime) : null
+        
+        // Determine side from units
+        const units = parseFloat(trade.currentUnits || trade.initialUnits)
+        const side = units > 0 ? 'buy' : 'sell'
+
+        return {
+          id: trade.id,
+          accountId: accountId === 'all-accounts' ? 'oanda-account' : accountId,
+          accountName: 'OANDA Practice Account',
+          instrument: trade.instrument.replace('_', '/'), // Convert EUR_USD to EUR/USD
+          type: 'market',
+          side,
+          units: Math.abs(units),
+          price: parseFloat(trade.price),
+          stopLoss: trade.stopLossOrder?.price ? parseFloat(trade.stopLossOrder.price) : null,
+          takeProfit: trade.takeProfitOrder?.price ? parseFloat(trade.takeProfitOrder.price) : null,
+          openTime,
+          closeTime,
+          status: trade.closeTime ? 'closed' : 'open',
+          pnl: parseFloat(trade.realizedPL || '0'),
+          commission: 0, // OANDA includes this in spread
+          swap: parseFloat(trade.financing || '0'),
+          tags: ['oanda', 'live-data']
+        }
       })
 
-      if (orchestratorResponse.ok) {
-        const data = await orchestratorResponse.json()
+      // Apply filters
+      if (filter.instrument) {
+        oandaTrades = oandaTrades.filter(t => t.instrument === filter.instrument)
+      }
+      
+      if (filter.status) {
+        oandaTrades = oandaTrades.filter(t => t.status === filter.status)
+      }
+      
+      if (filter.type) {
+        if (filter.type === 'long') {
+          oandaTrades = oandaTrades.filter(t => t.side === 'buy')
+        } else if (filter.type === 'short') {
+          oandaTrades = oandaTrades.filter(t => t.side === 'sell')
+        }
+      }
+      
+      if (filter.minProfit !== undefined) {
+        oandaTrades = oandaTrades.filter(t => t.pnl >= filter.minProfit)
+      }
+      
+      if (filter.maxProfit !== undefined) {
+        oandaTrades = oandaTrades.filter(t => t.pnl <= filter.maxProfit)
+      }
+
+      // Apply sorting
+      oandaTrades.sort((a: any, b: any) => {
+        let aVal = a[sortBy]
+        let bVal = b[sortBy]
         
-        // Transform data to match our frontend interface
-        const transformedData = {
-          trades: data.trades.map((trade: any) => ({
-            id: trade.id,
-            accountId: trade.accountId,
-            accountName: `Account ${trade.accountId}`,
-            instrument: trade.symbol,
-            type: 'market', // Most trades are market orders
-            side: trade.direction,
-            units: trade.size,
-            price: trade.openPrice,
-            stopLoss: trade.stopLoss || null,
-            takeProfit: trade.takeProfit || null,
-            openTime: new Date(trade.openTime),
-            closeTime: trade.closeTime ? new Date(trade.closeTime) : null,
-            status: trade.status,
-            pnl: trade.profit,
-            commission: trade.commission,
-            swap: trade.swap,
-            tags: [trade.strategy, trade.agentId]
-          })),
-          stats: data.stats,
-          pagination: data.pagination
+        // Handle date sorting
+        if (sortBy === 'openTime' || sortBy === 'closeTime') {
+          aVal = new Date(aVal).getTime()
+          bVal = new Date(bVal).getTime()
         }
         
-        return NextResponse.json(transformedData)
+        if (sortOrder === 'desc') {
+          return bVal - aVal
+        } else {
+          return aVal - bVal
+        }
+      })
+
+      // Calculate statistics from OANDA data
+      const closedOandaTrades = oandaTrades.filter(t => t.status === 'closed')
+      const winningTrades = closedOandaTrades.filter(t => t.pnl > 0)
+      const losingTrades = closedOandaTrades.filter(t => t.pnl < 0)
+      
+      const totalPnL = closedOandaTrades.reduce((sum, t) => sum + t.pnl, 0)
+      const totalSwap = oandaTrades.reduce((sum, t) => sum + t.swap, 0)
+      
+      const grossProfit = winningTrades.reduce((sum, t) => sum + t.pnl, 0)
+      const grossLoss = Math.abs(losingTrades.reduce((sum, t) => sum + t.pnl, 0))
+      
+      const stats = {
+        totalTrades: oandaTrades.length,
+        closedTrades: closedOandaTrades.length,
+        openTrades: oandaTrades.filter(t => t.status === 'open').length,
+        winningTrades: winningTrades.length,
+        losingTrades: losingTrades.length,
+        totalPnL: Math.round(totalPnL * 100) / 100,
+        winRate: closedOandaTrades.length > 0 ? (winningTrades.length / closedOandaTrades.length) * 100 : 0,
+        averageWin: winningTrades.length > 0 ? grossProfit / winningTrades.length : 0,
+        averageLoss: losingTrades.length > 0 ? grossLoss / losingTrades.length : 0,
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 999 : 0),
+        maxDrawdown: 0, // Would need running calculation
+        totalCommission: 0, // OANDA includes in spread
+        totalSwap: Math.round(totalSwap * 100) / 100
       }
-    } catch (orchestratorError) {
-      console.warn('Orchestrator not available for trade history, using mock data:', orchestratorError)
+
+      // Apply pagination
+      const startIndex = (page - 1) * limit
+      const paginatedTrades = oandaTrades.slice(startIndex, startIndex + limit)
+      
+      const response = {
+        trades: paginatedTrades,
+        stats,
+        pagination: {
+          total: oandaTrades.length,
+          page,
+          limit,
+          totalPages: Math.ceil(oandaTrades.length / limit)
+        }
+      }
+      
+      return NextResponse.json(response)
+
+    } catch (oandaError) {
+      console.warn('OANDA API not available for trade history, using mock data:', oandaError)
     }
 
     // Fallback to mock data if orchestrator is unavailable
