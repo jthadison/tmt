@@ -541,6 +541,44 @@ class OandaClient:
             logger.error(f"Error getting current positions: {e}")
         return all_positions
     
+    async def create_order(self, account_id: str, order: Dict[str, Any]) -> Dict[str, Any]:
+        """Create an order (bridge method for safety monitor compatibility)"""
+        try:
+            # Safety monitor passes order with nested "order" key
+            order_details = order.get("order", order)
+            order_type = order_details.get("type", "MARKET").upper()
+            
+            if order_type == "MARKET":
+                # Extract order parameters from nested structure
+                instrument = order_details["instrument"]
+                units = float(order_details["units"])
+                stop_loss = order_details.get("stopLossOnFill", {}).get("price")
+                take_profit = order_details.get("takeProfitOnFill", {}).get("price")
+                
+                # Convert string prices to float if needed
+                if stop_loss:
+                    stop_loss = float(stop_loss) if isinstance(stop_loss, str) else stop_loss
+                if take_profit:
+                    take_profit = float(take_profit) if isinstance(take_profit, str) else take_profit
+                
+                # Use the existing place_market_order method
+                result = await self.place_market_order(
+                    account_id=account_id,
+                    instrument=instrument,
+                    units=units,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit
+                )
+                
+                logger.info(f"Emergency order created: {instrument} {units} units")
+                return result
+            else:
+                raise OandaException(f"Order type {order_type} not supported in emergency mode")
+                
+        except Exception as e:
+            logger.error(f"Emergency order creation failed: {e}")
+            raise OandaException(f"Order creation failed: {e}")
+
     async def execute_trade(self, signal: Any, parameters: Dict[str, Any] = None) -> Any:
         """Execute a trade based on signal"""
         # This would be implemented to execute trades based on signals
