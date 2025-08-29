@@ -311,6 +311,23 @@ if FASTAPI_AVAILABLE:
         """Market order endpoint - supports both paper trading and real OANDA practice orders"""
         logger.info("Market order received", order_data=order_data)
         
+        # VALIDATION: Check for risk parameters on significant orders
+        units = order_data.get("units", 0)
+        if abs(units) > 10000 and not app_state.paper_trading_mode:
+            # Large positions must have stop-loss unless explicitly bypassed
+            if not order_data.get("stop_loss_price") and not order_data.get("allow_no_sl", False):
+                logger.error(f"Rejected order: Large position ({units} units) without stop-loss")
+                return JSONResponse({
+                    "error": "Large positions (>10000 units) require stop_loss_price or explicit allow_no_sl=true flag",
+                    "units": units,
+                    "instrument": order_data.get("instrument"),
+                    "recommendation": "Add stop_loss_price to order or set allow_no_sl=true to bypass (not recommended)"
+                }, status_code=400)
+            
+            # Warn about missing take-profit but don't block
+            if not order_data.get("take_profit_price"):
+                logger.warning(f"Large position ({units} units) without take-profit - allowing but not recommended")
+        
         if app_state.paper_trading_mode:
             # Paper trading mode - simulate order
             order_id = f"paper_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
@@ -362,6 +379,55 @@ if FASTAPI_AVAILABLE:
                 units = order_data.get("units", 1000)
                 stop_loss_price = order_data.get("stop_loss_price")
                 take_profit_price = order_data.get("take_profit_price")
+                
+                # CRITICAL SAFETY: Calculate default TP/SL if not provided
+                if not stop_loss_price or not take_profit_price:
+                    logger.warning(f"Missing TP/SL for {instrument} - calculating defaults")
+                    
+                    # Get current price (use entry price from order as estimate)
+                    entry_price = order_data.get("entry_price")
+                    if not entry_price:
+                        # Fetch current price from OANDA
+                        try:
+                            api_key = os.getenv("OANDA_API_KEY")
+                            price_url = f"https://api-fxpractice.oanda.com/v3/accounts/{account_id}/pricing?instruments={instrument}"
+                            price_headers = {"Authorization": f"Bearer {api_key}"}
+                            price_response = requests.get(price_url, headers=price_headers)
+                            if price_response.status_code == 200:
+                                prices = price_response.json()["prices"][0]
+                                entry_price = float(prices["bids"][0]["price"]) if side == "sell" else float(prices["asks"][0]["price"])
+                            else:
+                                logger.error(f"Could not fetch price for {instrument}")
+                                return JSONResponse({"error": "Cannot place order without price and TP/SL"}, status_code=400)
+                        except Exception as e:
+                            logger.error(f"Price fetch error: {e}")
+                            return JSONResponse({"error": "Cannot place order without TP/SL"}, status_code=400)
+                    else:
+                        entry_price = float(entry_price)
+                    
+                    # Calculate default stops based on instrument type
+                    if "JPY" in instrument:
+                        pip_size = 0.01
+                        default_sl_pips = 30  # Conservative 30 pip stop for JPY pairs
+                        default_tp_pips = 45  # 1.5:1 R:R ratio
+                    else:
+                        pip_size = 0.0001
+                        default_sl_pips = 30  # Conservative 30 pip stop
+                        default_tp_pips = 45  # 1.5:1 R:R ratio
+                    
+                    # Calculate actual prices
+                    if side == "buy":
+                        if not stop_loss_price:
+                            stop_loss_price = round(entry_price - (default_sl_pips * pip_size), 5)
+                        if not take_profit_price:
+                            take_profit_price = round(entry_price + (default_tp_pips * pip_size), 5)
+                    else:  # sell
+                        if not stop_loss_price:
+                            stop_loss_price = round(entry_price + (default_sl_pips * pip_size), 5)
+                        if not take_profit_price:
+                            take_profit_price = round(entry_price - (default_tp_pips * pip_size), 5)
+                    
+                    logger.warning(f"Using default TP/SL for {instrument}: SL={stop_loss_price}, TP={take_profit_price}")
                 
                 # Convert side to units (OANDA uses positive/negative units)
                 oanda_units = units if side == "buy" else -units
