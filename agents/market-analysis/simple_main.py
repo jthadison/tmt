@@ -69,7 +69,7 @@ async def get_current_market_price(instrument):
 
 async def send_signal_to_orchestrator(signal_data):
     """Send trading signal to orchestrator for execution"""
-    orchestrator_url = "http://localhost:8083"
+    orchestrator_url = "http://localhost:8089"
     
     try:
         async with aiohttp.ClientSession() as session:

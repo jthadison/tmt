@@ -13,7 +13,7 @@ from enum import Enum
 import statistics
 
 from .config import get_settings
-from .circuit_breaker import CircuitBreakerManager, TradingMetrics
+from .circuit_breaker import CircuitBreakerManager, TradingMetrics, BreakerType
 from .oanda_client import OandaClient
 from .event_bus import EventBus
 from .exceptions import SafetyException
@@ -339,10 +339,29 @@ class SafetyMonitor:
                 account_id
             )
         
-        # Check position concentration
+        # Check position concentration with stricter thresholds
         if metrics.position_count > 0:
             largest_percentage = (metrics.largest_position / metrics.current_balance) * 100
-            if largest_percentage > 20:
+            
+            if largest_percentage > 50:  # Emergency threshold
+                await self._create_alert(
+                    AlertLevel.EMERGENCY,
+                    "Critical Position Concentration",
+                    f"Account {account_id} largest position: {largest_percentage:.1f}% of balance - IMMEDIATE REDUCTION REQUIRED",
+                    account_id
+                )
+                # Trigger emergency position reduction
+                await self._handle_position_concentration_emergency(account_id, largest_percentage)
+                
+            elif largest_percentage > 25:  # Critical threshold
+                await self._create_alert(
+                    AlertLevel.CRITICAL,
+                    "High Position Concentration", 
+                    f"Account {account_id} largest position: {largest_percentage:.1f}% of balance - CONSIDER REDUCTION",
+                    account_id
+                )
+                
+            elif largest_percentage > 15:  # Warning threshold
                 await self._create_alert(
                     AlertLevel.WARNING,
                     "Position Concentration",
@@ -444,24 +463,187 @@ class SafetyMonitor:
         if alert.account_id:
             # Account-specific emergency
             await self.circuit_breaker.force_open_breaker(
-                self.circuit_breaker.BreakerType.ACCOUNT_LOSS,
+                BreakerType.ACCOUNT_LOSS,
                 f"Emergency: {alert.title}"
             )
         else:
             # System-wide emergency
             await self.circuit_breaker.force_open_breaker(
-                self.circuit_breaker.BreakerType.SYSTEM_HEALTH,
+                BreakerType.SYSTEM_HEALTH,
                 f"Emergency: {alert.title}"
             )
     
+    async def _handle_position_concentration_emergency(self, account_id: str, concentration_percentage: float):
+        """Handle emergency position concentration by reducing largest positions"""
+        try:
+            logger.critical(f"Handling position concentration emergency for account {account_id}: {concentration_percentage:.1f}%")
+            
+            if not self.oanda_client:
+                logger.error("Cannot reduce positions - no OANDA client available")
+                return
+            
+            # Get current positions
+            positions = await self.oanda_client.get_positions(account_id)
+            if not positions:
+                logger.warning(f"No positions found for account {account_id}")
+                return
+            
+            # Find positions with significant exposure (>10% of balance)
+            account_info = await self.oanda_client.get_account_info(account_id)
+            balance = account_info.balance
+            
+            dangerous_positions = []
+            for pos in positions:
+                position_value = abs(pos.units * pos.average_price)
+                position_percentage = (position_value / balance) * 100
+                
+                if position_percentage > 10:  # Positions > 10% of balance
+                    dangerous_positions.append({
+                        'position': pos,
+                        'value': position_value,
+                        'percentage': position_percentage
+                    })
+            
+            # Sort by percentage (largest first)
+            dangerous_positions.sort(key=lambda x: x['percentage'], reverse=True)
+            
+            # Reduce the largest positions
+            total_reduced = 0
+            max_reductions = 3  # Limit to 3 position reductions per emergency
+            
+            for i, pos_info in enumerate(dangerous_positions[:max_reductions]):
+                position = pos_info['position']
+                
+                # Calculate reduction amount (reduce by 50% if >50% concentration, 25% otherwise)
+                reduction_factor = 0.5 if concentration_percentage > 100 else 0.25
+                reduction_units = int(abs(position.units) * reduction_factor)
+                
+                if reduction_units > 0:
+                    try:
+                        # Close partial position
+                        logger.warning(f"EMERGENCY POSITION REDUCTION: Closing {reduction_units} units of {position.instrument}")
+                        
+                        # Create market order to close part of position
+                        close_order = {
+                            "order": {
+                                "type": "MARKET",
+                                "instrument": position.instrument,
+                                "units": str(-reduction_units if position.units > 0 else reduction_units),
+                                "timeInForce": "FOK",  # Fill or Kill - immediate execution
+                                "reason": "EMERGENCY_RISK_REDUCTION"
+                            }
+                        }
+                        
+                        # Execute the order
+                        result = await self.oanda_client.create_order(account_id, close_order)
+                        if result:
+                            total_reduced += reduction_units
+                            logger.warning(f"✅ Emergency reduction successful: {reduction_units} units of {position.instrument}")
+                        else:
+                            logger.error(f"❌ Emergency reduction failed for {position.instrument}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error reducing position {position.instrument}: {e}")
+            
+            # Log emergency action summary
+            logger.critical(f"EMERGENCY POSITION REDUCTION COMPLETED for account {account_id}")
+            logger.critical(f"  - Original concentration: {concentration_percentage:.1f}%")
+            logger.critical(f"  - Positions analyzed: {len(dangerous_positions)}")
+            logger.critical(f"  - Positions reduced: {min(len(dangerous_positions), max_reductions)}")
+            logger.critical(f"  - Total units closed: {total_reduced}")
+            
+            # Create follow-up alert
+            await self._create_alert(
+                AlertLevel.CRITICAL,
+                "Emergency Position Reduction Executed",
+                f"Account {account_id}: Reduced {total_reduced} units across {min(len(dangerous_positions), max_reductions)} positions",
+                account_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Emergency position reduction failed for account {account_id}: {e}")
+            await self._create_alert(
+                AlertLevel.EMERGENCY,
+                "Position Reduction Failed",
+                f"Account {account_id}: Emergency position reduction failed - MANUAL INTERVENTION REQUIRED",
+                account_id
+            )
+    
     async def check_trade_safety(self, account_id: str, signal) -> bool:
-        """Check if a trade is safe to execute"""
+        """Check if a trade is safe to execute with position sizing limits"""
         try:
             # Use circuit breaker for comprehensive checks
-            return await self.circuit_breaker.check_all_breakers(account_id, "trade")
+            breaker_check = await self.circuit_breaker.check_all_breakers(account_id, "trade")
+            if not breaker_check:
+                return False
+            
+            # Additional position sizing safety checks
+            if await self._check_position_sizing_safety(account_id, signal):
+                return True
+            else:
+                logger.warning(f"Trade rejected due to position sizing safety limits")
+                return False
+                
         except Exception as e:
             logger.error(f"Trade safety check failed: {e}")
             return False
+    
+    async def _check_position_sizing_safety(self, account_id: str, signal) -> bool:
+        """Check if the signal would create dangerous position concentration"""
+        try:
+            if not self.oanda_client or not hasattr(signal, 'position_size'):
+                return True  # Skip if no client or position size info
+            
+            # Get current account info and positions
+            account_info = await self.oanda_client.get_account_info(account_id)
+            positions = await self.oanda_client.get_positions(account_id)
+            
+            balance = account_info.balance
+            if balance <= 0:
+                return False
+            
+            # Calculate new position value
+            entry_price = getattr(signal, 'entry_price', 1.0)
+            position_size = getattr(signal, 'position_size', 1000)
+            new_position_value = abs(position_size * entry_price)
+            new_position_percentage = (new_position_value / balance) * 100
+            
+            # Check if new position would exceed individual position limit
+            MAX_SINGLE_POSITION_PERCENTAGE = 15.0  # No single position > 15% of balance
+            if new_position_percentage > MAX_SINGLE_POSITION_PERCENTAGE:
+                logger.warning(f"Signal rejected: new position ({new_position_percentage:.1f}%) would exceed {MAX_SINGLE_POSITION_PERCENTAGE}% limit")
+                return False
+            
+            # Check if this would create dangerous total exposure
+            current_total_exposure = sum(abs(pos.units * pos.average_price) for pos in positions)
+            total_exposure_after = current_total_exposure + new_position_value
+            total_exposure_percentage = (total_exposure_after / balance) * 100
+            
+            MAX_TOTAL_EXPOSURE_PERCENTAGE = 75.0  # Total exposure < 75% of balance
+            if total_exposure_percentage > MAX_TOTAL_EXPOSURE_PERCENTAGE:
+                logger.warning(f"Signal rejected: total exposure ({total_exposure_percentage:.1f}%) would exceed {MAX_TOTAL_EXPOSURE_PERCENTAGE}% limit")
+                return False
+            
+            # Check for same-instrument concentration
+            instrument = getattr(signal, 'instrument', getattr(signal, 'symbol', 'UNKNOWN'))
+            existing_same_instrument = sum(
+                abs(pos.units * pos.average_price) for pos in positions 
+                if pos.instrument == instrument
+            )
+            same_instrument_total = existing_same_instrument + new_position_value
+            same_instrument_percentage = (same_instrument_total / balance) * 100
+            
+            MAX_SAME_INSTRUMENT_PERCENTAGE = 25.0  # No more than 25% in same instrument
+            if same_instrument_percentage > MAX_SAME_INSTRUMENT_PERCENTAGE:
+                logger.warning(f"Signal rejected: {instrument} exposure ({same_instrument_percentage:.1f}%) would exceed {MAX_SAME_INSTRUMENT_PERCENTAGE}% limit")
+                return False
+            
+            logger.debug(f"Position sizing safety check passed for {instrument}: {new_position_percentage:.1f}% of balance")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Position sizing safety check failed: {e}")
+            return False  # Err on the side of caution
     
     def get_account_risk_metrics(self, account_id: str) -> Optional[RiskMetrics]:
         """Get risk metrics for a specific account"""
