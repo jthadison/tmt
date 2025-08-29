@@ -34,8 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      // In development, simulate successful login
-      if (process.env.NODE_ENV === 'development') {
+      // In development or with mock auth enabled, simulate successful login
+      const mockAuthEnabled = process.env.NEXT_PUBLIC_MOCK_AUTH === 'true'
+      if (process.env.NODE_ENV === 'development' || mockAuthEnabled) {
         // Simulate API delay
         await new Promise(resolve => setTimeout(resolve, 500))
         
@@ -208,12 +209,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const initializeAuth = async () => {
+      const mockAuthEnabled = process.env.NEXT_PUBLIC_MOCK_AUTH === 'true'
+      
+      // Auto-login for mock auth mode
+      if (mockAuthEnabled && !Cookies.get('access_token')) {
+        const mockUser: User = {
+          id: 'user-001',
+          name: 'Demo User',
+          email: 'demo@tradingsystem.com',
+          role: 'admin',
+          created_at: new Date().toISOString(),
+          last_login: new Date().toISOString(),
+          two_factor_enabled: false
+        }
+        
+        // Set mock token
+        Cookies.set('access_token', 'mock-access-token', {
+          expires: 1, // 1 day
+          secure: false,
+          sameSite: 'strict'
+        })
+        
+        setState({
+          user: mockUser,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null
+        })
+        return
+      }
+      
       const accessToken = Cookies.get('access_token')
       
       if (accessToken) {
         try {
-          // In development, use mock user if token exists
-          if (process.env.NODE_ENV === 'development' && accessToken === 'mock-access-token') {
+          // In development or with mock auth enabled, use mock user if token exists
+          const mockAuthEnabled = process.env.NEXT_PUBLIC_MOCK_AUTH === 'true'
+          if ((process.env.NODE_ENV === 'development' || mockAuthEnabled) && accessToken === 'mock-access-token') {
             const mockUser: User = {
               id: 'user-001',
               name: 'Demo User',
