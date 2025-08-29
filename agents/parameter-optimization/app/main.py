@@ -106,6 +106,31 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow()}
 
 
+@app.post("/process_signal")
+async def process_signal(signal: dict):
+    """
+    Process a signal for parameter optimization (compatibility endpoint).
+    Returns current optimization parameters for the signal.
+    """
+    try:
+        # For now, return default parameters as this agent focuses on historical analysis
+        # In a full implementation, this would analyze the signal and suggest optimal parameters
+        return {
+            "status": "processed",
+            "suggested_parameters": {
+                "position_size": 0.01,  # 1% risk
+                "stop_loss_pips": 20,
+                "take_profit_pips": 40,
+                "max_drawdown": 0.02
+            },
+            "confidence": 0.75,
+            "message": "Signal processed with default parameters"
+        }
+    except Exception as e:
+        logger.error(f"Error processing signal: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @app.post("/optimize")
 async def optimize_parameters(request: OptimizationRequest, background_tasks: BackgroundTasks):
     """

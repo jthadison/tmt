@@ -145,6 +145,28 @@ async def process_signal(
     
     This is the main endpoint that implements the disagreement logic.
     """
+    return await _process_signal_internal(request, background_tasks)
+
+
+@app.post("/process_signal", response_model=ProcessSignalResponse)
+async def process_signal_legacy(
+    request: ProcessSignalRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Legacy endpoint for compatibility with orchestrator.
+    Wraps the main signal processing logic.
+    """
+    return await _process_signal_internal(request, background_tasks)
+
+
+async def _process_signal_internal(
+    request: ProcessSignalRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Internal signal processing logic used by both endpoints.
+    """
     try:
         logger.info(f"Processing signal {request.signal_id} for {len(request.accounts)} accounts")
         
