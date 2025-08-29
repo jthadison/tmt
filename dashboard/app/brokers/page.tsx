@@ -49,6 +49,7 @@ export default function BrokersPage() {
   const handleRemoveBroker = async (accountId: string) => {
     try {
       await removeBrokerAccount(accountId);
+      await refreshData(); // Refresh the broker list after removing
       showToast('Broker account removed successfully', 'success');
     } catch {
       showToast('Failed to remove broker account', 'error');
@@ -61,10 +62,16 @@ export default function BrokersPage() {
     display_name: string;
     credentials: Record<string, string>;
   }) => {
+    console.log('handleAddBroker called with config:', config);
     try {
+      console.log('Calling addBrokerAccount...');
       await addBrokerAccount(config);
+      console.log('addBrokerAccount completed, refreshing data...');
+      await refreshData(); // Refresh the broker list after adding
+      console.log('Data refresh completed');
       showToast('Broker account added successfully', 'success');
-    } catch {
+    } catch (error) {
+      console.error('handleAddBroker error:', error);
       showToast('Failed to add broker account', 'error');
     }
   };

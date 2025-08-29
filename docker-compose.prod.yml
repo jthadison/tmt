@@ -238,7 +238,7 @@ services:
   # Dashboard - Production build
   dashboard:
     build:
-      context: ./src/dashboard
+      context: ./dashboard
       dockerfile: Dockerfile
       target: production
     container_name: trading-dashboard-prod

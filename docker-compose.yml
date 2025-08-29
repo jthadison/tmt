@@ -221,14 +221,14 @@ services:
   # Dashboard (Next.js) - Development mode
   dashboard:
     build:
-      context: ./src/dashboard
+      context: ./dashboard
       dockerfile: Dockerfile.dev
       target: development
     container_name: trading-dashboard
     ports:
       - "3000:3000"
     volumes:
-      - ./src/dashboard:/app
+      - ./dashboard:/app
       - /app/node_modules
       - /app/.next
     environment:
@@ -256,13 +256,117 @@ services:
     develop:
       watch:
         - action: sync
-          path: ./src/dashboard
+          path: ./dashboard
           target: /app
           ignore:
             - node_modules/
             - .next/
         - action: rebuild
-          path: ./src/dashboard/package.json
+          path: ./dashboard/package.json
+
+  # Trading System Orchestrator
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile.dev
+    container_name: trading-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY}
+      OANDA_ACCOUNT_IDS: ${OANDA_ACCOUNT_IDS:-101-001-21040028-001}
+      OANDA_ENVIRONMENT: ${OANDA_ENVIRONMENT:-practice}
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/trading_system
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - trading-network
+    volumes:
+      - ./orchestrator:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Market Analysis Agent
+  market-analysis:
+    build:
+      context: ./agents/market-analysis
+      dockerfile: Dockerfile.dev
+    container_name: trading-market-analysis
+    ports:
+      - "8002:8002"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY}
+      POLYGON_API_KEY: ${POLYGON_API_KEY:-}
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/trading_system
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/market-analysis:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: ["python", "../../../start-market-analysis.py"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Execution Engine
+  execution-engine:
+    build:
+      context: ./execution-engine
+      dockerfile: Dockerfile.dev
+    container_name: trading-execution-engine
+    ports:
+      - "8004:8004"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY}
+      OANDA_ACCOUNT_ID: ${OANDA_ACCOUNT_IDS:-101-001-21040028-001}
+      OANDA_ENVIRONMENT: ${OANDA_ENVIRONMENT:-practice}
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/trading_system
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trading-network
+    volumes:
+      - ./execution-engine:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: ["python", "../start-execution-engine.py"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 networks:
   trading-network:

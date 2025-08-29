@@ -469,10 +469,179 @@ class MarketStateAgent:
         
         while True:
             try:
-                # This would fetch real market data in production
-                # For now, it's a placeholder for the monitoring loop
-                await asyncio.sleep(60)  # Check every minute
+                # Connect to OANDA real-time data feed
+                await self._fetch_real_market_data()
+                
+                # Update market state based on real data
+                await self._update_market_state()
+                
+                # Generate signals from real data
+                await self._process_real_time_signals()
+                
+                await asyncio.sleep(5)  # Check every 5 seconds for real-time data
                 
             except Exception as e:
-                logger.error(f"Monitoring error: {e}")
-                await asyncio.sleep(60)
+                logger.error(f"Real-time monitoring error: {e}")
+                await asyncio.sleep(10)  # Shorter sleep on error
+    
+    async def _fetch_real_market_data(self):
+        """Fetch real-time market data from OANDA"""
+        try:
+            import aiohttp
+            import os
+            
+            # Get OANDA credentials
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+            environment = os.getenv("OANDA_ENVIRONMENT", "practice")
+            
+            if not api_key or not account_id:
+                logger.error("❌ OANDA credentials not configured")
+                return
+            
+            # OANDA API URLs
+            if environment == "practice":
+                base_url = "https://api-fxpractice.oanda.com"
+            else:
+                base_url = "https://api-fxtrade.oanda.com"
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Major currency pairs for analysis
+            instruments = ["EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD", "NZD_USD", "USD_CAD"]
+            
+            async with aiohttp.ClientSession() as session:
+                # Get current prices
+                instruments_str = ",".join(instruments)
+                price_url = f"{base_url}/v3/accounts/{account_id}/pricing"
+                
+                async with session.get(
+                    price_url,
+                    headers=headers,
+                    params={"instruments": instruments_str}
+                ) as response:
+                    
+                    if response.status == 200:
+                        price_data = await response.json()
+                        
+                        # Store real market data
+                        self.market_data = {
+                            "timestamp": datetime.now(),
+                            "prices": {},
+                            "spreads": {},
+                            "status": "connected"
+                        }
+                        
+                        for price in price_data.get("prices", []):
+                            instrument = price["instrument"]
+                            self.market_data["prices"][instrument] = {
+                                "bid": float(price["closeoutBid"]),
+                                "ask": float(price["closeoutAsk"]),
+                                "mid": (float(price["closeoutBid"]) + float(price["closeoutAsk"])) / 2,
+                                "time": price["time"]
+                            }
+                            
+                            # Calculate spread
+                            spread = float(price["closeoutAsk"]) - float(price["closeoutBid"])
+                            self.market_data["spreads"][instrument] = spread
+                        
+                        logger.info(f"✅ Real market data updated: {len(instruments)} instruments")
+                        self.connected = True
+                        
+                    else:
+                        logger.error(f"❌ OANDA API error: {response.status}")
+                        self.connected = False
+                        
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch real market data: {e}")
+            self.connected = False
+    
+    async def _update_market_state(self):
+        """Update market state based on real market data"""
+        if not hasattr(self, 'market_data') or not self.market_data:
+            return
+        
+        try:
+            # Analyze real price movements for volatility
+            volatility_scores = []
+            
+            for instrument, price_data in self.market_data["prices"].items():
+                spread = self.market_data["spreads"][instrument]
+                spread_pct = (spread / price_data["mid"]) * 10000  # in pips
+                
+                # Higher spread indicates higher volatility
+                if spread_pct > 3:
+                    volatility_scores.append("high")
+                elif spread_pct > 1.5:
+                    volatility_scores.append("medium")
+                else:
+                    volatility_scores.append("low")
+            
+            # Determine overall market state
+            high_vol_count = volatility_scores.count("high")
+            total_instruments = len(volatility_scores)
+            
+            if high_vol_count > total_instruments * 0.5:
+                self.current_state = "volatile"
+            elif high_vol_count > total_instruments * 0.2:
+                self.current_state = "ranging"
+            else:
+                self.current_state = "trending"
+            
+            # Update market_data with state
+            self.market_data["market_state"] = self.current_state
+            self.market_data["volatility_analysis"] = {
+                "high_vol_instruments": high_vol_count,
+                "total_instruments": total_instruments,
+                "avg_spread": sum(self.market_data["spreads"].values()) / len(self.market_data["spreads"])
+            }
+            
+            logger.info(f"📊 Market state updated: {self.current_state} ({high_vol_count}/{total_instruments} high volatility)")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update market state: {e}")
+    
+    async def _process_real_time_signals(self):
+        """Generate trading signals from real market data"""
+        if not hasattr(self, 'market_data') or not self.market_data:
+            return
+        
+        try:
+            from .signals.signal_generator import SignalGenerator
+            
+            # Initialize signal generator if not exists
+            if not hasattr(self, 'signal_generator'):
+                self.signal_generator = SignalGenerator()
+            
+            # Generate signals based on real market data
+            for instrument, price_data in self.market_data["prices"].items():
+                
+                # Simple signal generation based on spread analysis
+                spread = self.market_data["spreads"][instrument]
+                spread_pct = (spread / price_data["mid"]) * 10000
+                
+                # Generate signal if conditions are met
+                if spread_pct < 2.0:  # Low spread = good execution conditions
+                    signal = {
+                        "instrument": instrument,
+                        "type": "analysis_ready",
+                        "timestamp": datetime.now(),
+                        "price": price_data["mid"],
+                        "spread": spread,
+                        "market_state": self.current_state,
+                        "confidence": 0.7  # Basic confidence for real data
+                    }
+                    
+                    # In production, this would send signal to orchestrator
+                    logger.info(f"📈 Signal generated for {instrument}: {signal['type']}")
+            
+            # Update signal count
+            if not hasattr(self, 'signal_count'):
+                self.signal_count = 0
+            self.signal_count += len(self.market_data["prices"])
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to process real-time signals: {e}")

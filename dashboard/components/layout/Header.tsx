@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/context/AuthContext'
 
@@ -9,9 +11,25 @@ import { useAuth } from '@/context/AuthContext'
  */
 export default function Header() {
   const { user, logout } = useAuth()
+  const pathname = usePathname()
 
   const handleLogout = () => {
     logout()
+  }
+
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return pathname === '/'
+    }
+    return pathname.startsWith(path)
+  }
+
+  const getLinkClasses = (path: string) => {
+    const baseClasses = "hover:text-gray-300 transition-colors px-2 py-1 rounded"
+    const activeClasses = "text-white bg-blue-600"
+    const inactiveClasses = "text-gray-300"
+    
+    return `${baseClasses} ${isActive(path) ? activeClasses : inactiveClasses}`
   }
 
   return (
@@ -19,12 +37,22 @@ export default function Header() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-8">
-            <h1 className="text-xl font-bold">Adaptive Trading System</h1>
-            <nav className="hidden md:flex space-x-6">
-              <a href="#" className="hover:text-gray-300 transition-colors">Dashboard</a>
-              <a href="#" className="hover:text-gray-300 transition-colors">Accounts</a>
-              <a href="#" className="hover:text-gray-300 transition-colors">Positions</a>
-              <a href="#" className="hover:text-gray-300 transition-colors">Analytics</a>
+            <Link href="/" className="text-xl font-bold hover:text-gray-300 transition-colors">
+              Adaptive Trading System
+            </Link>
+            <nav className="hidden md:flex space-x-4">
+              <Link href="/" className={getLinkClasses('/')}>
+                Dashboard
+              </Link>
+              <Link href="/oanda" className={getLinkClasses('/oanda')}>
+                OANDA
+              </Link>
+              <Link href="/brokers" className={getLinkClasses('/brokers')}>
+                Brokers
+              </Link>
+              <Link href="/performance-analytics" className={getLinkClasses('/performance-analytics')}>
+                Analytics
+              </Link>
             </nav>
           </div>
           <div className="flex items-center space-x-4">

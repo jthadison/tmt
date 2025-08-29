@@ -8,13 +8,15 @@ import { Trade, TradeSortOptions, TradeHistoryFilters } from '@/types/accountDet
  */
 interface TradeHistoryProps {
   /** Array of completed trades */
-  trades: Trade[]
+  trades?: Trade[]
   /** Account ID for context */
   accountId: string
   /** Loading state indicator */
   loading?: boolean
   /** Items per page for pagination */
   itemsPerPage?: number
+  /** Show account column for multi-account view */
+  showAccountColumn?: boolean
 }
 
 /**
@@ -22,10 +24,11 @@ interface TradeHistoryProps {
  * Displays historical trade data with comprehensive filtering options
  */
 export function TradeHistory({
-  trades,
+  trades: propTrades,
   accountId,
   loading = false,
-  itemsPerPage = 25
+  itemsPerPage = 25,
+  showAccountColumn = false
 }: TradeHistoryProps) {
   // Remove unused accountId parameter warning
   void accountId
@@ -74,7 +77,7 @@ export function TradeHistory({
   }, [])
 
   // Combine provided trades with mock data
-  const allTrades = useMemo(() => [...trades, ...mockTrades], [trades, mockTrades])
+  const allTrades = useMemo(() => [...(propTrades || []), ...mockTrades], [propTrades, mockTrades])
 
   // Filter trades based on current filters
   const filteredTrades = useMemo(() => {
@@ -185,7 +188,8 @@ export function TradeHistory({
     }).format(amount)
   }
 
-  const formatDate = (date: Date): string => {
+  const formatDate = (date: Date | null): string => {
+    if (!date) return 'Open'
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: '2-digit',
@@ -391,7 +395,7 @@ export function TradeHistory({
                   {formatDate(trade.closeTime)}
                 </td>
                 <td className="py-3 px-4 text-white font-medium">
-                  {trade.symbol}
+                  {trade.symbol || trade.instrument}
                 </td>
                 <td className="py-3 px-4">
                   <span className={`
@@ -402,13 +406,13 @@ export function TradeHistory({
                   </span>
                 </td>
                 <td className="py-3 px-4 text-right text-white">
-                  {trade.size.toFixed(2)}
+                  {(trade.size || trade.units || 0).toFixed(2)}
                 </td>
                 <td className="py-3 px-4 text-right text-white">
-                  {trade.entryPrice.toFixed(5)}
+                  {(trade.entryPrice || trade.price || 0).toFixed(5)}
                 </td>
                 <td className="py-3 px-4 text-right text-white">
-                  {trade.exitPrice.toFixed(5)}
+                  {trade.exitPrice ? trade.exitPrice.toFixed(5) : '-'}
                 </td>
                 <td className="py-3 px-4 text-right">
                   <div className={`font-medium ${getPnLColor(trade.pnl)}`}>

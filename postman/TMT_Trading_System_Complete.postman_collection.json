@@ -1,0 +1,115 @@
+{
+  "info": {
+    "_postman_id": "tmt-trading-system-complete",
+    "name": "TMT Trading System - Complete API Collection (25+ Endpoints)", 
+    "description": "Comprehensive API collection for the TMT Autonomous Trading System with Core Infrastructure, 8 AI Agents, and Dashboard APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "{{base_url}}", "type": "string"},
+    {"key": "orchestrator_port", "value": "{{orchestrator_port}}", "type": "string"},
+    {"key": "oanda_account_id", "value": "{{oanda_account_id}}", "type": "string"}
+  ],
+  "item": [
+    {
+      "name": "🏗️ Core Infrastructure",
+      "item": [
+        {
+          "name": "Orchestrator - Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}:{{orchestrator_port}}/health",
+              "host": ["{{base_url}}"],
+              "port": "{{orchestrator_port}}",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Execution Engine - Health Check", 
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}:8082/health",
+              "host": ["{{base_url}}"],
+              "port": "8082", 
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 8-Agent AI Ecosystem",
+      "item": [
+        {
+          "name": "Market Analysis - Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}:8001/health",
+              "host": ["{{base_url}}"],
+              "port": "8001",
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Dashboard API (Port 3003)",
+      "item": [
+        {
+          "name": "Real-time P&L Data",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"accountId\": \"{{oanda_account_id}}\",\n  \"agentId\": \"all\"\n}"},
+            "url": {
+              "raw": "{{base_url}}:3003/api/analytics/realtime-pnl",
+              "host": ["{{base_url}}"],
+              "port": "3003",
+              "path": ["api", "analytics", "realtime-pnl"]
+            }
+          }
+        },
+        {
+          "name": "Trade History (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}:3003/api/trades/history?accountId={{oanda_account_id}}&page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "port": "3003",
+              "path": ["api", "trades", "history"],
+              "query": [
+                {"key": "accountId", "value": "{{oanda_account_id}}"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "50"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trade History (POST)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"accountId\": \"{{oanda_account_id}}\",\n  \"page\": 1,\n  \"limit\": 50,\n  \"sortBy\": \"openTime\",\n  \"sortOrder\": \"desc\"\n}"},
+            "url": {
+              "raw": "{{base_url}}:3003/api/trades/history",
+              "host": ["{{base_url}}"],
+              "port": "3003",
+              "path": ["api", "trades", "history"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

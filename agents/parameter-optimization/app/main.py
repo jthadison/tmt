@@ -5,6 +5,7 @@ FastAPI service for adaptive risk parameter tuning
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -24,6 +25,15 @@ app = FastAPI(
     title="Parameter Optimization Agent",
     description="Adaptive Risk Parameter Tuning for Trading Systems",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize the parameter tuner
@@ -96,10 +106,96 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow()}
 
 
-@app.post("/optimize")
-async def optimize_parameters(request: OptimizationRequest, background_tasks: BackgroundTasks):
+@app.post("/process_signal")
+async def process_signal(signal: dict):
     """
-    Optimize parameters for an account
+    Process a signal for parameter optimization (compatibility endpoint).
+    Returns current optimization parameters for the signal.
+    """
+    try:
+        # For now, return default parameters as this agent focuses on historical analysis
+        # In a full implementation, this would analyze the signal and suggest optimal parameters
+        return {
+            "status": "processed",
+            "suggested_parameters": {
+                "position_size": 0.01,  # 1% risk
+                "stop_loss_pips": 20,
+                "take_profit_pips": 40,
+                "max_drawdown": 0.02
+            },
+            "confidence": 0.75,
+            "message": "Signal processed with default parameters"
+        }
+    except Exception as e:
+        logger.error(f"Error processing signal: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/optimize")
+async def optimize_parameters_orchestrator(signal_request: Dict[str, Any]):
+    """
+    Optimize parameters for orchestrator signal (simple format)
+    """
+    try:
+        # Extract signal data from orchestrator format
+        signal_data = signal_request.get("signal", {})
+        
+        # Extract relevant signal information
+        instrument = signal_data.get("instrument", "EUR_USD")
+        confidence = signal_data.get("confidence", 75.0)
+        entry_price = signal_data.get("entry_price", 1.0)
+        stop_loss = signal_data.get("stop_loss")
+        take_profit = signal_data.get("take_profit")
+        
+        # Calculate risk/reward ratio if available
+        risk_reward_ratio = 1.5  # Default
+        if entry_price and stop_loss and take_profit:
+            risk = abs(entry_price - stop_loss)
+            reward = abs(take_profit - entry_price)
+            if risk > 0:
+                risk_reward_ratio = reward / risk
+        
+        # Calculate optimized parameters based on signal
+        confidence_normalized = confidence / 100.0 if confidence > 1.0 else confidence
+        base_risk = 0.01  # 1% base risk
+        
+        # Adjust position size based on confidence
+        position_size = base_risk * confidence_normalized
+        position_size = max(0.005, min(position_size, 0.02))  # Clamp between 0.5% and 2%
+        
+        # Calculate stop loss and take profit in pips
+        stop_loss_pips = 20 if "JPY" not in instrument else 30
+        take_profit_pips = int(stop_loss_pips * risk_reward_ratio)
+        
+        # Return optimized parameters in format expected by orchestrator
+        return {
+            "approved": True,
+            "parameters": {
+                "position_size": position_size,
+                "stop_loss_pips": stop_loss_pips,
+                "take_profit_pips": take_profit_pips,
+                "risk_reward_ratio": risk_reward_ratio,
+                "max_drawdown": 0.02,
+                "confidence_threshold": 0.65
+            },
+            "confidence": confidence_normalized,
+            "message": f"Optimized parameters for {instrument} with {confidence}% confidence"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error optimizing parameters: {e}")
+        return {
+            "approved": False,
+            "parameters": {},
+            "confidence": 0.0,
+            "message": f"Optimization error: {str(e)}"
+        }
+
+
+@app.post("/optimize/full")
+async def optimize_parameters_full(request: OptimizationRequest, background_tasks: BackgroundTasks):
+    """
+    Full parameter optimization with trade history (original complex endpoint)
     """
     try:
         # Convert request data to internal models

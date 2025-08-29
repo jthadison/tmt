@@ -5,6 +5,21 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 
+# Development and testing artifacts
+test_*.js
+test_*.py
+pr-*-diff.txt
+test-results/
+*.validation*.json
+
+# Trading system runtime data
+*.csv
+*.json
+trade_journal.json
+notification_test_trades.csv
+test_export.csv
+*_CODE_REVIEW.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -209,4 +224,9 @@ grafana_data/
 kafka_data/
 
 # Claude Code
-.claude/settings.local.json
+.claude/settings.local.jsonorchestrator/.env
+orchestrator/.coverage
+orchestrator/htmlcov/
+
+# Playwright MCP screenshots
+.playwright-mcp/

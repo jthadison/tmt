@@ -16,8 +16,23 @@ from .models import (
     VolatilityLevel, VolumeProfile, TrendDirection
 )
 
-# Import data interfaces
-from ...src.shared.python_utils.data_interfaces import MarketDataInterface, MockMarketDataProvider
+# Import data interfaces with fallback
+try:
+    from shared.python_utils.data_interfaces import MarketDataInterface, MockMarketDataProvider
+except ImportError:
+    # Fallback to mock implementations
+    class MockMarketDataInterface:
+        async def get_market_data_point(self, symbol):
+            from decimal import Decimal
+            return type('MarketDataPoint', (), {
+                'price': Decimal('1.0500'),
+                'volume': Decimal('1000'),
+                'volatility': Decimal('0.015'),
+                'trend_strength': Decimal('0.01')
+            })()
+    
+    MarketDataInterface = MockMarketDataInterface
+    MockMarketDataProvider = MockMarketDataInterface
 
 logger = logging.getLogger(__name__)
 

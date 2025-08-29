@@ -47,30 +47,49 @@ export interface Position {
 export interface Trade {
   /** Unique trade identifier */
   id: string
-  /** Trading symbol */
-  symbol: string
-  /** Trade type (long/short) */
-  type: PositionType
-  /** Trade size in lots or shares */
-  size: number
-  /** Entry price */
-  entryPrice: number
+  /** Account ID associated with trade */
+  accountId?: string
+  /** Account name for display */
+  accountName?: string
+  /** Trading symbol/instrument (symbol for compatibility, instrument for API) */
+  symbol?: string
+  instrument?: string
+  /** Trade type (long/short for compatibility, market/limit for API) */
+  type: PositionType | 'market' | 'limit'
+  /** Trade direction (buy/sell for API) */
+  side?: 'buy' | 'sell'
+  /** Trade size in lots or shares (size for compatibility, units for API) */
+  size?: number
+  units?: number
+  /** Entry price (entryPrice for compatibility, price for API) */
+  entryPrice?: number
+  price?: number
   /** Exit price */
-  exitPrice: number
+  exitPrice?: number
+  /** Stop loss price */
+  stopLoss?: number
+  /** Take profit price */
+  takeProfit?: number
   /** Final profit/loss */
   pnl: number
   /** Total commission paid */
   commission: number
+  /** Swap fees */
+  swap?: number
   /** Trade open timestamp */
   openTime: Date
   /** Trade close timestamp */
-  closeTime: Date
+  closeTime?: Date | null
+  /** Trade status */
+  status?: 'open' | 'closed' | 'pending'
   /** Trade duration in minutes */
-  duration: number
+  duration?: number
   /** Trading strategy used (optional) */
   strategy?: string
   /** Trade notes or comments */
   notes?: string
+  /** Trade tags */
+  tags?: string[]
 }
 
 /**
@@ -284,4 +303,52 @@ export interface PositionSortOptions {
 export interface TradeSortOptions {
   field: keyof Trade
   direction: 'asc' | 'desc'
+}
+
+/**
+ * Trade statistics for analysis
+ */
+export interface TradeStats {
+  /** Total number of trades */
+  totalTrades: number
+  /** Number of closed trades */
+  closedTrades: number
+  /** Number of open trades */
+  openTrades: number
+  /** Number of winning trades */
+  winningTrades: number
+  /** Number of losing trades */
+  losingTrades: number
+  /** Total P&L across all trades */
+  totalPnL: number
+  /** Win rate as percentage */
+  winRate: number
+  /** Average winning trade amount */
+  averageWin: number
+  /** Average losing trade amount */
+  averageLoss: number
+  /** Profit factor (gross profit / gross loss) */
+  profitFactor: number
+  /** Maximum drawdown */
+  maxDrawdown: number
+  /** Total commission paid */
+  totalCommission: number
+  /** Total swap fees */
+  totalSwap: number
+}
+
+/**
+ * Trade filter for API requests
+ */
+export interface TradeFilter {
+  /** Filter by instrument/symbol */
+  instrument?: string
+  /** Filter by trade status */
+  status?: 'open' | 'closed' | 'pending'
+  /** Filter by trade type */
+  type?: string
+  /** Minimum profit filter */
+  minProfit?: number
+  /** Maximum profit filter */
+  maxProfit?: number
 }

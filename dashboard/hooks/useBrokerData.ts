@@ -15,8 +15,8 @@ interface UseBrokerDataReturn {
   refreshData: () => Promise<void>;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws/dashboard';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8083/ws';
 
 export const useBrokerData = (): UseBrokerDataReturn => {
   const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
@@ -192,6 +192,9 @@ export const useBrokerData = (): UseBrokerDataReturn => {
 
   const addBrokerAccount = useCallback(async (config: any) => {
     try {
+      console.log('addBrokerAccount called with config:', JSON.stringify(config, null, 2));
+      console.log('Making request to:', `${API_BASE_URL}/api/brokers`);
+      
       const response = await fetch(`${API_BASE_URL}/api/brokers`, {
         method: 'POST',
         headers: {
@@ -200,19 +203,28 @@ export const useBrokerData = (): UseBrokerDataReturn => {
         body: JSON.stringify(config),
       });
       
+      console.log('Response status:', response.status);
+      console.log('Response statusText:', response.statusText);
+      
       if (!response.ok) {
-        throw new Error(`Failed to add broker account: ${response.statusText}`);
+        const errorBody = await response.text();
+        console.log('Error response body:', errorBody);
+        throw new Error(`Failed to add broker account: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody}` : ''}`);
       }
       
       const result = await response.json();
-      console.log('Broker account added:', result);
+      console.log('Broker account added successfully:', result);
+      
+      // Refresh data after successful addition
+      await fetchInitialData();
       
     } catch (err) {
+      console.error('addBrokerAccount error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to add broker account';
       setError(errorMessage);
       throw err;
     }
-  }, []);
+  }, [fetchInitialData]);
 
   const removeBrokerAccount = useCallback(async (accountId: string) => {
     try {

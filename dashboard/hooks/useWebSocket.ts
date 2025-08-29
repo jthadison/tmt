@@ -99,9 +99,7 @@ export function useWebSocket({
           setLastMessage(message)
           
           // Reset error on successful message
-          if (lastError) {
-            setLastError(null)
-          }
+          setLastError(null)
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error)
           setLastError(error as Error)
@@ -147,7 +145,7 @@ export function useWebSocket({
       setConnectionStatus(ConnectionStatus.ERROR)
       onError?.(error as Error)
     }
-  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat, onError, onReconnectFailed, lastError])
+  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat, onError, onReconnectFailed])
 
   const disconnect = useCallback(() => {
     isManualDisconnect.current = true
