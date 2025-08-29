@@ -236,13 +236,31 @@ async def get_status():
         ]
     }
 
+@app.post("/reset-signals")
+async def reset_signal_count():
+    """Reset daily signal count"""
+    global signals_generated_today, last_signal_time
+    old_count = signals_generated_today
+    signals_generated_today = 0
+    last_signal_time = None
+    
+    logger.info(f"🔄 Signal count reset from {old_count} to 0")
+    
+    return {
+        "status": "success",
+        "message": f"Signal count reset from {old_count} to 0",
+        "old_count": old_count,
+        "new_count": 0,
+        "reset_time": datetime.now().isoformat()
+    }
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "service": "Market Analysis Agent",
         "status": "running",
-        "endpoints": ["/health", "/status"]
+        "endpoints": ["/health", "/status", "/reset-signals"]
     }
 
 if __name__ == "__main__":

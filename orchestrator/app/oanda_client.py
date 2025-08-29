@@ -387,7 +387,7 @@ class OandaClient:
             return False
     
     async def list_accounts(self) -> List:
-        """List all available OANDA accounts"""
+        """List all available OANDA accounts with real data"""
         try:
             response = await self.client.get(f"{self.base_url}/v3/accounts")
             
@@ -395,18 +395,40 @@ class OandaClient:
                 data = response.json()
                 accounts = []
                 for account in data.get("accounts", []):
-                    accounts.append({
-                        "id": account["id"],
-                        "name": f"OANDA Account {account['id']}",
-                        "currency": account.get("currency", "USD"),
-                        "status": "active",  # Simplified - could check actual status
-                        "balance": 0.0,  # Would need separate call to get balance
-                        "unrealized_pnl": 0.0,
-                        "margin_used": 0.0,
-                        "margin_available": 0.0,
-                        "open_trades": 0,
-                        "open_positions": 0
-                    })
+                    try:
+                        # Get detailed account information
+                        account_info = await self.get_account_info(account["id"])
+                        positions = await self.get_positions(account["id"])
+                        trades = await self.get_trades(account["id"])
+                        
+                        accounts.append({
+                            "id": account["id"],
+                            "name": f"OANDA Account {account['id']}",
+                            "currency": account_info.currency,
+                            "status": "active",
+                            "balance": account_info.balance,
+                            "unrealized_pnl": account_info.unrealized_pnl,
+                            "margin_used": account_info.margin_used,
+                            "margin_available": account_info.margin_available,
+                            "open_trades": len(trades),
+                            "open_positions": len([p for p in positions if abs(p.units) > 0])
+                        })
+                    except Exception as account_error:
+                        logger.error(f"Error getting details for account {account['id']}: {account_error}")
+                        # Fall back to basic info if detailed fetch fails
+                        accounts.append({
+                            "id": account["id"],
+                            "name": f"OANDA Account {account['id']}",
+                            "currency": account.get("currency", "USD"),
+                            "status": "error",
+                            "balance": 0.0,
+                            "unrealized_pnl": 0.0,
+                            "margin_used": 0.0,
+                            "margin_available": 0.0,
+                            "open_trades": 0,
+                            "open_positions": 0
+                        })
+                        
                 return accounts
             else:
                 logger.error(f"Failed to list accounts: {response.status_code}")
@@ -425,14 +447,17 @@ class OandaClient:
             
             return {
                 "account_id": account_id,
-                "status": "active",
+                "currency": account_info.currency,
                 "balance": account_info.balance,
-                "unrealized_pnl": account_info.unrealized_pnl,
+                "equity": account_info.balance + account_info.unrealized_pnl,  # Calculate equity
                 "margin_used": account_info.margin_used,
                 "margin_available": account_info.margin_available,
-                "open_trades": len(trades),
-                "open_positions": len(positions),
-                "last_updated": datetime.utcnow().isoformat()
+                "unrealized_pnl": account_info.unrealized_pnl,
+                "open_positions": len([p for p in positions if abs(p.units) > 0]),
+                "open_orders": 0,  # TODO: Get actual pending orders count
+                "trading_enabled": True,
+                "last_update": datetime.utcnow(),
+                "health_status": "healthy"
             }
         except Exception as e:
             logger.error(f"Error getting account status for {account_id}: {e}")

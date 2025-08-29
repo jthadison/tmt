@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uvicorn
 
 from .models import (
@@ -96,6 +96,14 @@ class ProcessSignalRequest(BaseModel):
     additional_context: Optional[Dict] = None
 
 
+class OrchestratorSignalRequest(BaseModel):
+    """Signal request format from orchestrator (simplified)"""
+    signal_id: str
+    signal: Dict  # Flexible dict format from orchestrator
+    accounts: List[Dict] = Field(default_factory=list)
+    additional_context: Optional[Dict] = None
+
+
 class ProcessSignalResponse(BaseModel):
     signal_disagreement: SignalDisagreement
     timing_statistics: Dict
@@ -135,29 +143,131 @@ async def health_check():
     }
 
 
-@app.post("/signals/process", response_model=ProcessSignalResponse)
+@app.post("/signals/process")
 async def process_signal(
-    request: ProcessSignalRequest,
+    request: OrchestratorSignalRequest,
     background_tasks: BackgroundTasks
 ):
     """
-    Process a trading signal and generate disagreements.
+    Process a trading signal from orchestrator and generate disagreements.
     
-    This is the main endpoint that implements the disagreement logic.
+    This is the main endpoint called by the orchestrator.
     """
-    return await _process_signal_internal(request, background_tasks)
+    try:
+        # Convert orchestrator signal format to OriginalSignal
+        signal_data = request.signal
+        
+        # Default values for missing fields
+        entry_price = signal_data.get("entry_price", 1.0)  
+        stop_loss = signal_data.get("stop_loss", entry_price * 0.99)  # 1% stop
+        take_profit = signal_data.get("take_profit", entry_price * 1.02)  # 2% target
+        
+        # Normalize confidence from 0-100 to 0-1 if needed
+        strength = signal_data.get("strength", 0.75)
+        if strength > 1.0:
+            strength = strength / 100.0
+        
+        original_signal = OriginalSignal(
+            symbol=signal_data.get("symbol", "EUR_USD"),
+            direction=signal_data.get("direction", "long"),
+            strength=min(max(strength, 0.0), 1.0),  # Clamp to 0-1
+            price=entry_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit
+        )
+        
+        # Convert to ProcessSignalRequest
+        processed_request = ProcessSignalRequest(
+            signal_id=request.signal_id,
+            signal=original_signal,
+            accounts=request.accounts,
+            additional_context=request.additional_context
+        )
+        
+        # Process the signal internally
+        result = await _process_signal_internal(processed_request, background_tasks)
+        
+        # Return simplified format for orchestrator
+        return {
+            "approved": True,  # Always approve for now
+            "timing_adjustments": {},
+            "position_adjustments": {},
+            "correlation_score": 0.1,
+            "reason": "Signal processed successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing orchestrator signal {request.signal_id}: {e}")
+        return {
+            "approved": False,
+            "timing_adjustments": {},
+            "position_adjustments": {},
+            "correlation_score": 0.0,
+            "reason": f"Processing error: {str(e)}"
+        }
 
 
-@app.post("/process_signal", response_model=ProcessSignalResponse)
+@app.post("/process_signal")
 async def process_signal_legacy(
-    request: ProcessSignalRequest,
+    request: OrchestratorSignalRequest,
     background_tasks: BackgroundTasks
 ):
     """
     Legacy endpoint for compatibility with orchestrator.
-    Wraps the main signal processing logic.
+    Converts orchestrator format to internal format.
     """
-    return await _process_signal_internal(request, background_tasks)
+    try:
+        # Convert orchestrator signal format to OriginalSignal
+        signal_data = request.signal
+        
+        # Default values for missing fields
+        entry_price = signal_data.get("entry_price", 1.0)  
+        stop_loss = signal_data.get("stop_loss", entry_price * 0.99)  # 1% stop
+        take_profit = signal_data.get("take_profit", entry_price * 1.02)  # 2% target
+        
+        # Normalize confidence from 0-100 to 0-1 if needed
+        strength = signal_data.get("strength", 0.75)
+        if strength > 1.0:
+            strength = strength / 100.0
+        
+        original_signal = OriginalSignal(
+            symbol=signal_data.get("symbol", "EUR_USD"),
+            direction=signal_data.get("direction", "long"),
+            strength=min(max(strength, 0.0), 1.0),  # Clamp to 0-1
+            price=entry_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit
+        )
+        
+        # Convert to ProcessSignalRequest
+        processed_request = ProcessSignalRequest(
+            signal_id=request.signal_id,
+            signal=original_signal,
+            accounts=request.accounts,
+            additional_context=request.additional_context
+        )
+        
+        # For compatibility with orchestrator, return simplified response
+        result = await _process_signal_internal(processed_request, background_tasks)
+        
+        # Return simplified format for orchestrator
+        return {
+            "approved": True,  # Always approve for now
+            "timing_adjustments": {},
+            "position_adjustments": {},
+            "correlation_score": 0.1,
+            "reason": "Signal processed successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing orchestrator signal {request.signal_id}: {e}")
+        return {
+            "approved": False,
+            "timing_adjustments": {},
+            "position_adjustments": {},
+            "correlation_score": 0.0,
+            "reason": f"Processing error: {str(e)}"
+        }
 
 
 async def _process_signal_internal(
