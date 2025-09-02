@@ -1,1 +1,0 @@
-"""Anti-Correlation Engine application package."""

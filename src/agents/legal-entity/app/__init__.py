@@ -1,1 +1,0 @@
-"""Legal Entity Agent application package."""
