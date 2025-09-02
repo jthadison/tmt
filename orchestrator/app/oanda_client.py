@@ -314,35 +314,55 @@ class OandaClient:
             raise OandaException(f"Price request failed: {e}")
     
     async def execute_trade_signal(self, account_id: str, signal: TradeSignal) -> TradeResult:
-        """Execute a trade signal"""
+        """Execute a trade signal with advanced position sizing"""
         try:
-            # Calculate position size based on risk management
-            account_info = await self.get_account_info(account_id)
+            # Import here to avoid circular dependency
+            from .position_sizing import get_position_sizing_engine
             
-            # Calculate units based on risk per trade
-            risk_amount = account_info.balance * self.settings.risk_per_trade
+            # Use advanced position sizing engine
+            sizing_engine = get_position_sizing_engine()
             
-            # Get current price for calculation
-            price_data = await self.get_current_price(signal.instrument)
-            current_price = price_data["ask" if signal.direction == "BUY" else "bid"]
+            # Pre-trade concentration check
+            is_safe, warnings = await sizing_engine.check_pre_trade_concentration(
+                signal, account_id, self
+            )
             
-            # Calculate stop loss distance in pips (simplified)
-            if signal.stop_loss:
-                stop_distance = abs(current_price - signal.stop_loss)
-                pip_value = 0.0001  # Simplified - would need proper pip value calculation
-                units = risk_amount / (stop_distance / pip_value * 10)  # Simplified calculation
-            else:
-                units = risk_amount / (current_price * 0.01)  # 1% risk default
+            if not is_safe:
+                logger.warning(f"Trade blocked for {signal.instrument}: {'; '.join(warnings)}")
+                return TradeResult(
+                    success=False,
+                    message=f"Trade blocked: {'; '.join(warnings)}",
+                    execution_time=datetime.utcnow()
+                )
             
-            # Apply direction
-            if signal.direction == "SELL":
-                units = -units
+            # Calculate optimal position size
+            sizing_result = await sizing_engine.calculate_position_size(
+                signal, account_id, self
+            )
             
-            # Place the order
+            if not sizing_result.is_safe_to_trade or sizing_result.recommended_units == 0:
+                warning_msg = '; '.join(sizing_result.warning_messages) if sizing_result.warning_messages else 'Position size calculation failed'
+                logger.warning(f"Trade sizing failed for {signal.instrument}: {warning_msg}")
+                return TradeResult(
+                    success=False,
+                    message=f"Position sizing blocked: {warning_msg}",
+                    execution_time=datetime.utcnow()
+                )
+            
+            # Log position sizing decision
+            logger.info(f"Advanced position sizing for {signal.instrument}: "
+                       f"{sizing_result.recommended_units} units "
+                       f"(risk: {sizing_result.effective_risk_percent:.1f}%, "
+                       f"concentration after: {sizing_result.concentration_after_trade:.1f}%)")
+            
+            if sizing_result.warning_messages:
+                logger.warning(f"Position sizing warnings: {'; '.join(sizing_result.warning_messages)}")
+            
+            # Place the order with optimized size
             order_result = await self.place_market_order(
                 account_id=account_id,
                 instrument=signal.instrument,
-                units=units,
+                units=sizing_result.recommended_units,
                 stop_loss=signal.stop_loss,
                 take_profit=signal.take_profit
             )
@@ -360,7 +380,7 @@ class OandaClient:
                     commission=float(fill.get("commission", 0)),
                     financing=float(fill.get("financing", 0)),
                     execution_time=datetime.utcnow(),
-                    message="Trade executed successfully"
+                    message=f"Trade executed with advanced sizing: {sizing_result.effective_risk_percent:.1f}% risk"
                 )
             else:
                 return TradeResult(

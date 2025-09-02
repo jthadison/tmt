@@ -196,10 +196,87 @@ class TradeExecutor:
     
     async def _calculate_position_size(self, signal: TradeSignal, account_id: str) -> int:
         """
-        Calculate position size based on risk management rules
-        
-        Uses the formula: Position Size = (Account Balance * Risk%) / (Stop Loss Distance * Pip Value)
+        Calculate position size using advanced position sizing engine
         """
+        try:
+            # Import here to avoid circular dependency
+            from .position_sizing import get_position_sizing_engine
+            
+            # Use advanced position sizing engine
+            sizing_engine = get_position_sizing_engine()
+            
+            # Get mock OANDA client for sizing calculation
+            mock_oanda_client = self._create_mock_oanda_client()
+            
+            # Calculate optimal position size
+            sizing_result = await sizing_engine.calculate_position_size(
+                signal, account_id, mock_oanda_client
+            )
+            
+            if not sizing_result.is_safe_to_trade:
+                logger.warning(f"Position sizing blocked for {signal.instrument}: {'; '.join(sizing_result.warning_messages)}")
+                return 0
+            
+            logger.info(f"Advanced position sizing for {signal.instrument}: "
+                       f"{sizing_result.recommended_units} units "
+                       f"(risk: {sizing_result.effective_risk_percent:.1f}%, "
+                       f"concentration after: {sizing_result.concentration_after_trade:.1f}%)")
+            
+            return sizing_result.recommended_units
+            
+        except Exception as e:
+            logger.error(f"Error calculating position size: {e}")
+            # Fallback to legacy calculation
+            return await self._legacy_position_size_calculation(signal, account_id)
+    
+    def _create_mock_oanda_client(self):
+        """Create a mock OANDA client for position sizing calculations"""
+        class MockOandaClient:
+            def __init__(self, executor):
+                self.executor = executor
+            
+            async def get_account_info(self, account_id: str):
+                return await self.executor._get_account_info(account_id)
+            
+            async def get_positions(self, account_id: str):
+                # Get positions from OANDA API
+                try:
+                    url = f"{self.executor.base_url}/v3/accounts/{account_id}/positions"
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, headers=self.executor.headers) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                positions = []
+                                for pos_data in data.get("positions", []):
+                                    # Create mock position objects
+                                    from types import SimpleNamespace
+                                    position = SimpleNamespace()
+                                    position.instrument = pos_data["instrument"]
+                                    
+                                    long_units = float(pos_data.get("long", {}).get("units", 0))
+                                    short_units = float(pos_data.get("short", {}).get("units", 0))
+                                    position.units = long_units + short_units
+                                    
+                                    if position.units != 0:
+                                        long_avg = float(pos_data.get("long", {}).get("averagePrice", 0))
+                                        short_avg = float(pos_data.get("short", {}).get("averagePrice", 0))
+                                        if long_units != 0 and short_units != 0:
+                                            position.average_price = (long_avg * long_units + short_avg * short_units) / position.units
+                                        elif long_units != 0:
+                                            position.average_price = long_avg
+                                        else:
+                                            position.average_price = short_avg
+                                        positions.append(position)
+                                return positions
+                    return []
+                except Exception:
+                    return []
+        
+        return MockOandaClient(self)
+    
+    async def _legacy_position_size_calculation(self, signal: TradeSignal, account_id: str) -> int:
+        """Legacy position size calculation as fallback"""
         try:
             # Get account balance
             account_info = await self._get_account_info(account_id)
@@ -237,11 +314,11 @@ class TradeExecutor:
             if signal.direction in ["short", "sell"]:
                 position_size = -position_size
             
-            logger.info(f"Calculated position size: {position_size} units for signal {signal.id}")
+            logger.info(f"Legacy calculated position size: {position_size} units for signal {signal.id}")
             return position_size
             
         except Exception as e:
-            logger.error(f"Error calculating position size: {e}")
+            logger.error(f"Error calculating legacy position size: {e}")
             return 0
     
     async def _place_order(self, account_id: str, instrument: str, units: int,

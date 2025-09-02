@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     max_daily_loss: float = Field(0.06, env="MAX_DAILY_LOSS")
     circuit_breaker_threshold: float = Field(0.10, env="CIRCUIT_BREAKER_THRESHOLD")
     
+    # Advanced position sizing
+    max_position_concentration: float = Field(0.30, env="MAX_POSITION_CONCENTRATION")
+    emergency_concentration_threshold: float = Field(0.50, env="EMERGENCY_CONCENTRATION_THRESHOLD")
+    portfolio_heat_threshold: float = Field(0.15, env="PORTFOLIO_HEAT_THRESHOLD")
+    min_margin_buffer: float = Field(5000.0, env="MIN_MARGIN_BUFFER")
+    
     # Safety settings
     emergency_close_positions: bool = Field(True, env="EMERGENCY_CLOSE_POSITIONS")
     max_position_size: float = Field(100000.0, env="MAX_POSITION_SIZE")
