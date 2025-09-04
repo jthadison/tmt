@@ -34,34 +34,38 @@ class TradingSystemLauncher:
         self.services = {
             "orchestrator": {
                 "script": "orchestrator/app/main.py",
-                "port": 8000,
-                "module": "uvicorn orchestrator.app.main:app --host 0.0.0.0 --port 8000 --reload",
+                "port": 8089,
+                "module": f"{sys.executable} -m uvicorn orchestrator.app.main:app --host 0.0.0.0 --port 8089 --reload",
                 "cwd": Path.cwd(),
                 "env": {
                     "OANDA_API_KEY": os.getenv("OANDA_API_KEY", ""),
                     "OANDA_ACCOUNT_IDS": os.getenv("OANDA_ACCOUNT_IDS", "101-001-21040028-001"),
-                    "OANDA_ENVIRONMENT": os.getenv("OANDA_ENVIRONMENT", "practice")
+                    "OANDA_ENVIRONMENT": os.getenv("OANDA_ENVIRONMENT", "practice"),
+                    "ENABLE_TRADING": os.getenv("ENABLE_TRADING", "true"),
+                    "PORT": "8089"
                 }
             },
             "market_analysis": {
                 "script": "start-market-analysis.py", 
-                "port": 8002,
+                "port": 8001,
                 "module": "python start-market-analysis.py",
                 "cwd": Path.cwd(),
                 "env": {
                     "OANDA_API_KEY": os.getenv("OANDA_API_KEY", ""),
-                    "POLYGON_API_KEY": os.getenv("POLYGON_API_KEY", "")
+                    "POLYGON_API_KEY": os.getenv("POLYGON_API_KEY", ""),
+                    "PORT": "8001"
                 }
             },
             "execution_engine": {
                 "script": "start-execution-engine.py",
-                "port": 8004, 
+                "port": 8082, 
                 "module": "python start-execution-engine.py",
                 "cwd": Path.cwd(),
                 "env": {
                     "OANDA_API_KEY": os.getenv("OANDA_API_KEY", ""),
                     "OANDA_ACCOUNT_ID": os.getenv("OANDA_ACCOUNT_IDS", "101-001-21040028-001"),
-                    "OANDA_ENVIRONMENT": os.getenv("OANDA_ENVIRONMENT", "practice")
+                    "OANDA_ENVIRONMENT": os.getenv("OANDA_ENVIRONMENT", "practice"),
+                    "PORT": "8082"
                 }
             }
         }
@@ -90,14 +94,19 @@ class TradingSystemLauncher:
                 env.update(config["env"])
                 
                 # Start the process
+                # Use shell=True on Windows for complex commands
+                import platform
+                use_shell = platform.system() == "Windows" and service_name == "orchestrator"
+                
                 process = subprocess.Popen(
-                    config["module"].split(),
+                    config["module"] if use_shell else config["module"].split(),
                     cwd=config["cwd"],
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    shell=use_shell
                 )
                 
                 self.processes[service_name] = {
@@ -118,9 +127,9 @@ class TradingSystemLauncher:
         logger.info("🎯 All services started! System ready for trading.")
         logger.info("")
         logger.info("Service URLs:")
-        logger.info("  • Orchestrator:     http://localhost:8000/health")
-        logger.info("  • Market Analysis:  http://localhost:8002/health") 
-        logger.info("  • Execution Engine: http://localhost:8004/health")
+        logger.info("  • Orchestrator:     http://localhost:8089/health")
+        logger.info("  • Market Analysis:  http://localhost:8001/health") 
+        logger.info("  • Execution Engine: http://localhost:8082/health")
         logger.info("")
         logger.info("Testing URLs:")
         logger.info("  • Integration Test: python test-trading-pipeline.py")

@@ -48,34 +48,64 @@ class TradingSystemRestarter:
         # Known trading system processes and ports
         self.trading_processes = {
             "orchestrator": {
-                "ports": [8000],
+                "ports": [8089],
                 "process_names": ["uvicorn", "python"],
-                "keywords": ["orchestrator", "app.main", "8000"]
-            },
-            "market_analysis": {
-                "ports": [8002],
-                "process_names": ["python"],
-                "keywords": ["market-analysis", "start-market-analysis", "8002"]
+                "keywords": ["orchestrator", "app.main", "8089"]
             },
             "execution_engine": {
-                "ports": [8004],
+                "ports": [8082],
                 "process_names": ["python", "uvicorn"],
-                "keywords": ["execution-engine", "start-execution-engine", "8004"]
+                "keywords": ["execution-engine", "simple_main", "8082"]
             },
-            "signal_bridge": {
-                "ports": [],
+            "circuit_breaker": {
+                "ports": [8084],
                 "process_names": ["python"],
-                "keywords": ["signal_bridge", "signal-bridge"]
+                "keywords": ["circuit-breaker", "main.py", "8084"]
+            },
+            "market_analysis": {
+                "ports": [8001],
+                "process_names": ["python"],
+                "keywords": ["market-analysis", "simple_main", "8001"]
+            },
+            "strategy_analysis": {
+                "ports": [8002],
+                "process_names": ["python"],
+                "keywords": ["strategy-analysis", "start_agent_simple", "8002"]
+            },
+            "parameter_optimization": {
+                "ports": [8003],
+                "process_names": ["python"],
+                "keywords": ["parameter-optimization", "start_agent", "8003"]
+            },
+            "learning_safety": {
+                "ports": [8004],
+                "process_names": ["python"],
+                "keywords": ["learning-safety", "start_agent", "8004"]
+            },
+            "disagreement_engine": {
+                "ports": [8005],
+                "process_names": ["python"],
+                "keywords": ["disagreement-engine", "start_agent", "8005"]
+            },
+            "data_collection": {
+                "ports": [8006],
+                "process_names": ["python"],
+                "keywords": ["data-collection", "start_agent", "8006"]
+            },
+            "continuous_improvement": {
+                "ports": [8007],
+                "process_names": ["python"],
+                "keywords": ["continuous-improvement", "start_agent", "8007"]
+            },
+            "pattern_detection": {
+                "ports": [8008],
+                "process_names": ["python"],
+                "keywords": ["pattern-detection", "start_agent_simple", "8008"]
             },
             "dashboard": {
-                "ports": [3000],
+                "ports": [8080],
                 "process_names": ["node", "npm", "next"],
-                "keywords": ["dashboard", "next", "3000"]
-            },
-            "risk_analytics": {
-                "ports": [],
-                "process_names": ["python"],
-                "keywords": ["risk-analytics-engine", "risk_analytics"]
+                "keywords": ["dashboard", "next", "8080"]
             }
         }
         
@@ -88,33 +118,89 @@ class TradingSystemRestarter:
         
         # Service startup configurations for native mode
         self.native_startup_configs = {
-            "orchestrator": {
-                "command": ["python", "-m", "uvicorn", "orchestrator.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
-                "cwd": Path.cwd(),
-                "port": 8000,
+            "execution_engine": {
+                "command": ["python", "simple_main.py"],
+                "cwd": Path.cwd() / "execution-engine",
+                "port": 8082,
                 "health_endpoint": "/health",
-                "startup_delay": 5
+                "startup_delay": 3
             },
             "market_analysis": {
-                "command": ["python", "start-market-analysis.py"],
-                "cwd": Path.cwd(),
-                "port": 8002,
+                "command": ["python", "simple_main.py"],
+                "cwd": Path.cwd() / "agents" / "market-analysis",
+                "port": 8001,
                 "health_endpoint": "/health",
                 "startup_delay": 3
             },
-            "execution_engine": {
-                "command": ["python", "start-execution-engine.py"],
-                "cwd": Path.cwd(),
+            "orchestrator": {
+                "command": ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8089"],
+                "cwd": Path.cwd() / "orchestrator",
+                "port": 8089,
+                "health_endpoint": "/health",
+                "startup_delay": 4
+            },
+            "circuit_breaker": {
+                "command": ["python", "main.py"],
+                "cwd": Path.cwd() / "agents" / "circuit-breaker",
+                "port": 8084,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "strategy_analysis": {
+                "command": ["python", "start_agent_simple.py"],
+                "cwd": Path.cwd() / "agents" / "strategy-analysis",
+                "port": 8002,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "parameter_optimization": {
+                "command": ["python", "start_agent.py"],
+                "cwd": Path.cwd() / "agents" / "parameter-optimization",
+                "port": 8003,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "learning_safety": {
+                "command": ["python", "start_agent.py"],
+                "cwd": Path.cwd() / "agents" / "learning-safety",
                 "port": 8004,
                 "health_endpoint": "/health",
-                "startup_delay": 3
+                "startup_delay": 2
+            },
+            "disagreement_engine": {
+                "command": ["python", "start_agent.py"],
+                "cwd": Path.cwd() / "agents" / "disagreement-engine",
+                "port": 8005,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "data_collection": {
+                "command": ["python", "start_agent.py"],
+                "cwd": Path.cwd() / "agents" / "data-collection",
+                "port": 8006,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "continuous_improvement": {
+                "command": ["python", "start_agent.py"],
+                "cwd": Path.cwd() / "agents" / "continuous-improvement",
+                "port": 8007,
+                "health_endpoint": "/health",
+                "startup_delay": 2
+            },
+            "pattern_detection": {
+                "command": ["python", "start_agent_simple.py"],
+                "cwd": Path.cwd() / "agents" / "pattern-detection",
+                "port": 8008,
+                "health_endpoint": "/health",
+                "startup_delay": 2
             },
             "dashboard": {
                 "command": ["npm", "run", "dev"],
                 "cwd": Path.cwd() / "dashboard",
-                "port": 3000,
-                "health_endpoint": "/api/health",
-                "startup_delay": 8
+                "port": 8080,
+                "health_endpoint": "/",
+                "startup_delay": 5
             }
         }
         
@@ -632,11 +718,23 @@ class TradingSystemRestarter:
             logger.info("  • Redis:            localhost:6379")
             logger.info("  • Kafka:            localhost:9092")
         else:
-            logger.info("🔧 Native Services:")
-            logger.info("  • Orchestrator:     http://localhost:8000/health")
-            logger.info("  • Market Analysis:  http://localhost:8002/health")
-            logger.info("  • Execution Engine: http://localhost:8004/health")
-            logger.info("  • Dashboard:        http://localhost:3000")
+            logger.info("🔧 Core Services:")
+            logger.info("  • Execution Engine:       http://localhost:8082/health")
+            logger.info("  • Market Analysis:        http://localhost:8001/health")
+            logger.info("  • Orchestrator:           http://localhost:8089/health")
+            logger.info("  • Circuit Breaker:        http://localhost:8084/health")
+            logger.info("")
+            logger.info("🤖 AI Agent Ecosystem:")
+            logger.info("  • Strategy Analysis:      http://localhost:8002/health")
+            logger.info("  • Parameter Optimization: http://localhost:8003/health")
+            logger.info("  • Learning Safety:        http://localhost:8004/health")
+            logger.info("  • Disagreement Engine:    http://localhost:8005/health")
+            logger.info("  • Data Collection:        http://localhost:8006/health")
+            logger.info("  • Continuous Improvement: http://localhost:8007/health")
+            logger.info("  • Pattern Detection:      http://localhost:8008/health")
+            logger.info("")
+            logger.info("📊 Dashboard:")
+            logger.info("  • Dashboard:              http://localhost:8080")
         
         logger.info("")
         logger.info("🧪 Testing Commands:")

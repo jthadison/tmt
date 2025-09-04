@@ -23,14 +23,15 @@ logger = logging.getLogger("market_analysis_startup")
 
 async def main():
     """Start the market analysis agent"""
-    logger.info("🚀 Starting Market Analysis Agent on port 8002")
+    port = int(os.getenv("PORT", "8001"))
+    logger.info(f"🚀 Starting Market Analysis Agent on port {port}")
     
     try:
         # Check if main.py exists in market analysis
         main_py_path = market_analysis_path / "app" / "main.py"
         if not main_py_path.exists():
             logger.warning("⚠️ Market Analysis main.py not found, creating simple FastAPI server")
-            await create_simple_market_analysis_server()
+            await create_simple_market_analysis_server(port)
         else:
             # Import and start existing market analysis
             from app.main import app
@@ -39,25 +40,25 @@ async def main():
             config = uvicorn.Config(
                 app,
                 host="0.0.0.0", 
-                port=8002,
+                port=port,
                 log_level="info",
                 reload=False,
                 access_log=True
             )
             
             server = uvicorn.Server(config)
-            logger.info("✅ Market Analysis Agent starting on http://localhost:8002")
+            logger.info(f"✅ Market Analysis Agent starting on http://localhost:{port}")
             await server.serve()
         
     except ImportError as e:
         logger.warning(f"⚠️ Failed to import market analysis app: {e}")
         logger.info("Creating simple market analysis server for testing...")
-        await create_simple_market_analysis_server()
+        await create_simple_market_analysis_server(port)
     except Exception as e:
         logger.error(f"❌ Failed to start market analysis: {e}")
         sys.exit(1)
 
-async def create_simple_market_analysis_server():
+async def create_simple_market_analysis_server(port=8001):
     """Create a simple FastAPI server for market analysis testing"""
     try:
         from fastapi import FastAPI
@@ -70,7 +71,7 @@ async def create_simple_market_analysis_server():
         
         @app.get("/health")
         async def health():
-            return {"status": "healthy", "service": "market_analysis", "port": 8002}
+            return {"status": "healthy", "service": "market_analysis", "port": port}
         
         @app.get("/api/market-overview")
         async def market_overview():
@@ -148,14 +149,14 @@ async def create_simple_market_analysis_server():
         config = uvicorn.Config(
             app,
             host="0.0.0.0",
-            port=8002,
+            port=port,
             log_level="info",
             reload=False,
             access_log=True
         )
         
         server = uvicorn.Server(config)
-        logger.info("✅ Simple Market Analysis Server starting on http://localhost:8002")
+        logger.info(f"✅ Simple Market Analysis Server starting on http://localhost:{port}")
         await server.serve()
         
     except Exception as e:
