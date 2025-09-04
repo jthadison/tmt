@@ -18,7 +18,15 @@
       "Bash(PORT=8001 python:*)",
       "Bash(taskkill:*)",
       "Bash(git add:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(curl:*)",
+      "Bash(PORT=8001 python:*)",
+      "Bash(npm run dev:*)",
+      "Bash(PORT=3003 npm run dev)",
+      "Bash(taskkill:*)",
+      "Bash(node:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": [],

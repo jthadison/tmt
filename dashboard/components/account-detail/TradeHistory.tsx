@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Trade, TradeSortOptions, TradeHistoryFilters } from '@/types/accountDetail'
+import { tradeHistoryService } from '@/services/tradeHistoryService'
 
 /**
  * Props for TradeHistory component
@@ -40,13 +41,63 @@ export function TradeHistory({
     direction: 'desc'
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [realTrades, setRealTrades] = useState<Trade[]>([])
+  const [tradeStats, setTradeStats] = useState<any>(null)
+  const [isLoadingReal, setIsLoadingReal] = useState(false)
 
-  // Generate more mock trades for demonstration
+  // Load real trade data on component mount and when filters change
+  useEffect(() => {
+    const loadRealTradeData = async () => {
+      setIsLoadingReal(true)
+      try {
+        const response = await tradeHistoryService.getTradeHistory({
+          accountId,
+          page: currentPage,
+          limit: itemsPerPage,
+          filter: {
+            instrument: filters.symbol,
+            status: filters.type === 'long' ? 'buy' : filters.type === 'short' ? 'sell' : undefined,
+            type: filters.strategy
+          }
+        })
+        
+        // Transform the API response to match our component's Trade interface
+        const transformedTrades = response.trades.map((trade: any) => ({
+          id: trade.id,
+          symbol: trade.instrument || trade.symbol,
+          type: trade.side === 'buy' ? 'long' : 'short',
+          size: trade.units || trade.size,
+          entryPrice: trade.price || trade.entryPrice || trade.openPrice,
+          exitPrice: trade.closePrice || trade.exitPrice,
+          pnl: trade.pnl || trade.profit,
+          commission: trade.commission,
+          openTime: new Date(trade.openTime),
+          closeTime: trade.closeTime ? new Date(trade.closeTime) : null,
+          duration: trade.duration || (trade.closeTime && trade.openTime ? 
+            Math.floor((new Date(trade.closeTime).getTime() - new Date(trade.openTime).getTime()) / (1000 * 60)) : 0),
+          strategy: trade.strategy || trade.notes || 'Unknown',
+          notes: trade.notes || ''
+        }))
+        
+        setRealTrades(transformedTrades)
+        setTradeStats(response.stats)
+      } catch (error) {
+        console.error('Failed to load real trade data:', error)
+        // Keep existing mock trades as fallback
+      } finally {
+        setIsLoadingReal(false)
+      }
+    }
+
+    loadRealTradeData()
+  }, [accountId, currentPage, itemsPerPage, filters])
+
+  // Generate fallback mock trades for demonstration when real data isn't available
   const mockTrades: Trade[] = useMemo(() => {
     const symbols = ['EUR/USD', 'GBP/JPY', 'XAU/USD', 'USD/JPY', 'AUD/USD', 'GBP/USD', 'USD/CAD']
     const strategies = ['Breakout', 'Reversal', 'Trend Following', 'Scalping', 'News Trading']
     
-    return Array.from({ length: 100 }, (_, i) => {
+    return Array.from({ length: 10 }, (_, i) => {
       const isWin = Math.random() > 0.35 // 65% win rate
       const symbol = symbols[i % symbols.length]
       const type = Math.random() > 0.5 ? 'long' : 'short'
@@ -59,7 +110,7 @@ export function TradeHistory({
       const openTime = new Date(Date.now() - (i + 1) * 24 * 60 * 60 * 1000 - Math.random() * 24 * 60 * 60 * 1000)
       
       return {
-        id: `trade-${i + 1}`,
+        id: `fallback-${i + 1}`,
         symbol,
         type,
         size,
@@ -76,8 +127,13 @@ export function TradeHistory({
     })
   }, [])
 
-  // Combine provided trades with mock data
-  const allTrades = useMemo(() => [...(propTrades || []), ...mockTrades], [propTrades, mockTrades])
+  // Use real trades if available, otherwise combine provided trades with fallback mock data
+  const allTrades = useMemo(() => {
+    if (realTrades.length > 0) {
+      return [...(propTrades || []), ...realTrades]
+    }
+    return [...(propTrades || []), ...mockTrades]
+  }, [propTrades, realTrades, mockTrades])
 
   // Filter trades based on current filters
   const filteredTrades = useMemo(() => {
@@ -226,7 +282,7 @@ export function TradeHistory({
     return Array.from(new Set(allTrades.map(trade => String(trade[field])).filter(Boolean)))
   }
 
-  if (loading) {
+  if (loading || isLoadingReal) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="animate-pulse space-y-4">
@@ -464,29 +520,39 @@ export function TradeHistory({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <div className="text-gray-400">Total Trades</div>
-            <div className="text-white font-medium">{sortedTrades.length}</div>
+            <div className="text-white font-medium">
+              {tradeStats ? tradeStats.totalTrades : sortedTrades.length}
+            </div>
           </div>
           <div>
             <div className="text-gray-400">Win Rate</div>
             <div className="text-white font-medium">
-              {sortedTrades.length > 0 
-                ? ((sortedTrades.filter(t => t.pnl > 0).length / sortedTrades.length) * 100).toFixed(1)
-                : 0}%
+              {tradeStats 
+                ? `${tradeStats.winRate.toFixed(1)}%`
+                : sortedTrades.length > 0 
+                  ? `${((sortedTrades.filter(t => t.pnl > 0).length / sortedTrades.length) * 100).toFixed(1)}%`
+                  : '0%'}
             </div>
           </div>
           <div>
             <div className="text-gray-400">Total P&L</div>
-            <div className={`font-medium ${getPnLColor(sortedTrades.reduce((sum, t) => sum + t.pnl, 0))}`}>
-              {formatCurrency(sortedTrades.reduce((sum, t) => sum + t.pnl, 0))}
+            <div className={`font-medium ${getPnLColor(tradeStats ? tradeStats.totalPnL : sortedTrades.reduce((sum, t) => sum + t.pnl, 0))}`}>
+              {formatCurrency(tradeStats ? tradeStats.totalPnL : sortedTrades.reduce((sum, t) => sum + t.pnl, 0))}
             </div>
           </div>
           <div>
             <div className="text-gray-400">Avg P&L</div>
-            <div className={`font-medium ${getPnLColor(sortedTrades.reduce((sum, t) => sum + t.pnl, 0) / Math.max(sortedTrades.length, 1))}`}>
-              {formatCurrency(sortedTrades.reduce((sum, t) => sum + t.pnl, 0) / Math.max(sortedTrades.length, 1))}
+            <div className={`font-medium ${getPnLColor(tradeStats ? (tradeStats.totalPnL / Math.max(tradeStats.totalTrades, 1)) : (sortedTrades.reduce((sum, t) => sum + t.pnl, 0) / Math.max(sortedTrades.length, 1)))}`}>
+              {formatCurrency(tradeStats ? (tradeStats.totalPnL / Math.max(tradeStats.totalTrades, 1)) : (sortedTrades.reduce((sum, t) => sum + t.pnl, 0) / Math.max(sortedTrades.length, 1)))}
             </div>
           </div>
         </div>
+        {realTrades.length > 0 && (
+          <div className="mt-4 text-xs text-green-400 flex items-center">
+            <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+            Connected to live trading system - Showing real trade data
+          </div>
+        )}
       </div>
     </div>
   )

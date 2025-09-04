@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOandaClient } from '@/lib/oanda-client'
 
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8083'
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8089'
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,15 +46,40 @@ export async function GET(request: NextRequest) {
       dateRange: (dateFrom && dateTo) ? { start: dateFrom, end: dateTo } : undefined
     }
 
-    // Try to fetch live data from OANDA first
+    // Try to fetch live data from orchestrator first
     try {
-      const oandaClient = getOandaClient()
+      console.log(`Fetching trade history from orchestrator: ${ORCHESTRATOR_URL}/analytics/trade-history`)
       
-      // Get closed trades and transactions
-      const [closedTrades, transactions] = await Promise.all([
-        oandaClient.getClosedTrades(500), // Get up to 500 closed trades
-        oandaClient.getTransactions(dateFrom, dateTo, 1000) // Get transactions for the period
-      ])
+      const orchestratorResponse = await fetch(`${ORCHESTRATOR_URL}/analytics/trade-history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload)
+      })
+      
+      if (!orchestratorResponse.ok) {
+        throw new Error(`Orchestrator responded with ${orchestratorResponse.status}: ${orchestratorResponse.statusText}`)
+      }
+      
+      const orchestratorData = await orchestratorResponse.json()
+      console.log(`Successfully fetched ${orchestratorData.trades?.length || 0} trades from orchestrator`)
+      
+      // Return the orchestrator response directly as it already has the right format
+      return NextResponse.json(orchestratorData)
+      
+    } catch (orchestratorError) {
+      console.warn('Orchestrator not available for trade history, trying OANDA direct:', orchestratorError)
+      
+      // Fallback to direct OANDA connection
+      try {
+        const oandaClient = getOandaClient()
+        
+        // Get closed trades and transactions
+        const [closedTrades, transactions] = await Promise.all([
+          oandaClient.getClosedTrades(500), // Get up to 500 closed trades
+          oandaClient.getTransactions(dateFrom, dateTo, 1000) // Get transactions for the period
+        ])
 
       // Transform OANDA trades to our frontend format
       let oandaTrades = closedTrades.map((trade: any) => {
@@ -171,10 +196,11 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return NextResponse.json(response)
+        return NextResponse.json(response)
 
-    } catch (oandaError) {
-      console.warn('OANDA API not available for trade history, using mock data:', oandaError)
+      } catch (oandaError) {
+        console.warn('OANDA API not available for trade history, using mock data:', oandaError)
+      }
     }
 
     // Fallback to mock data if orchestrator is unavailable
