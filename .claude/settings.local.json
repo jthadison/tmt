@@ -17,7 +17,8 @@
       "Bash(PORT=8001 python -m app.main)",
       "Bash(PORT=8001 python:*)",
       "Bash(taskkill:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": [],
