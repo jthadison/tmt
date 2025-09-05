@@ -31,8 +31,8 @@ export function TradeHistory({
   itemsPerPage = 25,
   showAccountColumn = false
 }: TradeHistoryProps) {
-  // Remove unused accountId parameter warning
-  void accountId
+  // Remove unused parameters warning
+  void showAccountColumn
   
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState<TradeHistoryFilters>({})
@@ -42,7 +42,7 @@ export function TradeHistory({
   })
   const [showFilters, setShowFilters] = useState(false)
   const [realTrades, setRealTrades] = useState<Trade[]>([])
-  const [tradeStats, setTradeStats] = useState<any>(null)
+  const [tradeStats, setTradeStats] = useState<Record<string, any> | null>(null)
   const [isLoadingReal, setIsLoadingReal] = useState(false)
 
   // Load real trade data on component mount and when filters change
@@ -62,7 +62,7 @@ export function TradeHistory({
         })
         
         // Transform the API response to match our component's Trade interface
-        const transformedTrades = response.trades.map((trade: any) => ({
+        const transformedTrades = response.trades.map((trade: Record<string, any>) => ({
           id: trade.id,
           symbol: trade.instrument || trade.symbol,
           type: trade.side === 'buy' ? 'long' : 'short',
@@ -244,9 +244,16 @@ export function TradeHistory({
     }).format(amount)
   }
 
-  const formatDate = (date: Date | null): string => {
+  const formatDate = (date: Date | string | null): string => {
     if (!date) return 'Open'
-    return date.toLocaleDateString('en-US', {
+    
+    const dateObj = date instanceof Date ? date : new Date(date)
+    
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid Date'
+    }
+    
+    return dateObj.toLocaleDateString('en-US', {
       month: 'short',
       day: '2-digit',
       year: 'numeric',

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     
     // Extract filter parameters
-    const filter: any = {}
+    const filter: Record<string, any> = {}
     const instrument = searchParams.get('instrument')
     const status = searchParams.get('status')
     const type = searchParams.get('type')
@@ -75,14 +75,11 @@ export async function GET(request: NextRequest) {
       try {
         const oandaClient = getOandaClient()
         
-        // Get closed trades and transactions
-        const [closedTrades, transactions] = await Promise.all([
-          oandaClient.getClosedTrades(500), // Get up to 500 closed trades
-          oandaClient.getTransactions(dateFrom, dateTo, 1000) // Get transactions for the period
-        ])
+        // Get closed trades
+        const closedTrades = await oandaClient.getClosedTrades(500) // Get up to 500 closed trades
 
-      // Transform OANDA trades to our frontend format
-      let oandaTrades = closedTrades.map((trade: any) => {
+        // Transform OANDA trades to our frontend format
+        let oandaTrades = closedTrades.map((trade: any) => {
         const openTime = new Date(trade.openTime)
         const closeTime = trade.closeTime ? new Date(trade.closeTime) : null
         
