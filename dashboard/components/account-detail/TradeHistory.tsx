@@ -166,8 +166,40 @@ export function TradeHistory({
   const sortedTrades = useMemo(() => {
     return [...filteredTrades].sort((a, b) => {
       const { field, direction } = sortOptions
-      const aValue = a[field]
-      const bValue = b[field]
+      
+      // Map the display field names to the actual data properties
+      let aValue: any, bValue: any
+      
+      switch (field) {
+        case 'symbol':
+          aValue = a.instrument || a.symbol
+          bValue = b.instrument || b.symbol
+          break
+        case 'entryPrice':
+          aValue = a.price || a.entryPrice || a.openPrice
+          bValue = b.price || b.entryPrice || b.openPrice
+          break
+        case 'exitPrice':
+          aValue = a.closePrice || a.exitPrice
+          bValue = b.closePrice || b.exitPrice
+          break
+        case 'size':
+          aValue = a.units || a.size
+          bValue = b.units || b.size
+          break
+        case 'closeTime':
+          aValue = a.closeTime || a.openTime // For open trades, sort by open time
+          bValue = b.closeTime || b.openTime
+          break
+        default:
+          aValue = a[field]
+          bValue = b[field]
+      }
+
+      // Handle null/undefined values
+      if (aValue == null && bValue == null) return 0
+      if (aValue == null) return direction === 'asc' ? 1 : -1
+      if (bValue == null) return direction === 'asc' ? -1 : 1
 
       if (aValue instanceof Date && bValue instanceof Date) {
         return direction === 'asc' 
@@ -448,7 +480,7 @@ export function TradeHistory({
           <tbody>
             {paginatedTrades.map((trade, index) => (
               <tr 
-                key={trade.id}
+                key={`${trade.id}-${index}-${trade.instrument || trade.symbol}-${trade.openTime}`}
                 className={`
                   border-b border-gray-700 hover:bg-gray-750 transition-colors
                   ${index % 2 === 0 ? 'bg-gray-800' : 'bg-gray-850'}

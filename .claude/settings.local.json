@@ -31,7 +31,9 @@
       "Bash(npm run build:*)",
       "Bash(NODE_ENV=development npx next dev --port 8090)",
       "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "Bash(awk:*)",
+      "mcp__playwright__browser_click"
     ],
     "deny": [],
     "ask": [],
