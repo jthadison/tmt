@@ -62,22 +62,32 @@ export function TradeHistory({
         })
         
         // Transform the API response to match our component's Trade interface
-        const transformedTrades = response.trades.map((trade: Record<string, any>) => ({
-          id: trade.id,
-          symbol: trade.instrument || trade.symbol,
-          type: trade.side === 'buy' ? 'long' : 'short',
-          size: trade.units || trade.size,
-          entryPrice: trade.price || trade.entryPrice || trade.openPrice,
-          exitPrice: trade.closePrice || trade.exitPrice,
-          pnl: trade.pnl || trade.profit,
-          commission: trade.commission,
-          openTime: new Date(trade.openTime),
-          closeTime: trade.closeTime ? new Date(trade.closeTime) : null,
-          duration: trade.duration || (trade.closeTime && trade.openTime ? 
-            Math.floor((new Date(trade.closeTime).getTime() - new Date(trade.openTime).getTime()) / (1000 * 60)) : 0),
-          strategy: trade.strategy || trade.notes || 'Unknown',
-          notes: trade.notes || ''
-        }))
+        const transformedTrades = response.trades.map((trade: Record<string, any>) => {
+          const transformedTrade = {
+            id: trade.id,
+            symbol: trade.instrument || trade.symbol,
+            type: trade.side === 'buy' ? 'long' : 'short',
+            size: trade.units || trade.size,
+            entryPrice: trade.price || trade.entryPrice || trade.openPrice,
+            exitPrice: trade.closePrice || trade.exitPrice,
+            pnl: trade.pnl || trade.profit,
+            commission: trade.commission,
+            openTime: trade.openTime ? new Date(trade.openTime) : null,
+            closeTime: trade.closeTime ? new Date(trade.closeTime) : null,
+            duration: trade.duration || (trade.closeTime && trade.openTime ? 
+              Math.floor((new Date(trade.closeTime).getTime() - new Date(trade.openTime).getTime()) / (1000 * 60)) : 0),
+            strategy: trade.strategy || trade.notes || 'Unknown',
+            notes: trade.notes || '',
+            status: trade.status // Preserve the status field from API
+          }
+          
+          // Debug logging for first few trades
+          if (response.trades.indexOf(trade) < 3) {
+            console.log(`Trade ${trade.id} status: API="${trade.status}" transformed="${transformedTrade.status}"`)
+          }
+          
+          return transformedTrade
+        })
         
         setRealTrades(transformedTrades)
         setTradeStats(response.stats)
@@ -187,6 +197,10 @@ export function TradeHistory({
           aValue = a.units || a.size
           bValue = b.units || b.size
           break
+        case 'openTime':
+          aValue = a.openTime
+          bValue = b.openTime
+          break
         case 'closeTime':
           aValue = a.closeTime || a.openTime // For open trades, sort by open time
           bValue = b.closeTime || b.openTime
@@ -277,12 +291,13 @@ export function TradeHistory({
   }
 
   const formatDate = (date: Date | string | null): string => {
-    if (!date) return 'Open'
+    if (!date) return '-'
     
     const dateObj = date instanceof Date ? date : new Date(date)
     
-    if (isNaN(dateObj.getTime())) {
-      return 'Invalid Date'
+    // Check for invalid dates or Unix epoch (indicates missing/null data)
+    if (isNaN(dateObj.getTime()) || dateObj.getTime() === 0 || dateObj.getFullYear() < 2000) {
+      return '-'
     }
     
     return dateObj.toLocaleDateString('en-US', {
@@ -421,11 +436,8 @@ export function TradeHistory({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-700">
-              <th 
-                className="text-left py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
-                onClick={() => handleSort('closeTime')}
-              >
-                Date {getSortIcon('closeTime')}
+              <th className="text-left py-3 px-4 font-medium text-gray-300">
+                Status
               </th>
               <th 
                 className="text-left py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
@@ -446,16 +458,28 @@ export function TradeHistory({
                 Size {getSortIcon('size')}
               </th>
               <th 
+                className="text-left py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
+                onClick={() => handleSort('openTime')}
+              >
+                Entry Date {getSortIcon('openTime')}
+              </th>
+              <th 
+                className="text-left py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
+                onClick={() => handleSort('closeTime')}
+              >
+                Exit Date {getSortIcon('closeTime')}
+              </th>
+              <th 
                 className="text-right py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
                 onClick={() => handleSort('entryPrice')}
               >
-                Entry {getSortIcon('entryPrice')}
+                Entry Price {getSortIcon('entryPrice')}
               </th>
               <th 
                 className="text-right py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
                 onClick={() => handleSort('exitPrice')}
               >
-                Exit {getSortIcon('exitPrice')}
+                Exit Price {getSortIcon('exitPrice')}
               </th>
               <th 
                 className="text-right py-3 px-4 font-medium text-gray-300 cursor-pointer hover:text-white transition-colors"
@@ -486,8 +510,19 @@ export function TradeHistory({
                   ${index % 2 === 0 ? 'bg-gray-800' : 'bg-gray-850'}
                 `}
               >
-                <td className="py-3 px-4 text-gray-300 text-sm">
-                  {formatDate(trade.closeTime)}
+                <td className="py-3 px-4 text-sm">
+                  <span className={`
+                    inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    ${
+                      trade.status === 'open' 
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : trade.status === 'closed'
+                        ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                        : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                    }
+                  `}>
+                    {trade.status === 'open' ? 'OPEN' : trade.status === 'closed' ? 'CLOSED' : 'PENDING'}
+                  </span>
                 </td>
                 <td className="py-3 px-4 text-white font-medium">
                   {trade.symbol || trade.instrument}
@@ -502,6 +537,12 @@ export function TradeHistory({
                 </td>
                 <td className="py-3 px-4 text-right text-white">
                   {(trade.size || trade.units || 0).toFixed(2)}
+                </td>
+                <td className="py-3 px-4 text-gray-300 text-sm">
+                  {trade.openTime ? formatDate(trade.openTime) : '-'}
+                </td>
+                <td className="py-3 px-4 text-gray-300 text-sm">
+                  {trade.status === 'open' ? 'Open' : (trade.closeTime ? formatDate(trade.closeTime) : '-')}
                 </td>
                 <td className="py-3 px-4 text-right text-white">
                   {(trade.entryPrice || trade.price || 0).toFixed(5)}

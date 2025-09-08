@@ -261,7 +261,7 @@ export const defaultHealthCheckConfig: HealthCheckConfig = {
       critical: true
     },
     'Orchestrator': {
-      url: 'http://localhost:8087/health',
+      url: 'http://localhost:8089/health',
       timeout: 3000,
       critical: true
     }
