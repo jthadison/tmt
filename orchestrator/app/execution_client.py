@@ -42,7 +42,9 @@ class ExecutionEngineClient:
         side: str, 
         units: int,
         signal_id: Optional[str] = None,
-        price: Optional[float] = None
+        price: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Place a market order through the execution engine
@@ -54,6 +56,8 @@ class ExecutionEngineClient:
             units: Number of units to trade
             signal_id: Associated signal ID for tracking
             price: Expected price for validation
+            stop_loss: Stop loss price level
+            take_profit: Take profit price level
             
         Returns:
             Order execution result
@@ -71,6 +75,10 @@ class ExecutionEngineClient:
                 order_data["signal_id"] = signal_id
             if price:
                 order_data["price"] = price
+            if stop_loss:
+                order_data["stop_loss_price"] = stop_loss
+            if take_profit:
+                order_data["take_profit_price"] = take_profit
             
             logger.info(f"Placing market order: {order_data}")
             

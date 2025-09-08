@@ -31,7 +31,7 @@ class TradeHistoryService {
   private baseUrl: string
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || ''
   }
 
   /**
@@ -80,6 +80,16 @@ class TradeHistoryService {
 
       const data = await response.json()
       console.log('Successfully fetched real trade history data:', data.trades?.length, 'trades')
+      
+      // Convert ISO date strings back to Date objects
+      if (data.trades) {
+        data.trades = data.trades.map((trade: any) => ({
+          ...trade,
+          openTime: trade.openTime ? new Date(trade.openTime) : null,
+          closeTime: trade.closeTime ? new Date(trade.closeTime) : null
+        }))
+      }
+      
       return data
       
     } catch (error) {
