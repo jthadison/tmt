@@ -150,6 +150,32 @@ class TradeExecutor:
     async def _pre_execution_checks(self, signal: TradeSignal, account_id: str) -> bool:
         """Perform pre-execution safety checks"""
         
+        # CRITICAL SAFETY CHECK: All trades MUST have stop loss and take profit
+        if signal.stop_loss is None or signal.take_profit is None:
+            logger.error(f"Signal {signal.id} rejected: Missing stop loss or take profit - "
+                        f"stop_loss={signal.stop_loss}, take_profit={signal.take_profit}")
+            return False
+        
+        # Validate stop loss and take profit are reasonable
+        if signal.direction == "long":
+            if signal.stop_loss >= signal.entry_price:
+                logger.error(f"Signal {signal.id} rejected: Invalid stop loss for long position - "
+                           f"stop_loss={signal.stop_loss} >= entry_price={signal.entry_price}")
+                return False
+            if signal.take_profit <= signal.entry_price:
+                logger.error(f"Signal {signal.id} rejected: Invalid take profit for long position - "
+                           f"take_profit={signal.take_profit} <= entry_price={signal.entry_price}")
+                return False
+        else:  # short position
+            if signal.stop_loss <= signal.entry_price:
+                logger.error(f"Signal {signal.id} rejected: Invalid stop loss for short position - "
+                           f"stop_loss={signal.stop_loss} <= entry_price={signal.entry_price}")
+                return False
+            if signal.take_profit >= signal.entry_price:
+                logger.error(f"Signal {signal.id} rejected: Invalid take profit for short position - "
+                           f"take_profit={signal.take_profit} >= entry_price={signal.entry_price}")
+                return False
+        
         # Check internal circuit breaker status
         if self.circuit_breaker.is_tripped(account_id):
             logger.warning(f"Internal circuit breaker tripped for account {account_id}")
@@ -334,7 +360,9 @@ class TradeExecutor:
                 instrument=instrument,
                 side=side,
                 units=units,
-                signal_id=signal_id
+                signal_id=signal_id,
+                stop_loss=stop_loss,
+                take_profit=take_profit
             )
             
             if result.get("success"):
