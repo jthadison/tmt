@@ -17,6 +17,7 @@ import {
 } from '@/types/tradingControls'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
+import { getActiveInstruments } from '@/lib/instruments'
 
 /**
  * Props for ManualTradingInterface component
@@ -70,10 +71,7 @@ function TradeRequestForm({
     { value: 'modify_order', label: 'Modify Order' }
   ]
 
-  const instruments = [
-    'EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD', 'USD_CHF', 'EUR_GBP',
-    'USD_CAD', 'NZD_USD', 'EUR_JPY', 'GBP_JPY'
-  ]
+  const instruments = getActiveInstruments()
 
   const accounts = [
     { id: 'account_001', name: 'Primary Trading Account', balance: 100000 },

@@ -5,6 +5,7 @@ Real-time Wyckoff pattern detection, VPA analysis, and anti-detection clustering
 """
 
 import os
+import sys
 import logging
 import asyncio
 import random
@@ -13,6 +14,10 @@ from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+# Add shared config to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
+from config import ACTIVE_MONITORING_INSTRUMENTS
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +32,7 @@ wyckoff_patterns_found = 0
 vpa_signals_generated = 0
 stealth_assessments_completed = 0
 last_pattern_time = None
-active_monitoring_instruments = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CHF", "NZD_USD"]
+active_monitoring_instruments = ACTIVE_MONITORING_INSTRUMENTS
 
 async def background_pattern_monitoring():
     """Background task for continuous pattern detection and analysis"""

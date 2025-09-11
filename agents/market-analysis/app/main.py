@@ -5,6 +5,7 @@ Provides real-time market analysis and signal generation
 """
 
 import os
+import sys
 import asyncio
 import logging
 from datetime import datetime, timedelta
@@ -14,6 +15,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
+
+# Add shared config to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../shared'))
+from config import get_active_instruments
 
 # Load environment variables
 load_dotenv()
@@ -197,9 +202,10 @@ async def analyze_instrument(instrument: str):
 @app.get("/instruments")
 async def get_supported_instruments():
     """Get list of supported instruments"""
+    active_instruments = get_active_instruments()
     return {
-        "instruments": ["EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD", "NZD_USD", "USD_CAD"],
-        "total": 7,
+        "instruments": active_instruments,
+        "total": len(active_instruments),
         "actively_monitored": len(getattr(market_agent, 'market_data', {}).get('prices', {}))
     }
 

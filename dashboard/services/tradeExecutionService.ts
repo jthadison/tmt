@@ -18,6 +18,7 @@ import {
   OrderLifecycle,
   TimeframePeriod
 } from '@/types/tradeExecution'
+import { getActiveInstruments } from '@/lib/instruments'
 
 /**
  * Configuration for the trade execution service
@@ -63,7 +64,7 @@ class RateLimiter {
  * Mock data generator for development and testing
  */
 class MockDataGenerator {
-  private instruments = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'NZDUSD', 'USDCHF']
+  private instruments = getActiveInstruments()
   private brokers = ['OANDA', 'MetaTrader4', 'MetaTrader5', 'cTrader', 'TradeLocker']
   private accounts = ['account-001', 'account-002', 'account-003', 'account-004']
 
