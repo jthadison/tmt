@@ -36,9 +36,156 @@ export async function GET(request: NextRequest) {
     if (minProfit !== null) filter.minProfit = parseFloat(minProfit || '0')
     if (maxProfit !== null) filter.maxProfit = parseFloat(maxProfit || '0')
 
-    // Try to fetch real closed and open trades from OANDA first
+    // Try orchestrator first, but always fetch open trades from OANDA
+    const skipOrchestrator = false;
+    const preferOandaForOpenTrades = true;
+    
+    // Try to fetch real trade data from orchestrator first
+    if (!skipOrchestrator) {
+      try {
+      console.log(`Fetching real trade history from orchestrator: ${ORCHESTRATOR_URL}/trades`)
+      
+      const orchestratorResponse = await fetch(`${ORCHESTRATOR_URL}/trades`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      if (!orchestratorResponse.ok) {
+        throw new Error(`Orchestrator responded with ${orchestratorResponse.status}: ${orchestratorResponse.statusText}`)
+      }
+      
+      const orchestratorTrades = await orchestratorResponse.json()
+      console.log(`Successfully fetched ${orchestratorTrades.length || 0} real trades from orchestrator`)
+      
+      // Transform orchestrator trades to dashboard format
+      const transformedTrades = orchestratorTrades.map((trade: any) => {
+        const orderData = trade.result?.details?.order_data
+        const metadata = orderData?.metadata || {}
+        const oandaResponse = trade.result?.details?.oanda_response
+        
+        // Extract real pattern and confidence data
+        const pattern = metadata.pattern_type || 'unknown'
+        const confidence = metadata.confidence || 0
+        
+        // Extract execution details
+        const fillTransaction = oandaResponse?.orderFillTransaction
+        const side = orderData?.side || 'unknown'
+        const instrument = (orderData?.instrument || trade.symbol || '').replace('_', '/')
+        const units = Math.abs(parseFloat(orderData?.units || '0'))
+        const fillPrice = parseFloat(fillTransaction?.price || orderData?.fill_price || '0')
+        const pnl = parseFloat(fillTransaction?.pl || trade.result?.details?.pl || '0')
+        const status = trade.result?.details?.status === 'filled' ? 'closed' : 'open'
+        
+        // Parse timestamp
+        const timestamp = trade.timestamp ? new Date(trade.timestamp) : new Date()
+        
+        return {
+          id: trade.signal_id || `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          accountId: orderData?.account_id || accountId,
+          accountName: 'OANDA Practice Account',
+          instrument,
+          symbol: instrument,
+          type: 'market',
+          side,
+          units,
+          size: units,
+          price: fillPrice,
+          entryPrice: fillPrice,
+          exitPrice: status === 'closed' ? fillPrice : null,
+          stopLoss: parseFloat(orderData?.stop_loss_price || '0') || null,
+          takeProfit: parseFloat(orderData?.take_profit_price || '0') || null,
+          openTime: timestamp,
+          closeTime: status === 'closed' ? timestamp : null,
+          status,
+          pnl,
+          commission: parseFloat(fillTransaction?.commission || '0'),
+          swap: parseFloat(fillTransaction?.financing || '0'),
+          tags: ['orchestrator-real', `agent-${metadata.agent_id || 'unknown'}`],
+          strategy: 'ai-trading',
+          pattern, // Real pattern from metadata
+          confidence, // Real confidence from metadata
+          agentName: metadata.agent_id || 'Market Analysis Agent'
+        }
+      })
+      
+      // Apply filters
+      let filteredTrades = transformedTrades
+      
+      // If we want open trades, fetch them directly from OANDA instead
+      if (status === 'open' && preferOandaForOpenTrades) {
+        console.log('Status is open, skipping orchestrator trades and fetching from OANDA')
+        throw new Error('Fetch open trades from OANDA')  // Force fallback to OANDA
+      }
+      
+      if (status) filteredTrades = filteredTrades.filter((t: any) => t.status === status)
+      if (instrument) filteredTrades = filteredTrades.filter((t: any) => t.instrument === instrument)
+      
+      // Sort trades
+      filteredTrades.sort((a: any, b: any) => {
+        const aValue = a[sortBy as keyof typeof a] || 0
+        const bValue = b[sortBy as keyof typeof b] || 0
+        
+        if (sortOrder === 'asc') {
+          return aValue > bValue ? 1 : -1
+        } else {
+          return aValue < bValue ? 1 : -1
+        }
+      })
+
+      // Calculate pagination
+      const total = filteredTrades.length
+      const totalPages = Math.ceil(total / limit)
+      const startIndex = (page - 1) * limit
+      const paginatedTrades = filteredTrades.slice(startIndex, startIndex + limit)
+
+      // Calculate statistics
+      const closedTradesOnly = filteredTrades.filter((t: any) => t.status === 'closed')
+      const openTradesOnly = filteredTrades.filter((t: any) => t.status === 'open')
+      const winningTrades = closedTradesOnly.filter((t: any) => t.pnl > 0)
+      const losingTrades = closedTradesOnly.filter((t: any) => t.pnl < 0)
+      
+      const totalPnL = closedTradesOnly.reduce((sum: number, t: any) => sum + t.pnl, 0)
+      const totalSwap = filteredTrades.reduce((sum: number, t: any) => sum + t.swap, 0)
+      
+      const stats = {
+        totalTrades: total,
+        closedTrades: closedTradesOnly.length,
+        openTrades: openTradesOnly.length,
+        winningTrades: winningTrades.length,
+        losingTrades: losingTrades.length,
+        totalPnL: Math.round(totalPnL * 100) / 100,
+        winRate: closedTradesOnly.length > 0 ? Math.round((winningTrades.length / closedTradesOnly.length) * 100 * 100) / 100 : 0,
+        averageWin: winningTrades.length > 0 ? Math.round((winningTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / winningTrades.length) * 100) / 100 : 0,
+        averageLoss: losingTrades.length > 0 ? Math.round((losingTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / losingTrades.length) * 100) / 100 : 0,
+        profitFactor: losingTrades.length > 0 ? Math.abs(winningTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / losingTrades.reduce((sum: number, t: any) => sum + t.pnl, 0)) : 0,
+        maxDrawdown: Math.abs(Math.min(...closedTradesOnly.map((t: any) => t.pnl), 0)),
+        totalCommission: filteredTrades.reduce((sum: number, t: any) => sum + t.commission, 0),
+        totalSwap: Math.round(totalSwap * 100) / 100
+      }
+
+      return NextResponse.json({
+        trades: paginatedTrades,
+        stats,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages
+        },
+        source: 'orchestrator-real',
+        message: `Showing ${paginatedTrades.length} real trades from orchestrator (${closedTradesOnly.length} closed, ${openTradesOnly.length} open)`
+      })
+
+      } catch (orchestratorError) {
+        console.warn('Orchestrator not available, trying OANDA direct API:', orchestratorError)
+      }
+    } // end of if (!skipOrchestrator)
+
+    // Try to fetch real closed and open trades from OANDA as fallback
     try {
-      console.log('Fetching real closed and open trades directly from OANDA API')
+      console.log('Fetching closed and open trades directly from OANDA API as fallback')
       const oandaClient = getOandaClient()
       
       // Get both closed and open trades from OANDA, plus transaction-based history and pending orders
@@ -95,21 +242,26 @@ export async function GET(request: NextRequest) {
           accountId: accountId === 'all-accounts' ? 'oanda-practice' : accountId,
           accountName: 'OANDA Practice Account',
           instrument: trade.instrument.replace('_', '/'), // Convert EUR_USD to EUR/USD
+          symbol: trade.instrument.replace('_', '/'),
           type: 'market',
           side,
           units: absoluteUnits,
+          size: absoluteUnits,
           price: parseFloat(trade.price || trade.averageClosePrice || '0'),
           entryPrice: parseFloat(trade.price || trade.averageClosePrice || '0'),
+          exitPrice: parseFloat(trade.averageClosePrice || trade.price || '0'),
           stopLoss: trade.stopLossOrder?.price ? parseFloat(trade.stopLossOrder.price) : null,
           takeProfit: trade.takeProfitOrder?.price ? parseFloat(trade.takeProfitOrder.price) : null,
           openTime,
           closeTime,
           status: 'closed', // These came from getClosedTrades()
-          pnl: parseFloat(trade.realizedPL || trade.unrealizedPL || '0'),
+          pnl: parseFloat(trade.realizedPL || '0'), // OANDA provides realizedPL for closed trades
           commission: 0, // OANDA includes this in spread
           swap: parseFloat(trade.financing || '0'),
           tags: ['oanda-live', 'closed-trade'],
           strategy: 'live-trading',
+          pattern: null, // No pattern data available from OANDA
+          confidence: null, // No confidence data available from OANDA
           agentName: 'OANDA Live System'
         }
       })
@@ -139,9 +291,9 @@ export async function GET(request: NextRequest) {
         const side = rawUnits > 0 ? 'buy' : 'sell'
         const absoluteUnits = Math.abs(rawUnits)
         
-        // Debug logging for first few trades (keeping minimal for production)
-        if (openTrades.indexOf(trade) < 1) {
-          console.log(`OANDA Open Trade ${trade.id}: units=${rawUnits}, side=${side}, pnl=${trade.unrealizedPL}`)
+        // Debug logging to see actual OANDA response structure
+        if (openTrades.indexOf(trade) < 2) {
+          console.log(`OANDA Open Trade ${trade.id} full data:`, JSON.stringify(trade, null, 2))
         }
 
         return {
@@ -149,9 +301,11 @@ export async function GET(request: NextRequest) {
           accountId: accountId === 'all-accounts' ? 'oanda-practice' : accountId,
           accountName: 'OANDA Practice Account',
           instrument: trade.instrument.replace('_', '/'), // Convert EUR_USD to EUR/USD
+          symbol: trade.instrument.replace('_', '/'),
           type: 'market',
           side,
           units: absoluteUnits,
+          size: absoluteUnits,
           price: parseFloat(trade.price || trade.averageClosePrice || '0'),
           entryPrice: parseFloat(trade.price || trade.averageClosePrice || '0'),
           stopLoss: trade.stopLossOrder?.price ? parseFloat(trade.stopLossOrder.price) : null,
@@ -159,11 +313,13 @@ export async function GET(request: NextRequest) {
           openTime,
           closeTime: null, // Open trades don't have close time
           status: 'open', // These came from getOpenTrades()
-          pnl: parseFloat(trade.unrealizedPL || trade.realizedPL || '0'),
+          pnl: parseFloat(trade.unrealizedPL || '0'), // OANDA provides unrealizedPL for open trades
           commission: 0, // OANDA includes this in spread
           swap: parseFloat(trade.financing || '0'),
           tags: ['oanda-live', 'open-position'],
           strategy: 'live-trading',
+          pattern: null, // No pattern data available from OANDA
+          confidence: null, // No confidence data available from OANDA
           agentName: 'OANDA Live System'
         }
       })
@@ -177,7 +333,7 @@ export async function GET(request: NextRequest) {
       if (instrument) filteredTrades = filteredTrades.filter(t => t.instrument === instrument)
       
       // Sort trades
-      filteredTrades.sort((a, b) => {
+      filteredTrades.sort((a: any, b: any) => {
         const aValue = a[sortBy as keyof typeof a] || 0
         const bValue = b[sortBy as keyof typeof b] || 0
         
@@ -195,13 +351,13 @@ export async function GET(request: NextRequest) {
       const paginatedTrades = filteredTrades.slice(startIndex, startIndex + limit)
 
       // Calculate statistics
-      const closedTradesOnly = filteredTrades.filter(t => t.status === 'closed')
-      const openTradesOnly = filteredTrades.filter(t => t.status === 'open')
-      const winningTrades = closedTradesOnly.filter(t => t.pnl > 0)
-      const losingTrades = closedTradesOnly.filter(t => t.pnl < 0)
+      const closedTradesOnly = filteredTrades.filter((t: any) => t.status === 'closed')
+      const openTradesOnly = filteredTrades.filter((t: any) => t.status === 'open')
+      const winningTrades = closedTradesOnly.filter((t: any) => t.pnl > 0)
+      const losingTrades = closedTradesOnly.filter((t: any) => t.pnl < 0)
       
-      const totalPnL = closedTradesOnly.reduce((sum, t) => sum + t.pnl, 0)
-      const totalSwap = filteredTrades.reduce((sum, t) => sum + t.swap, 0)
+      const totalPnL = closedTradesOnly.reduce((sum: number, t: any) => sum + t.pnl, 0)
+      const totalSwap = filteredTrades.reduce((sum: number, t: any) => sum + t.swap, 0)
       
       const stats = {
         totalTrades: total,
@@ -234,42 +390,7 @@ export async function GET(request: NextRequest) {
       })
 
     } catch (oandaError) {
-      console.warn('OANDA API not available, trying orchestrator:', oandaError)
-    }
-
-    // Try to fetch live data from orchestrator as fallback
-    try {
-      console.log(`Fetching trade history from orchestrator: ${ORCHESTRATOR_URL}/analytics/trade-history`)
-      
-      const requestPayload = {
-        accountId,
-        page,
-        limit,
-        sortBy,
-        sortOrder,
-        filter,
-        dateRange: (dateFrom && dateTo) ? { start: dateFrom, end: dateTo } : undefined
-      }
-      
-      const orchestratorResponse = await fetch(`${ORCHESTRATOR_URL}/analytics/trade-history`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload)
-      })
-      
-      if (!orchestratorResponse.ok) {
-        throw new Error(`Orchestrator responded with ${orchestratorResponse.status}: ${orchestratorResponse.statusText}`)
-      }
-      
-      const orchestratorData = await orchestratorResponse.json()
-      console.log(`Successfully fetched ${orchestratorData.trades?.length || 0} trades from orchestrator`)
-      
-      return NextResponse.json(orchestratorData)
-      
-    } catch (orchestratorError) {
-      console.warn('Orchestrator not available for trade history, trying execution engine:', orchestratorError)
+      console.warn('OANDA API not available, trying execution engine:', oandaError)
       
       // Final fallback to execution engine data
       try {

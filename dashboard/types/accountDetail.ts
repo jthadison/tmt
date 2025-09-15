@@ -86,6 +86,10 @@ export interface Trade {
   duration?: number
   /** Trading strategy used (optional) */
   strategy?: string
+  /** Pattern used to enter the trade (e.g., wyckoff_spring, vpa_confirmation) */
+  pattern?: string
+  /** Signal confidence when trade was entered (0-100) */
+  confidence?: number
   /** Trade notes or comments */
   notes?: string
   /** Trade tags */
@@ -273,8 +277,8 @@ export type ChartTimeframe = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL'
 export interface TradeHistoryFilters {
   /** Filter by symbol */
   symbol?: string
-  /** Filter by trade type */
-  type?: PositionType
+  /** Filter by trade type (buy/sell or long/short) */
+  type?: PositionType | 'buy' | 'sell'
   /** Filter by date range */
   dateRange?: {
     start: Date
@@ -287,6 +291,8 @@ export interface TradeHistoryFilters {
   }
   /** Filter by strategy */
   strategy?: string
+  /** Filter by pattern */
+  pattern?: string
 }
 
 /**
