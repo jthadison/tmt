@@ -46,7 +46,15 @@
       "Bash(git branch:*)",
       "mcp__playwright__browser_install",
       "mcp__playwright__browser_snapshot",
-      "Read(//e/Pictures/Screenshots/**)"
+      "Read(//e/Pictures/Screenshots/**)",
+      "Bash(where mcp)",
+      "Bash(npm install:*)",
+      "Bash(npm search mcp-server)",
+      "Bash(npm search mcp)",
+      "Bash(npm search:*)",
+      "Bash(npm root:*)",
+      "Read(//c/Users/jthad/AppData/Roaming/npm/node_modules/exa-mcp-server/**)",
+      "Bash(del nul)"
     ],
     "deny": [],
     "ask": [],

@@ -64,6 +64,69 @@ class PatternConfidenceScorer:
             'upthrust': {'success_rate': 0.76, 'avg_profit': 0.048}
         }
     
+    def calculate_confidence(self,
+                           pattern_data: Dict,
+                           price_data: pd.DataFrame,
+                           volume_data: pd.Series,
+                           timeframe_data: Optional[Dict] = None,
+                           custom_weights: Optional[Dict] = None) -> float:
+        """
+        Calculate enhanced confidence score for detected pattern
+
+        Args:
+            pattern_data: Pattern detection results with criteria
+            price_data: OHLC price data
+            volume_data: Volume data
+            timeframe_data: Multi-timeframe analysis results
+            custom_weights: Custom factor weights (optional)
+
+        Returns:
+            Float confidence score (0-100)
+        """
+        try:
+            weights = custom_weights if custom_weights else self.default_weights
+            pattern_type = pattern_data.get('phase', pattern_data.get('type', 'unknown'))
+
+            # Get base confidence from pattern data
+            base_confidence = float(pattern_data.get('confidence', 70.0))
+
+            # Calculate individual factor scores
+            factor_scores = {
+                'volume_confirmation': float(self._score_volume_confirmation(pattern_data, volume_data)),
+                'price_structure': float(self._score_price_structure_quality(pattern_data, price_data)),
+                'timeframe_alignment': float(self._score_timeframe_alignment(timeframe_data)),
+                'historical_performance': float(self._score_historical_performance(pattern_type)),
+                'market_context': float(self._score_market_context(pattern_data, price_data, volume_data))
+            }
+
+            # Calculate weighted enhancement score
+            enhancement_score = sum(
+                factor_scores[factor] * float(weights[factor])
+                for factor in factor_scores
+            )
+
+            # Combine base confidence with enhancement factors
+            # Use base confidence as foundation (70% weight) and enhancements (30% weight)
+            final_confidence = (base_confidence * 0.7) + (enhancement_score * 0.3)
+
+            # Apply volume and structure bonus/penalty
+            volume_score = factor_scores['volume_confirmation']
+            structure_score = factor_scores['price_structure']
+
+            if volume_score > 80 and structure_score > 75:
+                final_confidence *= 1.15  # 15% bonus for strong volume + structure
+            elif volume_score < 40 or structure_score < 40:
+                final_confidence *= 0.85  # 15% penalty for weak fundamentals
+
+            # Ensure confidence is within valid range
+            final_confidence = max(0.0, min(100.0, final_confidence))
+
+            return final_confidence
+
+        except Exception as e:
+            # Fallback to base confidence if calculation fails
+            return float(pattern_data.get('confidence', 50.0))
+
     def calculate_pattern_confidence(self,
                                    pattern_data: Dict,
                                    price_data: pd.DataFrame,
@@ -72,7 +135,7 @@ class PatternConfidenceScorer:
                                    custom_weights: Optional[Dict] = None) -> ConfidenceScore:
         """
         Calculate comprehensive confidence score for a detected pattern
-        
+
         Args:
             pattern_data: Pattern detection results with criteria
             price_data: OHLC price data

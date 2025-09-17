@@ -557,70 +557,114 @@ class SignalParameterCalculator:
     def _optimize_risk_reward(self, params: Dict, pattern: Dict, price_data: pd.DataFrame) -> Dict:
         """Optimize parameters to meet minimum risk-reward requirements"""
         optimized_params = params.copy()
-        
+
         entry = float(optimized_params['entry_price'])
         stop = float(optimized_params['stop_loss'])
         tp1 = float(optimized_params['take_profit_1'])
-        
-        # Calculate current R:R
-        if optimized_params['signal_type'] == 'long':
+        signal_type = optimized_params['signal_type']
+
+        # Calculate current risk
+        if signal_type == 'long':
             risk = entry - stop
             reward = tp1 - entry
         else:
             risk = stop - entry
             reward = entry - tp1
-        
+
+        # Ensure risk is positive and meaningful
+        if risk <= 0:
+            # Fix invalid risk by adjusting stop loss
+            atr = self._calculate_atr(price_data)
+            if signal_type == 'long':
+                stop = entry - (atr * 1.0)  # Minimum 1 ATR risk
+                risk = entry - stop
+            else:
+                stop = entry + (atr * 1.0)  # Minimum 1 ATR risk
+                risk = stop - entry
+
+            optimized_params['stop_loss'] = Decimal(str(round(stop, 5)))
+            logger.warning(f"Fixed invalid risk: adjusted stop loss to ensure minimum risk of {risk:.5f}")
+
+        # Ensure reward is positive
+        if reward <= 0:
+            # Fix invalid reward by adjusting take profit
+            if signal_type == 'long':
+                tp1 = entry + (risk * self.min_risk_reward)
+                reward = tp1 - entry
+            else:
+                tp1 = entry - (risk * self.min_risk_reward)
+                reward = entry - tp1
+
+            optimized_params['take_profit_1'] = Decimal(str(round(tp1, 5)))
+            logger.warning(f"Fixed invalid reward: adjusted take profit to ensure minimum reward of {reward:.5f}")
+
+        # Calculate current R:R ratio
         current_rr = reward / risk if risk > 0 else 0
-        
-        # If R:R is below minimum, try to optimize
+
+        # If R:R is below minimum, extend targets
         if current_rr < self.min_risk_reward:
-            # Strategy 1: Extend first target
-            if optimized_params['signal_type'] == 'long':
+            # Strategy 1: Extend first target to meet minimum R:R
+            if signal_type == 'long':
                 new_tp1 = entry + (risk * self.min_risk_reward)
             else:
                 new_tp1 = entry - (risk * self.min_risk_reward)
-            
+
             optimized_params['take_profit_1'] = Decimal(str(round(new_tp1, 5)))
-            
+
             # Recalculate other targets proportionally
             if 'take_profit_2' in optimized_params and optimized_params['take_profit_2']:
-                tp2 = float(optimized_params['take_profit_2'])
-                if optimized_params['signal_type'] == 'long':
+                if signal_type == 'long':
                     new_tp2 = entry + (risk * (self.min_risk_reward * 1.5))
                 else:
                     new_tp2 = entry - (risk * (self.min_risk_reward * 1.5))
                 optimized_params['take_profit_2'] = Decimal(str(round(new_tp2, 5)))
-            
+
             if 'take_profit_3' in optimized_params and optimized_params['take_profit_3']:
-                if optimized_params['signal_type'] == 'long':
+                if signal_type == 'long':
                     new_tp3 = entry + (risk * (self.min_risk_reward * 2.0))
                 else:
                     new_tp3 = entry - (risk * (self.min_risk_reward * 2.0))
                 optimized_params['take_profit_3'] = Decimal(str(round(new_tp3, 5)))
-        
+
+            logger.info(f"Extended targets to meet minimum R:R: {current_rr:.2f} -> {self.min_risk_reward:.2f}")
+
         # Cap R:R at maximum to avoid unrealistic targets
         elif current_rr > self.max_risk_reward:
-            if optimized_params['signal_type'] == 'long':
+            if signal_type == 'long':
                 capped_tp1 = entry + (risk * self.max_risk_reward)
             else:
                 capped_tp1 = entry - (risk * self.max_risk_reward)
             optimized_params['take_profit_1'] = Decimal(str(round(capped_tp1, 5)))
-        
+            logger.info(f"Capped R:R ratio: {current_rr:.2f} -> {self.max_risk_reward:.2f}")
+
         # Recalculate final risk-reward ratio after optimization
         final_entry = float(optimized_params['entry_price'])
         final_stop = float(optimized_params['stop_loss'])
         final_tp1 = float(optimized_params['take_profit_1'])
-        
-        if optimized_params['signal_type'] == 'long':
+
+        if signal_type == 'long':
             final_risk = final_entry - final_stop
             final_reward = final_tp1 - final_entry
         else:
             final_risk = final_stop - final_entry
             final_reward = final_entry - final_tp1
-        
+
         final_rr = final_reward / final_risk if final_risk > 0 else 0
         optimized_params['risk_reward_ratio'] = round(final_rr, 2)
-        
+
+        # Ensure we always meet minimum requirements
+        if final_rr < self.min_risk_reward:
+            logger.error(f"Failed to optimize R:R ratio: {final_rr:.2f} < {self.min_risk_reward:.2f}")
+            # Force minimum by adjusting TP1 again
+            if signal_type == 'long':
+                forced_tp1 = final_entry + (final_risk * self.min_risk_reward)
+            else:
+                forced_tp1 = final_entry - (final_risk * self.min_risk_reward)
+
+            optimized_params['take_profit_1'] = Decimal(str(round(forced_tp1, 5)))
+            optimized_params['risk_reward_ratio'] = self.min_risk_reward
+            logger.info(f"Force-adjusted TP1 to meet minimum R:R: {self.min_risk_reward:.2f}")
+
         return optimized_params
     
     def _estimate_timing_parameters(self, pattern: Dict, market_context: Dict) -> Dict:
