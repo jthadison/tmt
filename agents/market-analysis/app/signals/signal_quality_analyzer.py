@@ -75,16 +75,40 @@ class SignalQualityAnalyzer:
         try:
             logger.info(f"Analyzing {len(historical_signals)} signals and {len(execution_data)} executions")
             
-            # Filter recent data
-            cutoff_date = datetime.now() - timedelta(days=self.data_retention_days)
-            recent_signals = [
-                s for s in historical_signals 
-                if s.get('generated_at', datetime.min) > cutoff_date
-            ]
-            recent_executions = [
-                e for e in execution_data
-                if e.get('executed_at', datetime.min) > cutoff_date
-            ]
+            # Filter recent data - use timezone-aware datetime
+            from datetime import timezone
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.data_retention_days)
+            recent_signals = []
+            for s in historical_signals:
+                generated_at = s.get('generated_at')
+                if generated_at:
+                    # Handle both string and datetime formats
+                    if isinstance(generated_at, str):
+                        try:
+                            generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                        except:
+                            continue
+                    # Ensure datetime is timezone-aware
+                    if generated_at.tzinfo is None:
+                        generated_at = generated_at.replace(tzinfo=timezone.utc)
+                    if generated_at > cutoff_date:
+                        recent_signals.append(s)
+
+            recent_executions = []
+            for e in execution_data:
+                executed_at = e.get('executed_at')
+                if executed_at:
+                    # Handle both string and datetime formats
+                    if isinstance(executed_at, str):
+                        try:
+                            executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+                        except:
+                            continue
+                    # Ensure datetime is timezone-aware
+                    if executed_at.tzinfo is None:
+                        executed_at = executed_at.replace(tzinfo=timezone.utc)
+                    if executed_at > cutoff_date:
+                        recent_executions.append(e)
             
             if len(recent_signals) < self.min_sample_size:
                 return {
@@ -104,17 +128,27 @@ class SignalQualityAnalyzer:
             optimization_recommendations = await self._generate_optimization_recommendations(
                 confidence_analysis, pattern_analysis, conversion_analysis, timing_analysis
             )
-            
+
             # Calculate performance impact estimates
             impact_estimates = await self._estimate_optimization_impact(optimization_recommendations)
-            
+
+            # Calculate actual signal-to-execution matches for proper conversion rate
+            matched_executions = []
+            recent_signal_ids = {s.get('signal_id') for s in recent_signals}
+            for execution in recent_executions:
+                if execution.get('signal_id') in recent_signal_ids:
+                    matched_executions.append(execution)
+
+            # Conversion rate should be: matched executions / total signals (≤ 1.0)
+            actual_conversion_rate = len(matched_executions) / len(recent_signals) if recent_signals else 0
+
             analysis_results = {
                 'analysis_status': 'completed',
                 'analysis_timestamp': datetime.now(),
                 'data_summary': {
                     'signals_analyzed': len(recent_signals),
-                    'executions_analyzed': len(recent_executions),
-                    'conversion_rate': len(recent_executions) / len(recent_signals) if recent_signals else 0,
+                    'executions_analyzed': len(matched_executions),  # Only count matched executions
+                    'conversion_rate': actual_conversion_rate,
                     'analysis_period_days': self.data_retention_days
                 },
                 'confidence_analysis': confidence_analysis,
@@ -283,10 +317,11 @@ class SignalQualityAnalyzer:
                                       executions: List[Dict]) -> Dict:
         """Analyze signal-to-execution conversion rates and identify bottlenecks"""
         
-        # Calculate overall conversion rate
+        # Calculate overall conversion rate - only count executions that match signals
         total_signals = len(signals)
-        total_executions = len(executions)
-        overall_conversion = total_executions / total_signals if total_signals > 0 else 0
+        signal_ids = {s.get('signal_id') for s in signals}
+        matched_executions = [e for e in executions if e.get('signal_id') in signal_ids]
+        overall_conversion = len(matched_executions) / total_signals if total_signals > 0 else 0
         
         # Analyze conversion by confidence ranges
         confidence_ranges = [(50, 60), (60, 70), (70, 80), (80, 90), (90, 100)]
@@ -343,8 +378,23 @@ class SignalQualityAnalyzer:
             generated_at = signal.get('generated_at')
             valid_until = signal.get('valid_until')
             if generated_at and valid_until:
-                validity_hours = (valid_until - generated_at).total_seconds() / 3600
-                validity_periods.append(validity_hours)
+                try:
+                    # Handle both string and datetime formats
+                    if isinstance(generated_at, str):
+                        generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                    if isinstance(valid_until, str):
+                        valid_until = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
+
+                    # Ensure timezone consistency
+                    if generated_at.tzinfo is None:
+                        generated_at = generated_at.replace(tzinfo=timezone.utc)
+                    if valid_until.tzinfo is None:
+                        valid_until = valid_until.replace(tzinfo=timezone.utc)
+
+                    validity_hours = (valid_until - generated_at).total_seconds() / 3600
+                    validity_periods.append(validity_hours)
+                except:
+                    continue
         
         if validity_periods:
             timing_analysis['signal_validity_analysis'] = {
@@ -363,8 +413,23 @@ class SignalQualityAnalyzer:
                 generated_at = signal.get('generated_at')
                 executed_at = execution.get('executed_at')
                 if generated_at and executed_at:
-                    delay_minutes = (executed_at - generated_at).total_seconds() / 60
-                    execution_delays.append(delay_minutes)
+                    try:
+                        # Handle both string and datetime formats
+                        if isinstance(generated_at, str):
+                            generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                        if isinstance(executed_at, str):
+                            executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+
+                        # Ensure timezone consistency
+                        if generated_at.tzinfo is None:
+                            generated_at = generated_at.replace(tzinfo=timezone.utc)
+                        if executed_at.tzinfo is None:
+                            executed_at = executed_at.replace(tzinfo=timezone.utc)
+
+                        delay_minutes = (executed_at - generated_at).total_seconds() / 60
+                        execution_delays.append(delay_minutes)
+                    except:
+                        continue
         
         if execution_delays:
             timing_analysis['execution_delay_analysis'] = {

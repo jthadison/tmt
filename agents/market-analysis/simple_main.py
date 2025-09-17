@@ -254,18 +254,19 @@ async def background_market_monitoring():
     
     while True:
         try:
-            # Simulate market scanning every 30-60 seconds
-            await asyncio.sleep(random.randint(30, 60))
+            # Market scanning every 5-15 minutes for more realistic trading frequency
+            await asyncio.sleep(random.randint(300, 900))  # 5-15 minutes
             
-            # Simulate signal generation (20% chance per scan)
-            if random.random() < 0.20:
+            # Reduced signal generation (3% chance per scan for ~1-2 signals/hour max)
+            if random.random() < 0.03:
                 signals_generated_today += 1
                 last_signal_time = datetime.now()
                 
                 instruments = CORE_TRADING_INSTRUMENTS  # Using centralized instrument config
                 instrument = random.choice(instruments)
                 signal_type = random.choice(["BUY", "SELL"])
-                confidence = random.randint(70, 95)
+                # Higher confidence threshold for quality signals
+                confidence = random.randint(80, 95)  # Only high-confidence signals
                 
                 # Get current market price for realistic entry price
                 entry_price = await get_current_market_price(instrument)
@@ -616,53 +617,297 @@ async def implement_optimization(threshold: float = 72.5, dry_run: bool = False)
 
 @app.get("/optimization/monitor")
 async def monitor_optimization_performance(hours: int = 24):
-    """Monitor optimization performance"""
+    """Monitor optimization performance with real trend analysis"""
     try:
         logger.info(f"Monitoring optimization performance for last {hours} hours")
-        
-        # Load recent performance data
-        all_signals = _get_historical_signals()
-        all_executions = _get_execution_data()
-        recent_signals = all_signals[-20:] if len(all_signals) >= 20 else all_signals  # Last 20 signals
-        recent_executions = all_executions[-5:] if len(all_executions) >= 5 else all_executions  # Last 5 executions
-        
-        # Calculate monitoring metrics
-        total_recent_signals = len(recent_signals)
-        recent_conversions = len(recent_executions)
-        recent_conversion_rate = (recent_conversions / total_recent_signals) * 100 if total_recent_signals > 0 else 0
-        
-        avg_recent_pnl = sum(exec_data['pnl'] for exec_data in recent_executions) / len(recent_executions) if recent_executions else 0
-        profitable_recent = len([exec_data for exec_data in recent_executions if exec_data['pnl'] > 0])
-        recent_win_rate = (profitable_recent / recent_conversions) * 100 if recent_conversions > 0 else 0
-        
+
+        # Load performance data from database instead of old JSON files
+        # Get all signals from the database (not from the old JSON file)
+        try:
+            all_signals_response = await get_signal_history(limit=1000)
+            all_signals = all_signals_response.get('signals', [])
+            logger.info(f"Loaded {len(all_signals)} signals from database")
+        except Exception as e:
+            logger.warning(f"Failed to load signals from database: {e}, falling back to historical data")
+            all_signals = _get_historical_signals()
+
+        # Load execution data from orchestrator instead of mock data
+        try:
+            import requests
+            orchestrator_response = requests.get("http://localhost:8089/trades", timeout=5)
+            if orchestrator_response.status_code == 200:
+                orchestrator_data = orchestrator_response.json()
+                all_executions = []
+                for trade in orchestrator_data:
+                    if trade.get('result', {}).get('status') == 'success':
+                        all_executions.append({
+                            'signal_id': trade.get('signal_id'),
+                            'executed_at': trade.get('timestamp'),
+                            'pnl': trade.get('result', {}).get('details', {}).get('pl', 0),
+                            'symbol': trade.get('symbol'),
+                            'execution_price': trade.get('result', {}).get('details', {}).get('fill_price', 0),
+                            'position_size': trade.get('result', {}).get('details', {}).get('units_filled', 0)
+                        })
+                logger.info(f"Loaded {len(all_executions)} executions from orchestrator")
+            else:
+                logger.warning(f"Failed to load executions from orchestrator: {orchestrator_response.status_code}")
+                all_executions = _get_execution_data()
+        except Exception as e:
+            logger.warning(f"Failed to load executions from orchestrator: {e}, falling back to mock data")
+            all_executions = _get_execution_data()
+
+        # Filter signals and executions by actual time window
+        from datetime import timezone, timedelta
+        current_time = datetime.now(timezone.utc)
+        current_period_start = current_time - timedelta(hours=hours)
+        previous_period_start = current_time - timedelta(hours=hours * 2)
+        previous_period_end = current_period_start
+
+        # Filter current period signals (within requested hours)
+        current_period_signals = []
+        for signal in all_signals:
+            generated_at = signal.get('generated_at')
+            if generated_at:
+                if isinstance(generated_at, str):
+                    try:
+                        # Handle both timezone-aware (with Z) and timezone-naive (from database) strings
+                        if generated_at.endswith('Z'):
+                            generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                        elif '+' in generated_at or '-' in generated_at[-6:]:
+                            # Already has timezone info
+                            generated_at = datetime.fromisoformat(generated_at)
+                        else:
+                            # Timezone-naive from database - parse as local time and convert to UTC
+                            generated_at = datetime.fromisoformat(generated_at)
+                            # Assume local timezone is UTC-5 (observed from logs) and convert to UTC
+                            generated_at = generated_at.replace(tzinfo=timezone.utc)
+                            # Convert from local time to UTC by adding 5 hours (UTC-5 to UTC)
+                            generated_at = generated_at + timedelta(hours=5)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse signal timestamp '{generated_at}': {e}")
+                        continue
+                # Ensure timezone-aware
+                if generated_at.tzinfo is None:
+                    generated_at = generated_at.replace(tzinfo=timezone.utc)
+                if current_period_start <= generated_at <= current_time:
+                    current_period_signals.append(signal)
+
+        # Debug signal filtering
+        logger.info(f"Signal filtering debug:")
+        logger.info(f"  Current time: {current_time}")
+        logger.info(f"  Period start ({hours}h ago): {current_period_start}")
+        logger.info(f"  Total signals loaded: {len(all_signals)}")
+        logger.info(f"  Signals in time window: {len(current_period_signals)}")
+        if all_signals and len(all_signals) > 0:
+            recent_signals = all_signals[:3]  # Check first 3 signals
+            for i, signal in enumerate(recent_signals):
+                gen_time = signal.get('generated_at')
+                logger.info(f"  Signal {i+1} time: {gen_time}")
+                if isinstance(gen_time, str):
+                    try:
+                        # Use same parsing logic as above
+                        if gen_time.endswith('Z'):
+                            parsed_time = datetime.fromisoformat(gen_time.replace('Z', '+00:00'))
+                        elif '+' in gen_time or '-' in gen_time[-6:]:
+                            parsed_time = datetime.fromisoformat(gen_time)
+                        else:
+                            parsed_time = datetime.fromisoformat(gen_time)
+                            parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+                            # Convert from local time to UTC by adding 5 hours (UTC-5 to UTC)
+                            parsed_time = parsed_time + timedelta(hours=5)
+                        logger.info(f"  Signal {i+1} parsed: {parsed_time}")
+                        logger.info(f"  Signal {i+1} in range? {current_period_start <= parsed_time <= current_time}")
+                    except Exception as e:
+                        logger.info(f"  Signal {i+1} parse error: {e}")
+
+
+        # Filter current period executions (within requested hours)
+        current_period_executions = []
+        for execution in all_executions:
+            executed_at = execution.get('executed_at', execution.get('timestamp'))
+            if executed_at:
+                if isinstance(executed_at, str):
+                    try:
+                        executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+                    except:
+                        continue
+                if executed_at.tzinfo is None:
+                    executed_at = executed_at.replace(tzinfo=timezone.utc)
+                if current_period_start <= executed_at <= current_time:
+                    current_period_executions.append(execution)
+
+
+        # Filter previous period for comparison (same duration, but earlier)
+        previous_period_signals = []
+        previous_period_executions = []
+        for signal in all_signals:
+            generated_at = signal.get('generated_at')
+            if generated_at:
+                if isinstance(generated_at, str):
+                    try:
+                        # Handle both timezone-aware (with Z) and timezone-naive (from database) strings
+                        if generated_at.endswith('Z'):
+                            generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                        elif '+' in generated_at or '-' in generated_at[-6:]:
+                            # Already has timezone info
+                            generated_at = datetime.fromisoformat(generated_at)
+                        else:
+                            # Timezone-naive from database - parse as local time and convert to UTC
+                            generated_at = datetime.fromisoformat(generated_at)
+                            # Assume local timezone is UTC-5 (observed from logs) and convert to UTC
+                            generated_at = generated_at.replace(tzinfo=timezone.utc)
+                            # Convert from local time to UTC by adding 5 hours (UTC-5 to UTC)
+                            generated_at = generated_at + timedelta(hours=5)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse signal timestamp '{generated_at}': {e}")
+                        continue
+                # Ensure timezone-aware
+                if generated_at.tzinfo is None:
+                    generated_at = generated_at.replace(tzinfo=timezone.utc)
+                if previous_period_start <= generated_at <= previous_period_end:
+                    previous_period_signals.append(signal)
+
+        for execution in all_executions:
+            executed_at = execution.get('executed_at', execution.get('timestamp'))
+            if executed_at:
+                if isinstance(executed_at, str):
+                    try:
+                        executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+                    except:
+                        continue
+                if executed_at.tzinfo is None:
+                    executed_at = executed_at.replace(tzinfo=timezone.utc)
+                if previous_period_start <= executed_at <= previous_period_end:
+                    previous_period_executions.append(execution)
+
+        # Calculate current period metrics
+        current_signals_count = len(current_period_signals)
+        current_executions_count = len(current_period_executions)
+        current_conversion_rate = (current_executions_count / current_signals_count) * 100 if current_signals_count > 0 else 0
+
+        current_avg_pnl = sum(exec_data['pnl'] for exec_data in current_period_executions) / len(current_period_executions) if current_period_executions else 0
+        current_profitable = len([exec_data for exec_data in current_period_executions if exec_data['pnl'] > 0])
+        current_win_rate = (current_profitable / current_executions_count) * 100 if current_executions_count > 0 else 0
+
+        # Calculate previous period metrics for comparison
+        prev_signals_count = len(previous_period_signals)
+        prev_executions_count = len(previous_period_executions)
+        prev_conversion_rate = (prev_executions_count / prev_signals_count) * 100 if prev_signals_count > 0 else 0
+        prev_avg_pnl = sum(exec_data['pnl'] for exec_data in previous_period_executions) / len(previous_period_executions) if previous_period_executions else 0
+        prev_profitable = len([exec_data for exec_data in previous_period_executions if exec_data['pnl'] > 0])
+        prev_win_rate = (prev_profitable / prev_executions_count) * 100 if prev_executions_count > 0 else 0
+
+        # Real trend analysis based on actual data comparison
+        def analyze_trend(current_val, previous_val, threshold=10):
+            """Analyze trend between current and previous values"""
+            if previous_val == 0:
+                return "insufficient_data"
+
+            change_percent = ((current_val - previous_val) / abs(previous_val)) * 100 if previous_val != 0 else 0
+
+            if change_percent > threshold:
+                return "improving"
+            elif change_percent < -threshold:
+                return "declining"
+            else:
+                return "stable"
+
+        conversion_trend = analyze_trend(current_conversion_rate, prev_conversion_rate, 15)
+        performance_trend = analyze_trend(current_avg_pnl, prev_avg_pnl, 20)
+        win_rate_trend = analyze_trend(current_win_rate, prev_win_rate, 10)
+
+        # Determine threshold effectiveness based on actual metrics
+        threshold_effectiveness = "good"
+        if current_conversion_rate < 10:
+            threshold_effectiveness = "poor"
+        elif current_conversion_rate < 20:
+            threshold_effectiveness = "moderate"
+        elif current_win_rate < 40:
+            threshold_effectiveness = "moderate"
+
+        # Generate dynamic recommendations based on real metrics
+        recommendations = []
+        alerts = []
+
+        # Conversion rate recommendations
+        if current_conversion_rate < 15:
+            recommendations.append(f"Low conversion rate ({current_conversion_rate:.1f}%) - consider lowering confidence threshold")
+            alerts.append({"type": "warning", "message": "Conversion rate below 15%"})
+        elif current_conversion_rate > 40:
+            recommendations.append(f"High conversion rate ({current_conversion_rate:.1f}%) - consider raising confidence threshold for quality")
+
+        # Win rate recommendations
+        if current_win_rate < 35:
+            recommendations.append(f"Win rate ({current_win_rate:.1f}%) below target - review signal quality filters")
+            alerts.append({"type": "warning", "message": "Win rate below 35%"})
+        elif current_win_rate > 65:
+            recommendations.append(f"Strong win rate ({current_win_rate:.1f}%) - current parameters performing well")
+
+        # P&L recommendations
+        if current_avg_pnl < -10:
+            recommendations.append(f"Negative average P&L (${current_avg_pnl:.2f}) - review risk management parameters")
+            alerts.append({"type": "critical", "message": f"Average P&L is negative: ${current_avg_pnl:.2f}"})
+        elif current_avg_pnl > 20:
+            recommendations.append(f"Positive average P&L (${current_avg_pnl:.2f}) - consider increasing position sizes")
+
+        # Trend-based recommendations
+        if conversion_trend == "declining":
+            recommendations.append("Conversion rate declining - monitor market conditions")
+        elif conversion_trend == "improving":
+            recommendations.append("Conversion rate improving - maintain current strategy")
+
+        if performance_trend == "declining":
+            recommendations.append("Performance declining - review recent parameter changes")
+
+        # Volume recommendations
+        if current_signals_count < 10:
+            recommendations.append(f"Low signal volume ({current_signals_count} signals) - may need more data for accurate analysis")
+
+        # Default recommendation if all is well
+        if not recommendations:
+            recommendations = [
+                "Performance metrics within acceptable range",
+                f"Continue monitoring - current win rate: {current_win_rate:.1f}%",
+                "No immediate parameter adjustments needed"
+            ]
+
         monitoring_result = {
             "monitoring_period_hours": hours,
             "performance_metrics": {
-                "signals_generated": total_recent_signals,
-                "signals_executed": recent_conversions,
-                "conversion_rate": round(recent_conversion_rate, 2),
-                "win_rate": round(recent_win_rate, 2),
-                "avg_pnl": round(avg_recent_pnl, 2)
+                "signals_generated": current_signals_count,
+                "signals_executed": current_executions_count,
+                "conversion_rate": round(current_conversion_rate, 2),
+                "win_rate": round(current_win_rate, 2),
+                "avg_pnl": round(current_avg_pnl, 2)
+            },
+            "previous_period_metrics": {
+                "signals_generated": prev_signals_count,
+                "signals_executed": prev_executions_count,
+                "conversion_rate": round(prev_conversion_rate, 2),
+                "win_rate": round(prev_win_rate, 2),
+                "avg_pnl": round(prev_avg_pnl, 2)
             },
             "trend_analysis": {
-                "conversion_trend": "stable",
-                "performance_trend": "improving",
-                "threshold_effectiveness": "good"
+                "conversion_trend": conversion_trend,
+                "performance_trend": performance_trend,
+                "win_rate_trend": win_rate_trend,
+                "threshold_effectiveness": threshold_effectiveness
             },
-            "recommendations": [
-                "Continue monitoring for another 24 hours",
-                "Performance metrics within expected range",
-                "No immediate adjustments needed"
-            ],
-            "alerts": []
+            "change_percentages": {
+                "conversion_change": round(((current_conversion_rate - prev_conversion_rate) / abs(prev_conversion_rate)) * 100, 2) if prev_conversion_rate != 0 else 0,
+                "win_rate_change": round(((current_win_rate - prev_win_rate) / abs(prev_win_rate)) * 100, 2) if prev_win_rate != 0 else 0,
+                "pnl_change": round(((current_avg_pnl - prev_avg_pnl) / abs(prev_avg_pnl)) * 100, 2) if prev_avg_pnl != 0 else 0
+            },
+            "recommendations": recommendations[:5],  # Limit to top 5 recommendations
+            "alerts": alerts
         }
-        
+
         return {
             "monitoring_status": "completed",
             "timestamp": datetime.now().isoformat(),
             "monitoring_result": monitoring_result
         }
-        
+
     except Exception as e:
         logger.error(f"Optimization monitoring error: {e}")
         return {

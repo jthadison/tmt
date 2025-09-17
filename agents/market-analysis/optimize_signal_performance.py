@@ -636,7 +636,19 @@ class SignalOptimizationOrchestrator:
         if analysis_result.get('analysis_status') != 'completed':
             return {
                 'status': 'incomplete',
-                'message': analysis_result.get('error_message', 'Analysis not completed')
+                'message': analysis_result.get('error_message', 'Analysis not completed'),
+                'current_performance': {
+                    'signal_conversion_rate': '0.0%',
+                    'signals_analyzed': 0,
+                    'executions_analyzed': 0
+                },
+                'key_findings': {
+                    'top_issue': 'analysis_error',
+                    'improvement_potential': '0.0%',
+                    'priority_actions': []
+                },
+                'immediate_actions': ['fix_analysis_errors'],
+                'expected_impact': {}
             }
         
         data_summary = analysis_result.get('data_summary', {})

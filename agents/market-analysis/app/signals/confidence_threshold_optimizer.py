@@ -155,18 +155,41 @@ class ConfidenceThresholdOptimizer:
                                        executions: List[Dict]) -> Dict:
         """Prepare and clean data for optimization"""
         
-        # Filter to optimization window
-        cutoff_date = datetime.now() - timedelta(days=self.optimization_window_days)
-        
-        recent_signals = [
-            s for s in signals
-            if s.get('generated_at', datetime.min) > cutoff_date
-        ]
-        
-        recent_executions = [
-            e for e in executions
-            if e.get('executed_at', datetime.min) > cutoff_date
-        ]
+        # Filter to optimization window - use timezone-aware datetime
+        from datetime import timezone
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.optimization_window_days)
+
+        recent_signals = []
+        for s in signals:
+            generated_at = s.get('generated_at')
+            if generated_at:
+                # Handle both string and datetime formats
+                if isinstance(generated_at, str):
+                    try:
+                        generated_at = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+                    except:
+                        continue
+                # Ensure datetime is timezone-aware
+                if generated_at.tzinfo is None:
+                    generated_at = generated_at.replace(tzinfo=timezone.utc)
+                if generated_at > cutoff_date:
+                    recent_signals.append(s)
+
+        recent_executions = []
+        for e in executions:
+            executed_at = e.get('executed_at')
+            if executed_at:
+                # Handle both string and datetime formats
+                if isinstance(executed_at, str):
+                    try:
+                        executed_at = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
+                    except:
+                        continue
+                # Ensure datetime is timezone-aware
+                if executed_at.tzinfo is None:
+                    executed_at = executed_at.replace(tzinfo=timezone.utc)
+                if executed_at > cutoff_date:
+                    recent_executions.append(e)
         
         # Match executions to signals
         signal_execution_pairs = []
