@@ -43,8 +43,8 @@ class SignalGenerator:
     """
     
     def __init__(self,
-                 confidence_threshold: float = 65.0,
-                 min_risk_reward: float = 2.0,
+                 confidence_threshold: float = 55.0,  # Lowered from 65.0 for more signals
+                 min_risk_reward: float = 1.8,  # Lowered from 2.0 for better entry opportunities
                  enable_market_filtering: bool = True,
                  enable_frequency_management: bool = False,
                  enable_performance_tracking: bool = True):
@@ -276,7 +276,7 @@ class SignalGenerator:
 
             # Convert phase detection result to pattern format
             patterns = []
-            if phase_result.confidence > 45.0:  # Lowered threshold to enable more patterns
+            if phase_result.confidence > 40.0:  # Lowered from 45.0 to enable more patterns
                 pattern = {
                     'type': f'{phase_result.phase}_phase',
                     'phase': phase_result.phase,
@@ -322,13 +322,13 @@ class SignalGenerator:
             # Determine pattern based on simple analysis
             if abs(trend_slope) < price_range * 0.1:  # Sideways
                 pattern_type = 'accumulation' if recent_closes.iloc[-1] < recent_closes.mean() else 'distribution'
-                confidence = 75.0  # Higher confidence for simple detection
+                confidence = 65.0  # Lowered from 75.0
             elif trend_slope > 0:  # Uptrend
                 pattern_type = 'markup'
-                confidence = 80.0
+                confidence = 70.0  # Lowered from 80.0
             else:  # Downtrend
                 pattern_type = 'markdown'
-                confidence = 80.0
+                confidence = 70.0  # Lowered from 80.0
 
             # Create fallback pattern
             pattern = {

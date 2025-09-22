@@ -182,7 +182,7 @@ class MultiTimeframeValidator:
                 'overall_alignment': (pattern_alignment['score'] + trend_alignment['score'] + level_confluence['score']) / 3
             }
             
-            if alignment_data['overall_alignment'] >= 60:
+            if alignment_data['overall_alignment'] >= 50:  # Relaxed from 60% to 50%
                 confirmations.append(alignment_data)
             else:
                 contradictions.append(alignment_data)
@@ -199,7 +199,7 @@ class MultiTimeframeValidator:
             confirmation_strength = confirmation_ratio * 100
         
         return {
-            'confirmed': confirmation_strength >= 60,
+            'confirmed': confirmation_strength >= 50,  # Reduced from 60% for more confirmations
             'confirmation_strength': confirmation_strength,
             'confirmations': confirmations,
             'contradictions': contradictions,

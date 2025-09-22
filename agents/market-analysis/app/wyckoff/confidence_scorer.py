@@ -105,18 +105,12 @@ class PatternConfidenceScorer:
                 for factor in factor_scores
             )
 
-            # Combine base confidence with enhancement factors
-            # Use base confidence as foundation (70% weight) and enhancements (30% weight)
-            final_confidence = (base_confidence * 0.7) + (enhancement_score * 0.3)
+            # IMPROVED: Simplified confidence calculation - removed double penalties
+            # Use base confidence as foundation (60% weight) and enhancements (40% weight)
+            final_confidence = (base_confidence * 0.6) + (enhancement_score * 0.4)
 
-            # Apply volume and structure bonus/penalty
-            volume_score = factor_scores['volume_confirmation']
-            structure_score = factor_scores['price_structure']
-
-            if volume_score > 80 and structure_score > 75:
-                final_confidence *= 1.15  # 15% bonus for strong volume + structure
-            elif volume_score < 40 or structure_score < 40:
-                final_confidence *= 0.85  # 15% penalty for weak fundamentals
+            # REMOVED: The 15% penalty/bonus that was overly restrictive
+            # Old code applied secondary adjustments that filtered out too many valid signals
 
             # Ensure confidence is within valid range
             final_confidence = max(0.0, min(100.0, final_confidence))

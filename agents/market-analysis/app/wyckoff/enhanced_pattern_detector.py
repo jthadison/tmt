@@ -73,8 +73,8 @@ class EnhancedWyckoffDetector:
     """
     
     def __init__(self,
-                 volume_expansion_threshold: float = 2.0,
-                 smart_money_threshold: float = 0.7,
+                 volume_expansion_threshold: float = 1.3,  # Reduced from 2.0 for subtler patterns
+                 smart_money_threshold: float = 0.6,    # Reduced from 0.7 for current regime
                  min_pattern_bars: int = 15,
                  max_pattern_bars: int = 50):
         """
@@ -94,12 +94,12 @@ class EnhancedWyckoffDetector:
         # Initialize confidence scorer
         self.confidence_scorer = PatternConfidenceScorer()
         
-        # Pattern validation thresholds
+        # Pattern validation thresholds - RECALIBRATED for improved win rate
         self.validation_thresholds = {
-            'min_confidence': 65.0,
-            'min_volume_confirmation': 60.0,
-            'min_structure_score': 50.0,
-            'min_risk_reward': 1.5
+            'min_confidence': 55.0,        # Reduced from 65.0 to capture more valid patterns
+            'min_volume_confirmation': 45.0, # Reduced from 60.0 for current market regime
+            'min_structure_score': 40.0,    # Reduced from 50.0 for early-stage patterns
+            'min_risk_reward': 2.0          # Increased from 1.5 to match tighter stops
         }
     
     async def detect_enhanced_patterns(self,
@@ -258,10 +258,10 @@ class EnhancedWyckoffDetector:
         price_score = sum(price_criteria.values()) / len(price_criteria) * 100
         volume_score = sum(volume_criteria.values()) / len(volume_criteria) * 100
         
-        # Require minimum scores
-        if price_score < 60 or volume_score < 50:
+        # Require minimum scores - RELAXED for accumulation patterns
+        if price_score < 50 or volume_score < 40:
             return None
-        
+
         # Calculate key levels
         support = support_level
         resistance = np.percentile(analysis_data['high'].values, 80)
@@ -324,10 +324,10 @@ class EnhancedWyckoffDetector:
         price_score = sum(price_criteria.values()) / len(price_criteria) * 100
         volume_score = sum(volume_criteria.values()) / len(volume_criteria) * 100
         
-        # Require minimum scores
-        if price_score < 60 or volume_score < 50:
+        # Require minimum scores - RELAXED for distribution patterns
+        if price_score < 50 or volume_score < 40:
             return None
-        
+
         # Calculate key levels
         resistance = resistance_level
         support = np.percentile(analysis_data['low'].values, 20)
@@ -410,7 +410,7 @@ class EnhancedWyckoffDetector:
         
         pattern_score = sum(criteria.values()) / len(criteria) * 100
         
-        if pattern_score < 70:  # Springs need high confirmation
+        if pattern_score < 60:  # Springs - RELAXED from 70% to 60%
             return None
         
         # Calculate target levels
@@ -496,7 +496,7 @@ class EnhancedWyckoffDetector:
         
         pattern_score = sum(criteria.values()) / len(criteria) * 100
         
-        if pattern_score < 70:  # Upthrusts need high confirmation
+        if pattern_score < 60:  # Upthrusts - RELAXED from 70% to 60%
             return None
         
         # Calculate target levels
