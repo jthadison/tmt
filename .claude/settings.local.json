@@ -54,7 +54,9 @@
       "Bash(npm search:*)",
       "Bash(npm root:*)",
       "Read(//c/Users/jthad/AppData/Roaming/npm/node_modules/exa-mcp-server/**)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(claude config set --global preferredNotifChannel terminal_bell)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": [],

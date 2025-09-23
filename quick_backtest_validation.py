@@ -94,7 +94,7 @@ class QuickBacktestValidator:
         return signals
 
     def simulate_trade_outcomes(self, signals: List[Dict], config_name: str) -> List[Dict]:
-        """Simulate realistic trade outcomes"""
+        """Simulate realistic trade outcomes with MAE/MFE tracking"""
 
         np.random.seed(42 if config_name == "baseline" else 123)
         trades = []
