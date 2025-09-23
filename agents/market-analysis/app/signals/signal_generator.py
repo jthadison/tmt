@@ -13,6 +13,8 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 import logging
 import asyncio
+import pytz
+from enum import Enum
 
 from .signal_metadata import TradingSignal, ConfidenceBreakdown, MarketContext, PatternDetails, EntryConfirmation
 from .parameter_calculator import SignalParameterCalculator
@@ -27,6 +29,15 @@ from ..wyckoff.phase_detector import WyckoffPhaseDetector
 from ..volume_analysis.wyckoff_integration import WyckoffVolumeIntegrator
 
 logger = logging.getLogger(__name__)
+
+
+class TradingSession(Enum):
+    """Trading sessions for session-targeted optimization"""
+    SYDNEY = "Sydney"
+    TOKYO = "Tokyo"
+    LONDON = "London"
+    NEW_YORK = "New_York"
+    LONDON_NY_OVERLAP = "London_NY_Overlap"
 
 
 class SignalGenerator:
@@ -47,19 +58,33 @@ class SignalGenerator:
                  min_risk_reward: float = 1.8,  # Lowered from 2.0 for better entry opportunities
                  enable_market_filtering: bool = True,
                  enable_frequency_management: bool = False,
-                 enable_performance_tracking: bool = True):
+                 enable_performance_tracking: bool = True,
+                 enable_session_targeting: bool = False):  # NEW: Toggle for session-specific trading
         """
         Initialize the signal generation engine.
-        
+
         Args:
             confidence_threshold: Minimum confidence for signal generation
             min_risk_reward: Minimum risk-reward ratio required
             enable_market_filtering: Enable market state filtering
             enable_frequency_management: Enable frequency controls
             enable_performance_tracking: Enable performance tracking
+            enable_session_targeting: Enable session-specific parameter optimization
         """
-        self.confidence_threshold = confidence_threshold
-        self.min_risk_reward = min_risk_reward
+        self.enable_session_targeting = enable_session_targeting
+
+        # Store base configuration
+        self.base_confidence_threshold = confidence_threshold
+        self.base_min_risk_reward = min_risk_reward
+
+        # Apply session-specific parameters if enabled
+        if self.enable_session_targeting:
+            self._apply_session_parameters()
+        else:
+            # Use base parameters (Cycle 4 configuration)
+            self.confidence_threshold = confidence_threshold
+            self.min_risk_reward = min_risk_reward
+
         self.enable_market_filtering = enable_market_filtering
         self.enable_frequency_management = enable_frequency_management
         self.enable_performance_tracking = enable_performance_tracking
@@ -127,19 +152,23 @@ class SignalGenerator:
                 patterns, price_data, volume_data
             )
             
-            # Step 3: Filter by confidence threshold
+            # Step 3: Apply session-specific parameters and filter by confidence threshold
+            session_params = self._apply_session_parameters()
+            current_confidence_threshold = session_params['confidence_threshold']
+
             high_confidence_patterns = [
-                p for p in enhanced_patterns 
-                if p.get('confidence', 0) >= self.confidence_threshold
+                p for p in enhanced_patterns
+                if p.get('confidence', 0) >= current_confidence_threshold
             ]
-            
+
             if not high_confidence_patterns:
                 self.generation_stats['filtered_by_confidence'] += 1
                 return {
                     'signal_generated': False,
                     'reason': 'insufficient_confidence',
                     'highest_confidence': max([p.get('confidence', 0) for p in enhanced_patterns]),
-                    'required_confidence': self.confidence_threshold,
+                    'required_confidence': current_confidence_threshold,
+                    'session_mode': session_params.get('source', 'unknown'),
                     'patterns_detected': len(patterns)
                 }
             
@@ -167,18 +196,28 @@ class SignalGenerator:
                 best_pattern, price_data, volume_data, market_state_analysis
             )
             
-            # Step 7: Optimize risk-reward ratio
+            # Step 7: Optimize risk-reward ratio using session parameters
+            current_min_rr = session_params['min_risk_reward']
+
+            # Temporarily update the optimizer with session parameters
+            original_min_rr = self.rr_optimizer.min_risk_reward
+            self.rr_optimizer.min_risk_reward = current_min_rr
+
             optimization_result = self.rr_optimizer.optimize_signal_parameters(
                 signal_params, best_pattern, price_data, market_state_analysis
             )
-            
+
+            # Restore original value
+            self.rr_optimizer.min_risk_reward = original_min_rr
+
             if not optimization_result.get('success', False):
                 self.generation_stats['filtered_by_rr'] += 1
                 return {
                     'signal_generated': False,
                     'reason': 'insufficient_risk_reward',
                     'optimization_details': optimization_result,
-                    'required_rr': self.min_risk_reward
+                    'required_rr': current_min_rr,
+                    'session_mode': session_params.get('source', 'unknown')
                 }
             
             optimized_params = optimization_result['params']
@@ -216,13 +255,20 @@ class SignalGenerator:
             
             # Step 11: Log generation success
             self.generation_stats['signals_generated'] += 1
+            session_info = f" [{session_params.get('source', 'unknown')}]" if self.enable_session_targeting else " [Cycle 4 Universal]"
             logger.info(f"Signal generated for {symbol}: {signal.pattern_type} "
-                       f"(confidence: {signal.confidence}%, R:R: {signal.risk_reward_ratio}:1)")
-            
+                       f"(confidence: {signal.confidence}%, R:R: {signal.risk_reward_ratio}:1){session_info}")
+
             return {
                 'signal_generated': True,
                 'signal': signal,
                 'signal_dict': signal.to_dict(),
+                'session_mode': {
+                    'targeting_enabled': self.enable_session_targeting,
+                    'current_session': self._get_current_session().value if self.enable_session_targeting else 'universal',
+                    'parameters_source': session_params.get('source', 'unknown'),
+                    'applied_parameters': session_params
+                },
                 'generation_metadata': {
                     'patterns_analyzed': len(patterns),
                     'patterns_high_confidence': len(high_confidence_patterns),
@@ -669,5 +715,151 @@ class SignalGenerator:
         """Get summary of active signals for monitoring"""
         if not self.enable_frequency_management or not account_id:
             return {'frequency_management_disabled': True}
-        
+
         return self.frequency_manager.get_weekly_signal_capacity(account_id)
+
+    def _apply_session_parameters(self) -> Dict:
+        """Apply session-specific parameters when session targeting is enabled"""
+        if not self.enable_session_targeting:
+            # Use Cycle 4 parameters across the board
+            return {
+                'confidence_threshold': 70.0,
+                'min_risk_reward': 2.8,
+                'atr_multiplier_stop': 0.6,
+                'source': 'cycle_4_universal'
+            }
+
+        current_session = self._get_current_session()
+
+        # Session-optimized parameters from comprehensive analysis
+        session_params = {
+            TradingSession.LONDON: {
+                'confidence_threshold': 72.0,  # Dynamic Adaptive optimized for London
+                'min_risk_reward': 3.2,
+                'atr_multiplier_stop': 0.45,
+                'source': 'cycle_5_london_optimized'
+            },
+            TradingSession.NEW_YORK: {
+                'confidence_threshold': 70.0,  # Balanced Aggressive works well
+                'min_risk_reward': 2.8,
+                'atr_multiplier_stop': 0.6,
+                'source': 'cycle_4_newyork_optimized'
+            },
+            TradingSession.TOKYO: {
+                'confidence_threshold': 85.0,  # Ultra Selective for lower volatility
+                'min_risk_reward': 4.0,
+                'atr_multiplier_stop': 0.3,
+                'source': 'cycle_2_tokyo_optimized'
+            },
+            TradingSession.SYDNEY: {
+                'confidence_threshold': 78.0,  # Multi-Timeframe Precision
+                'min_risk_reward': 3.5,
+                'atr_multiplier_stop': 0.4,
+                'source': 'cycle_3_sydney_optimized'
+            },
+            TradingSession.LONDON_NY_OVERLAP: {
+                'confidence_threshold': 70.0,  # Balanced Aggressive for high activity
+                'min_risk_reward': 2.8,
+                'atr_multiplier_stop': 0.6,
+                'source': 'cycle_4_overlap_optimized'
+            }
+        }
+
+        return session_params.get(current_session, {
+            'confidence_threshold': 70.0,  # Default to Cycle 4
+            'min_risk_reward': 2.8,
+            'atr_multiplier_stop': 0.6,
+            'source': 'cycle_4_default_fallback'
+        })
+
+    def _get_current_session(self) -> TradingSession:
+        """Determine current trading session based on GMT time"""
+        try:
+            import pytz
+            # Get current GMT time
+            gmt = pytz.timezone('GMT')
+            current_time = datetime.now(gmt)
+            hour = current_time.hour
+        except Exception:
+            # Fallback if pytz is not available
+            from datetime import datetime, timezone
+            current_time = datetime.now(timezone.utc)
+            hour = current_time.hour
+
+        # Trading session definitions (GMT/UTC)
+        # Sydney: 21:00 GMT - 06:00 GMT (next day)
+        if 21 <= hour or hour < 6:
+            return TradingSession.SYDNEY
+        # Tokyo: 06:00 GMT - 08:00 GMT (overlaps end of Sydney)
+        elif 6 <= hour < 8:
+            return TradingSession.TOKYO
+        # London: 08:00 GMT - 13:00 GMT
+        elif 8 <= hour < 13:
+            return TradingSession.LONDON
+        # London/NY Overlap: 13:00 GMT - 16:00 GMT
+        elif 13 <= hour < 16:
+            return TradingSession.LONDON_NY_OVERLAP
+        # New York: 16:00 GMT - 21:00 GMT
+        elif 16 <= hour < 21:
+            return TradingSession.NEW_YORK
+        else:
+            # Fallback to London session
+            return TradingSession.LONDON
+
+    def toggle_session_targeting(self, enabled: bool) -> Dict:
+        """Toggle session-targeted trading on/off for easy rollback"""
+        old_state = self.enable_session_targeting
+        self.enable_session_targeting = enabled
+
+        # Apply new parameters immediately
+        new_params = self._apply_session_parameters()
+
+        # Update internal thresholds
+        self.confidence_threshold = new_params['confidence_threshold']
+        self.min_risk_reward = new_params['min_risk_reward']
+
+        # Update parameter calculator
+        if hasattr(self.parameter_calculator, 'atr_multiplier_stop'):
+            self.parameter_calculator.atr_multiplier_stop = new_params['atr_multiplier_stop']
+        if hasattr(self.parameter_calculator, 'min_risk_reward'):
+            self.parameter_calculator.min_risk_reward = new_params['min_risk_reward']
+
+        # Update risk-reward optimizer
+        if hasattr(self.rr_optimizer, 'min_risk_reward'):
+            self.rr_optimizer.min_risk_reward = new_params['min_risk_reward']
+
+        logger.info(f"Session targeting toggled: {old_state} -> {enabled}")
+        logger.info(f"Applied parameters: {new_params}")
+
+        return {
+            'session_targeting_changed': True,
+            'old_state': old_state,
+            'new_state': enabled,
+            'applied_parameters': new_params,
+            'current_session': self._get_current_session().value if enabled else 'universal_cycle_4',
+            'rollback_available': True
+        }
+
+    def get_current_trading_mode(self) -> Dict:
+        """Get current trading mode and session information"""
+        if self.enable_session_targeting:
+            current_session = self._get_current_session()
+            session_params = self._apply_session_parameters()
+            return {
+                'mode': 'session_targeted',
+                'current_session': current_session.value,
+                'session_parameters': session_params,
+                'parameters_source': session_params.get('source', 'unknown'),
+                'rollback_to_cycle_4': 'Available via toggle_session_targeting(False)'
+            }
+        else:
+            return {
+                'mode': 'universal_cycle_4',
+                'parameters': {
+                    'confidence_threshold': 70.0,
+                    'min_risk_reward': 2.8,
+                    'atr_multiplier_stop': 0.6
+                },
+                'parameters_source': 'cycle_4_balanced_aggressive',
+                'session_targeting': 'Available via toggle_session_targeting(True)'
+            }
