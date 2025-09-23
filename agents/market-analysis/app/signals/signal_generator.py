@@ -59,7 +59,10 @@ class SignalGenerator:
                  enable_market_filtering: bool = True,
                  enable_frequency_management: bool = False,
                  enable_performance_tracking: bool = True,
-                 enable_session_targeting: bool = False):  # NEW: Toggle for session-specific trading
+                 enable_session_targeting: bool = False,  # Toggle for session-specific trading
+                 enable_hybrid_mode: bool = False,        # Hybrid session targeting
+                 volatility_threshold: float = 1.5,      # Volatility threshold for hybrid mode
+                 enable_usdjpy_focus: bool = False):     # NEW: USD_JPY focused strategy
         """
         Initialize the signal generation engine.
 
@@ -72,6 +75,9 @@ class SignalGenerator:
             enable_session_targeting: Enable session-specific parameter optimization
         """
         self.enable_session_targeting = enable_session_targeting
+        self.enable_hybrid_mode = enable_hybrid_mode
+        self.volatility_threshold = volatility_threshold
+        self.enable_usdjpy_focus = enable_usdjpy_focus
 
         # Store base configuration
         self.base_confidence_threshold = confidence_threshold
@@ -152,8 +158,16 @@ class SignalGenerator:
                 patterns, price_data, volume_data
             )
             
-            # Step 3: Apply session-specific parameters and filter by confidence threshold
-            session_params = self._apply_session_parameters()
+            # Step 3: Calculate market volatility for hybrid mode
+            market_volatility = self._calculate_market_volatility(price_data) if self.enable_hybrid_mode else None
+
+            # Apply session-specific parameters and filter by confidence threshold
+            session_params = self._apply_session_parameters(market_volatility)
+
+            # Apply USD_JPY focused optimizations if enabled
+            if self.enable_usdjpy_focus and symbol == 'USD_JPY':
+                session_params = self._apply_usdjpy_optimizations(session_params, symbol)
+
             current_confidence_threshold = session_params['confidence_threshold']
 
             high_confidence_patterns = [
@@ -718,7 +732,7 @@ class SignalGenerator:
 
         return self.frequency_manager.get_weekly_signal_capacity(account_id)
 
-    def _apply_session_parameters(self) -> Dict:
+    def _apply_session_parameters(self, market_volatility: float = None) -> Dict:
         """Apply session-specific parameters when session targeting is enabled"""
         if not self.enable_session_targeting:
             # Use Cycle 4 parameters across the board
@@ -729,48 +743,62 @@ class SignalGenerator:
                 'source': 'cycle_4_universal'
             }
 
+        # Hybrid mode: Check if we should use session targeting or fall back to Cycle 4
+        if self.enable_hybrid_mode and market_volatility is not None:
+            if market_volatility < self.volatility_threshold:
+                # Low volatility: Use Universal Cycle 4 for consistent performance
+                return {
+                    'confidence_threshold': 70.0,
+                    'min_risk_reward': 2.8,
+                    'atr_multiplier_stop': 0.6,
+                    'source': 'hybrid_cycle_4_fallback'
+                }
+
         current_session = self._get_current_session()
 
-        # Session-optimized parameters from comprehensive analysis
+        # Session-optimized parameters - UPDATED POST 12-MONTH BACKTEST
+        # Reduced confidence thresholds by 5-8% for viable signal generation
         session_params = {
             TradingSession.LONDON: {
-                'confidence_threshold': 72.0,  # Dynamic Adaptive optimized for London
-                'min_risk_reward': 3.2,
+                'confidence_threshold': 62.0,  # Reduced from 72% (10% reduction)
+                'min_risk_reward': 3.0,        # Slightly reduced from 3.2 for more signals
                 'atr_multiplier_stop': 0.45,
-                'source': 'cycle_5_london_optimized'
+                'source': 'cycle_5_london_optimized_v2'
             },
             TradingSession.NEW_YORK: {
-                'confidence_threshold': 70.0,  # Balanced Aggressive works well
+                'confidence_threshold': 62.0,  # Reduced from 70% (8% reduction)
                 'min_risk_reward': 2.8,
                 'atr_multiplier_stop': 0.6,
-                'source': 'cycle_4_newyork_optimized'
+                'source': 'cycle_4_newyork_optimized_v2'
             },
             TradingSession.TOKYO: {
-                'confidence_threshold': 85.0,  # Ultra Selective for lower volatility
-                'min_risk_reward': 4.0,
-                'atr_multiplier_stop': 0.3,
-                'source': 'cycle_2_tokyo_optimized'
+                'confidence_threshold': 75.0,  # Reduced from 85% (10% reduction)
+                'min_risk_reward': 3.5,        # Reduced from 4.0 for more signals
+                'atr_multiplier_stop': 0.35,   # Slightly increased for better stops
+                'source': 'cycle_2_tokyo_optimized_v2'
             },
             TradingSession.SYDNEY: {
-                'confidence_threshold': 78.0,  # Multi-Timeframe Precision
-                'min_risk_reward': 3.5,
+                'confidence_threshold': 68.0,  # Reduced from 78% (10% reduction)
+                'min_risk_reward': 3.2,        # Reduced from 3.5 for more signals
                 'atr_multiplier_stop': 0.4,
-                'source': 'cycle_3_sydney_optimized'
+                'source': 'cycle_3_sydney_optimized_v2'
             },
             TradingSession.LONDON_NY_OVERLAP: {
-                'confidence_threshold': 70.0,  # Balanced Aggressive for high activity
+                'confidence_threshold': 62.0,  # Reduced from 70% (8% reduction)
                 'min_risk_reward': 2.8,
                 'atr_multiplier_stop': 0.6,
-                'source': 'cycle_4_overlap_optimized'
+                'source': 'cycle_4_overlap_optimized_v2'
             }
         }
 
-        return session_params.get(current_session, {
+        session_config = session_params.get(current_session, {
             'confidence_threshold': 70.0,  # Default to Cycle 4
             'min_risk_reward': 2.8,
             'atr_multiplier_stop': 0.6,
             'source': 'cycle_4_default_fallback'
         })
+
+        return session_config
 
     def _get_current_session(self) -> TradingSession:
         """Determine current trading session based on GMT time"""
@@ -863,3 +891,138 @@ class SignalGenerator:
                 'parameters_source': 'cycle_4_balanced_aggressive',
                 'session_targeting': 'Available via toggle_session_targeting(True)'
             }
+
+    def _calculate_market_volatility(self, price_data: pd.DataFrame, lookback_periods: int = 20) -> float:
+        """Calculate current market volatility for hybrid mode decisions"""
+        try:
+            if len(price_data) < lookback_periods:
+                return 1.0  # Default to normal volatility
+
+            # Calculate recent price returns
+            recent_data = price_data.tail(lookback_periods)
+            returns = recent_data['close'].pct_change().dropna()
+
+            if len(returns) < 5:
+                return 1.0
+
+            # Calculate volatility (standard deviation of returns)
+            current_volatility = returns.std()
+
+            # Calculate historical volatility for comparison (last 100 periods)
+            if len(price_data) >= 100:
+                historical_data = price_data.tail(100)
+                hist_returns = historical_data['close'].pct_change().dropna()
+                historical_volatility = hist_returns.std()
+
+                # Return ratio of current to historical volatility
+                if historical_volatility > 0:
+                    volatility_ratio = current_volatility / historical_volatility
+                    return volatility_ratio
+                else:
+                    return 1.0
+            else:
+                # Not enough historical data, use absolute volatility measure
+                # Normalize by typical forex volatility (0.005 = 0.5% daily)
+                normalized_volatility = current_volatility / 0.005
+                return max(0.5, min(3.0, normalized_volatility))  # Cap between 0.5x and 3.0x
+
+        except Exception as e:
+            logger.debug(f"Error calculating market volatility: {e}")
+            return 1.0  # Default to normal volatility
+
+    def enable_hybrid_session_targeting(self, volatility_threshold: float = 1.5) -> Dict:
+        """Enable hybrid session targeting mode"""
+        self.enable_hybrid_mode = True
+        self.volatility_threshold = volatility_threshold
+
+        logger.info(f"Hybrid session targeting enabled with volatility threshold: {volatility_threshold}")
+
+        return {
+            'hybrid_mode_enabled': True,
+            'volatility_threshold': volatility_threshold,
+            'description': 'Session targeting during high volatility, Cycle 4 during low volatility'
+        }
+
+    def disable_hybrid_mode(self) -> Dict:
+        """Disable hybrid mode and return to pure session targeting or universal mode"""
+        self.enable_hybrid_mode = False
+
+        logger.info("Hybrid mode disabled, returning to pure session targeting mode")
+
+        return {
+            'hybrid_mode_disabled': True,
+            'current_mode': 'session_targeted' if self.enable_session_targeting else 'universal_cycle_4'
+        }
+
+    def _apply_usdjpy_optimizations(self, base_params: Dict, symbol: str) -> Dict:
+        """Apply USD_JPY specific optimizations based on 12-month backtest results"""
+        if symbol != 'USD_JPY':
+            return base_params
+
+        # USD_JPY showed exceptional performance in 12-month backtest (93.8% of profits)
+        # Optimize parameters specifically for this pair
+        optimized_params = base_params.copy()
+
+        # Get current session for session-specific USD_JPY optimization
+        current_session = self._get_current_session()
+
+        if current_session == TradingSession.TOKYO:
+            # Tokyo session: USD_JPY home session, be more aggressive
+            optimized_params.update({
+                'confidence_threshold': max(60.0, base_params['confidence_threshold'] - 7.0),  # Reduce by 7%
+                'min_risk_reward': max(2.3, base_params['min_risk_reward'] - 0.4),  # Lower R:R for more signals
+                'atr_multiplier_stop': 0.35,  # Tighter stops for better entry
+                'source': f"{base_params.get('source', 'unknown')}_usdjpy_tokyo_focus"
+            })
+        elif current_session in [TradingSession.LONDON, TradingSession.LONDON_NY_OVERLAP]:
+            # European/Overlap sessions: High volatility periods for USD_JPY
+            optimized_params.update({
+                'confidence_threshold': max(55.0, base_params['confidence_threshold'] - 5.0),  # Reduce by 5%
+                'min_risk_reward': max(2.5, base_params['min_risk_reward'] - 0.3),  # Lower R:R
+                'atr_multiplier_stop': 0.5,  # Slightly wider stops for volatility
+                'source': f"{base_params.get('source', 'unknown')}_usdjpy_europe_focus"
+            })
+        elif current_session == TradingSession.NEW_YORK:
+            # NY session: USD side of the pair, moderate optimization
+            optimized_params.update({
+                'confidence_threshold': max(58.0, base_params['confidence_threshold'] - 4.0),  # Reduce by 4%
+                'min_risk_reward': max(2.4, base_params['min_risk_reward'] - 0.2),  # Lower R:R
+                'atr_multiplier_stop': 0.45,
+                'source': f"{base_params.get('source', 'unknown')}_usdjpy_ny_focus"
+            })
+        else:
+            # Sydney session: Less optimal for USD_JPY, but still optimize
+            optimized_params.update({
+                'confidence_threshold': max(60.0, base_params['confidence_threshold'] - 3.0),  # Reduce by 3%
+                'min_risk_reward': max(2.6, base_params['min_risk_reward'] - 0.2),  # Slightly lower R:R
+                'atr_multiplier_stop': base_params.get('atr_multiplier_stop', 0.4),
+                'source': f"{base_params.get('source', 'unknown')}_usdjpy_sydney_focus"
+            })
+
+        logger.info(f"Applied USD_JPY optimization for {current_session.value}: "
+                   f"Confidence {base_params['confidence_threshold']:.1f}% -> {optimized_params['confidence_threshold']:.1f}%")
+
+        return optimized_params
+
+    def enable_usdjpy_focus(self) -> Dict:
+        """Enable USD_JPY focused strategy based on 12-month backtest results"""
+        self.enable_usdjpy_focus = True
+
+        logger.info("USD_JPY focused strategy enabled - optimized parameters for USD_JPY trades")
+
+        return {
+            'usdjpy_focus_enabled': True,
+            'description': 'Optimized parameters specifically for USD_JPY based on historical performance',
+            'benefit': '93.8% of profits came from USD_JPY in 12-month backtest'
+        }
+
+    def disable_usdjpy_focus(self) -> Dict:
+        """Disable USD_JPY focused strategy"""
+        self.enable_usdjpy_focus = False
+
+        logger.info("USD_JPY focused strategy disabled")
+
+        return {
+            'usdjpy_focus_disabled': True,
+            'current_mode': 'universal_parameters_for_all_pairs'
+        }
