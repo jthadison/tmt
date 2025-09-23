@@ -24,6 +24,20 @@ from typing import Optional, List, Dict, Any
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 from config import CORE_TRADING_INSTRUMENTS
 
+# Import session targeting configuration
+try:
+    from config import SESSION_TARGETING_ENABLED, get_current_parameters
+except ImportError:
+    # Fallback if config doesn't exist
+    SESSION_TARGETING_ENABLED = True
+    def get_current_parameters():
+        return {
+            'confidence_threshold': 70.0,
+            'min_risk_reward': 2.8,
+            'mode': 'session_targeted',
+            'current_session': 'London'
+        }
+
 import aiosqlite
 from pathlib import Path
 
@@ -257,23 +271,33 @@ async def background_market_monitoring():
             # Market scanning every 5-15 minutes for more realistic trading frequency
             await asyncio.sleep(random.randint(300, 900))  # 5-15 minutes
             
+            # Get current session parameters
+            current_params = get_current_parameters()
+            session_confidence = current_params.get('confidence_threshold', 70.0)
+            session_rr = current_params.get('min_risk_reward', 2.0)
+            current_session = current_params.get('current_session', 'unknown')
+
             # Reduced signal generation (3% chance per scan for ~1-2 signals/hour max)
             if random.random() < 0.03:
                 signals_generated_today += 1
                 last_signal_time = datetime.now()
-                
+
                 instruments = CORE_TRADING_INSTRUMENTS  # Using centralized instrument config
                 instrument = random.choice(instruments)
                 signal_type = random.choice(["BUY", "SELL"])
-                # Higher confidence threshold for quality signals
-                confidence = random.randint(80, 95)  # Only high-confidence signals
+
+                # Use session-specific confidence threshold
+                min_confidence = int(session_confidence)
+                max_confidence = min(95, int(session_confidence + 15))
+                confidence = random.randint(min_confidence, max_confidence)
                 
                 # Get current market price for realistic entry price
                 entry_price = await get_current_market_price(instrument)
                 
                 # Calculate proper stop-loss and take-profit based on signal direction
                 risk_pips = random.randint(20, 50)  # Risk in pips
-                reward_ratio = random.uniform(1.5, 3.0)  # Risk:Reward ratio
+                # Use session-specific risk-reward ratio
+                reward_ratio = random.uniform(session_rr, min(session_rr + 1.0, 5.0))  # Session-based R:R
                 
                 pip_value = 0.0001 if instrument != "USD_JPY" else 0.01
                 risk_amount = risk_pips * pip_value
@@ -303,10 +327,13 @@ async def background_market_monitoring():
                     "market_context": {
                         "trend": random.choice(["bullish", "bearish", "sideways"]),
                         "volatility": random.choice(["low", "normal", "high"]),
-                        "volume": random.choice(["below_average", "average", "above_average"])
+                        "volume": random.choice(["below_average", "average", "above_average"]),
+                        "trading_session": current_session,
+                        "session_parameters": current_params
                     },
                     "risk_reward_ratio": round(reward_ratio, 2),
-                    "risk_pips": risk_pips
+                    "risk_pips": risk_pips,
+                    "session_targeted": SESSION_TARGETING_ENABLED
                 }
 
                 # Store signal in database if available

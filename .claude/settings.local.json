@@ -58,7 +58,9 @@
       "Bash(claude config set --global preferredNotifChannel terminal_bell)",
       "Bash(git push:*)",
       "Bash(git log:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],

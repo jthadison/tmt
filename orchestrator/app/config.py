@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     max_trades_per_hour: int = Field(10, env="MAX_TRADES_PER_HOUR")
     
     # Trading control
-    enable_trading: bool = Field(False, env="ENABLE_TRADING")
+    enable_trading: bool = Field(True, env="ENABLE_TRADING")
     
     # Message broker configuration
     message_broker_url: str = Field("redis://localhost:6379", env="MESSAGE_BROKER_URL")
