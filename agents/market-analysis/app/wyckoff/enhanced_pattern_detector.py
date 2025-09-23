@@ -96,10 +96,10 @@ class EnhancedWyckoffDetector:
         
         # Pattern validation thresholds - RECALIBRATED for improved win rate
         self.validation_thresholds = {
-            'min_confidence': 55.0,        # Reduced from 65.0 to capture more valid patterns
-            'min_volume_confirmation': 45.0, # Reduced from 60.0 for current market regime
-            'min_structure_score': 40.0,    # Reduced from 50.0 for early-stage patterns
-            'min_risk_reward': 2.0          # Increased from 1.5 to match tighter stops
+            'min_confidence': 70.0,        # CYCLE 4: Balanced for volume and growth
+            'min_volume_confirmation': 60.0, # CYCLE 4: Reasonable volume requirements
+            'min_structure_score': 58.0,    # CYCLE 4: Good patterns with volume focus
+            'min_risk_reward': 2.8          # CYCLE 4: Achievable R:R for high frequency
         }
     
     async def detect_enhanced_patterns(self,

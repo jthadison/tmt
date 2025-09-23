@@ -30,9 +30,9 @@ class SignalParameterCalculator:
     """
 
     def __init__(self,
-                 atr_multiplier_entry: float = 0.5,
-                 atr_multiplier_stop: float = 0.5,  # REDUCED from 1.0 to 0.5
-                 min_risk_reward: float = 1.8,      # Already lowered
+                 atr_multiplier_entry: float = 0.6,
+                 atr_multiplier_stop: float = 0.6,  # CYCLE 4: Moderate stops for balanced approach
+                 min_risk_reward: float = 2.8,      # CYCLE 4: Achievable R:R for high frequency
                  max_risk_reward: float = 10.0):
         """
         Initialize parameter calculator with improved risk management.

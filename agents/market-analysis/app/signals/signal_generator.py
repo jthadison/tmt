@@ -43,10 +43,10 @@ class SignalGenerator:
     """
     
     def __init__(self,
-                 confidence_threshold: float = 55.0,  # Lowered from 65.0 for more signals
-                 min_risk_reward: float = 1.8,  # Lowered from 2.0 for better entry opportunities
-                 enable_market_filtering: bool = True,
-                 enable_frequency_management: bool = False,
+                 confidence_threshold: float = 70.0,  # CYCLE 4: Balanced aggressive configuration
+                 min_risk_reward: float = 2.8,  # CYCLE 4: Achievable R:R for high frequency
+                 enable_market_filtering: bool = False,  # CYCLE 4: No filtering for max opportunities
+                 enable_frequency_management: bool = True,  # CYCLE 4: Manage but allow high frequency
                  enable_performance_tracking: bool = True):
         """
         Initialize the signal generation engine.
