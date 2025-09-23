@@ -46,10 +46,10 @@ class TradingSystemHealthMonitor:
         
         # Health check configurations
         self.services = {
-            "orchestrator": {"port": 8000, "endpoint": "/health", "critical": True},
+            "orchestrator": {"port": 8082, "endpoint": "/health", "critical": True},
             "market_analysis": {"port": 8002, "endpoint": "/health", "critical": True},
             "execution_engine": {"port": 8004, "endpoint": "/health", "critical": True},
-            "dashboard": {"port": 3000, "endpoint": "/api/health", "critical": False},
+            "dashboard": {"port": 8090, "endpoint": "/api/health", "critical": False},
         }
         
         self.infrastructure = {

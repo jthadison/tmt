@@ -21,8 +21,8 @@ echo Starting Orchestrator on port 8089...
 start "Orchestrator" cmd /k "cd orchestrator && python -m uvicorn app.main:app --host 0.0.0.0 --port 8089"
 timeout /t 3 /nobreak >nul
 
-REM Start Circuit Breaker Agent (port 8084)
-echo Starting Circuit Breaker on port 8084...
+REM Start Circuit Breaker Agent (port 8086)
+echo Starting Circuit Breaker on port 8086...
 start "Circuit Breaker" cmd /k "cd agents\circuit-breaker && python main.py"
 timeout /t 2 /nobreak >nul
 
@@ -65,7 +65,7 @@ start "Pattern Detection" cmd /k "cd agents\pattern-detection && python start_ag
 timeout /t 2 /nobreak >nul
 
 REM Start Dashboard (port 8080)
-echo Starting Dashboard on port 8080...
+echo Starting Dashboard on port 8090...
 start "Dashboard" cmd /k "cd dashboard && npm run dev"
 timeout /t 3 /nobreak >nul
 
@@ -77,7 +77,7 @@ echo Core Service URLs:
 echo   Execution Engine:     http://localhost:8082/health
 echo   Market Analysis:      http://localhost:8001/health
 echo   Orchestrator:         http://localhost:8089/health
-echo   Circuit Breaker:      http://localhost:8084/health
+echo   Circuit Breaker:      http://localhost:8086/health
 echo.
 echo AI Agent URLs:
 echo   Strategy Analysis:    http://localhost:8002/health
@@ -88,7 +88,7 @@ echo   Data Collection:      http://localhost:8006/health
 echo   Continuous Improvement: http://localhost:8007/health
 echo   Pattern Detection:    http://localhost:8008/health
 echo.
-echo Dashboard:              http://localhost:8080
+echo Dashboard:              http://localhost:8090
 echo.
 echo To stop all services, close the individual command windows.
 echo ============================================================
