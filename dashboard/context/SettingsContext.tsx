@@ -10,6 +10,8 @@ export interface SettingsData {
   soundAlerts: boolean
   
   // Trading Configuration
+  tradingEnabled: boolean
+  sessionTargetingEnabled: boolean
   defaultRiskPerTrade: number
   maxDailyLoss: number
   emergencyStopLoss: number
@@ -42,6 +44,8 @@ const defaultSettings: SettingsData = {
   refreshInterval: 30,
   notifications: true,
   soundAlerts: false,
+  tradingEnabled: true,
+  sessionTargetingEnabled: true,
   defaultRiskPerTrade: 1.0,
   maxDailyLoss: 500,
   emergencyStopLoss: 1000,

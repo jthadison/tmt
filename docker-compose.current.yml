@@ -1,0 +1,252 @@
+version: '3.8'
+
+services:
+  # Dashboard (Next.js)
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: trading-dashboard
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8089
+    networks:
+      - trading-network
+    restart: unless-stopped
+
+  # Trading System Orchestrator
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile.dev
+    container_name: trading-orchestrator
+    ports:
+      - "8089:8089"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY:-your-oanda-api-key}
+      OANDA_ACCOUNT_IDS: ${OANDA_ACCOUNT_IDS:-101-001-21040028-001}
+      OANDA_ENVIRONMENT: ${OANDA_ENVIRONMENT:-practice}
+      ENABLE_TRADING: ${ENABLE_TRADING:-true}
+      PORT: 8089
+    networks:
+      - trading-network
+    volumes:
+      - ./orchestrator:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Market Analysis Agent
+  market-analysis:
+    build:
+      context: ./agents/market-analysis
+      dockerfile: Dockerfile.dev
+    container_name: trading-market-analysis
+    ports:
+      - "8001:8001"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY:-your-oanda-api-key}
+      PORT: 8001
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/market-analysis:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Execution Engine
+  execution-engine:
+    build:
+      context: ./execution-engine
+      dockerfile: Dockerfile.dev
+    container_name: trading-execution-engine
+    ports:
+      - "8082:8082"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY:-your-oanda-api-key}
+      OANDA_ACCOUNT_ID: ${OANDA_ACCOUNT_IDS:-101-001-21040028-001}
+      OANDA_ENVIRONMENT: ${OANDA_ENVIRONMENT:-practice}
+      PORT: 8082
+    networks:
+      - trading-network
+    volumes:
+      - ./execution-engine:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Additional AI Agents (optional - can be scaled)
+  strategy-analysis:
+    build:
+      context: ./agents/strategy-analysis
+      dockerfile: Dockerfile
+    container_name: trading-strategy-analysis
+    ports:
+      - "8002:8002"
+    environment:
+      PORT: 8002
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/strategy-analysis:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  parameter-optimization:
+    build:
+      context: ./agents/parameter-optimization
+      dockerfile: Dockerfile.dev
+    container_name: trading-parameter-optimization
+    ports:
+      - "8003:8003"
+    environment:
+      PORT: 8003
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/parameter-optimization:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  learning-safety:
+    build:
+      context: ./agents/learning-safety
+      dockerfile: Dockerfile.dev
+    container_name: trading-learning-safety
+    ports:
+      - "8004:8004"
+    environment:
+      PORT: 8004
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/learning-safety:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  disagreement-engine:
+    build:
+      context: ./agents/disagreement-engine
+      dockerfile: Dockerfile
+    container_name: trading-disagreement-engine
+    ports:
+      - "8005:8005"
+    environment:
+      PORT: 8005
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/disagreement-engine:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  data-collection:
+    build:
+      context: ./agents/data-collection
+      dockerfile: Dockerfile
+    container_name: trading-data-collection
+    ports:
+      - "8006:8006"
+    environment:
+      PORT: 8006
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/data-collection:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  continuous-improvement:
+    build:
+      context: ./agents/continuous-improvement
+      dockerfile: Dockerfile.dev
+    container_name: trading-continuous-improvement
+    ports:
+      - "8007:8007"
+    environment:
+      PORT: 8007
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/continuous-improvement:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  pattern-detection:
+    build:
+      context: ./agents/pattern-detection
+      dockerfile: Dockerfile.dev
+    container_name: trading-pattern-detection
+    ports:
+      - "8008:8008"
+    environment:
+      PORT: 8008
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/pattern-detection:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+  # Circuit Breaker Agent
+  circuit-breaker:
+    build:
+      context: ./agents/circuit-breaker
+      dockerfile: Dockerfile.dev
+    container_name: trading-circuit-breaker
+    ports:
+      - "8084:8084"
+    environment:
+      OANDA_API_KEY: ${OANDA_API_KEY:-your-oanda-api-key}
+      OANDA_ACCOUNT_ID: ${OANDA_ACCOUNT_IDS:-101-001-21040028-001}
+      PORT: 8084
+    networks:
+      - trading-network
+    volumes:
+      - ./agents/circuit-breaker:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    restart: unless-stopped
+
+networks:
+  trading-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  logs:

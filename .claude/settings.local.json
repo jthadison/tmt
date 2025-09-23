@@ -60,7 +60,8 @@
       "Bash(git log:*)",
       "Bash(cat:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cmd //c:*)"
     ],
     "deny": [],
     "ask": [],

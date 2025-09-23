@@ -44,6 +44,9 @@ from pathlib import Path
 # Simple database functionality directly in this file
 signal_db_path = Path("signals.db")
 
+# Global signal generator instance (initialized in startup)
+signal_generator = None
+
 # Minimal signal data classes for this service
 class SimpleSignal:
     def __init__(self, signal_id, symbol, timeframe, signal_type, pattern_type, confidence,
@@ -445,6 +448,67 @@ async def get_status():
         ]
     }
 
+@app.get("/api/config/current")
+async def get_current_config():
+    """Get current configuration including session targeting status"""
+    global signal_generator
+
+    try:
+        return {
+            "status": "success",
+            "session_targeting_enabled": signal_generator.enable_session_targeting if signal_generator else SESSION_TARGETING_ENABLED,
+            "current_session": signal_generator._get_current_session().value if signal_generator and signal_generator.enable_session_targeting else "universal",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting current config: {e}")
+        return {
+            "status": "error",
+            "session_targeting_enabled": SESSION_TARGETING_ENABLED,
+            "current_session": "universal",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.post("/api/config/session-targeting")
+async def update_session_targeting(request: dict):
+    """Update session targeting configuration"""
+    global signal_generator, SESSION_TARGETING_ENABLED
+
+    try:
+        enabled = request.get("enabled", False)
+
+        # Update global config
+        SESSION_TARGETING_ENABLED = enabled
+
+        # Update signal generator if it exists
+        if signal_generator:
+            result = signal_generator.toggle_session_targeting(enabled)
+            logger.info(f"📊 Session targeting {'enabled' if enabled else 'disabled'} via API")
+            return {
+                "status": "success",
+                "session_targeting_enabled": enabled,
+                "message": f"Session targeting {'enabled' if enabled else 'disabled'}",
+                "details": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            logger.info(f"📊 Session targeting {'enabled' if enabled else 'disabled'} (signal generator not initialized)")
+            return {
+                "status": "success",
+                "session_targeting_enabled": enabled,
+                "message": f"Session targeting {'enabled' if enabled else 'disabled'} (will apply when signal generator initializes)",
+                "timestamp": datetime.now().isoformat()
+            }
+
+    except Exception as e:
+        logger.error(f"Error updating session targeting: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to update session targeting: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
 @app.post("/reset-signals")
 async def reset_signal_count():
     """Reset daily signal count"""
@@ -452,9 +516,9 @@ async def reset_signal_count():
     old_count = signals_generated_today
     signals_generated_today = 0
     last_signal_time = None
-    
+
     logger.info(f"🔄 Signal count reset from {old_count} to 0")
-    
+
     return {
         "status": "success",
         "message": f"Signal count reset from {old_count} to 0",

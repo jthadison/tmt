@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import MainLayout from '@/components/layout/MainLayout'
 import Card from '@/components/ui/Card'
 import Grid from '@/components/ui/Grid'
@@ -8,6 +8,8 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { useTheme } from '@/context/ThemeContext'
 import { useSettings } from '@/context/SettingsContext'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import ToggleSwitch from '@/components/ui/ToggleSwitch'
+import { tradingConfigService, type ServiceResponse } from '@/lib/tradingConfigService'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -21,35 +23,136 @@ export default function SettingsPage() {
   } = useSettings()
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [activeTab, setActiveTab] = useState<'general' | 'trading' | 'display' | 'alerts' | 'api'>('general')
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle')
+  const [servicesHealth, setServicesHealth] = useState({
+    orchestrator: false,
+    marketAnalysis: false,
+    overall: false
+  })
 
   // Handle setting change
-  const handleSettingChange = (key: keyof typeof settings, value: unknown) => {
+  const handleSettingChange = (key: keyof typeof settings, value: any) => {
     updateSetting(key, value)
   }
 
-  // Save settings
-  const saveSettings = async () => {
-    setSaveStatus('saving')
+  // Handle trading configuration changes with immediate save and backend sync
+  const handleTradingConfigChange = async (key: 'tradingEnabled' | 'sessionTargetingEnabled', value: boolean) => {
+    // Update the setting immediately
+    handleSettingChange(key, value)
+
+    // Save to localStorage immediately
+    const updatedSettings = { ...settings, [key]: value }
+
     try {
-      await saveSettingsToStorage()
-      
-      // Apply theme change immediately
-      if (settings.theme !== theme) {
-        setTheme(settings.theme)
-      }
-      
-      setSaveStatus('saved')
-      
-      // Reset status after 2 seconds
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      // Save settings to storage immediately
+      localStorage.setItem('tradingSystemSettings', JSON.stringify(updatedSettings))
+      const now = new Date()
+      localStorage.setItem('tradingSystemSettingsLastSaved', now.toISOString())
+
+      // Sync with backend
+      await syncTradingConfig({
+        tradingEnabled: key === 'tradingEnabled' ? value : settings.tradingEnabled,
+        sessionTargetingEnabled: key === 'sessionTargetingEnabled' ? value : settings.sessionTargetingEnabled
+      })
+
+      // Dispatch settings changed event
+      window.dispatchEvent(new CustomEvent('settingsChanged', {
+        detail: { settings: updatedSettings, timestamp: now }
+      }))
+
     } catch (error) {
-      console.error('Error saving settings:', error)
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      console.error('Error saving settings immediately:', error)
+      // Revert the change if save failed
+      handleSettingChange(key, !value)
     }
   }
 
-  // Reset settings wrapper
+  // Handle immediate save for non-trading settings
+  const handleImmediateSave = async (key: keyof typeof settings, value: any) => {
+    // Update the setting
+    handleSettingChange(key, value)
+
+    // Save immediately to localStorage
+    const updatedSettings = { ...settings, [key]: value }
+
+    try {
+      localStorage.setItem('tradingSystemSettings', JSON.stringify(updatedSettings))
+      const now = new Date()
+      localStorage.setItem('tradingSystemSettingsLastSaved', now.toISOString())
+
+      // Apply theme change immediately if it's a theme setting
+      if (key === 'theme' && (value === 'light' || value === 'dark')) {
+        setTheme(value)
+      }
+
+      // Dispatch settings changed event
+      window.dispatchEvent(new CustomEvent('settingsChanged', {
+        detail: { settings: updatedSettings, timestamp: now }
+      }))
+
+    } catch (error) {
+      console.error('Error saving setting immediately:', error)
+      // Revert the change if save failed
+      handleSettingChange(key, settings[key])
+    }
+  }
+
+  // Sync trading configuration with backend services
+  const syncTradingConfig = async (config: { tradingEnabled: boolean; sessionTargetingEnabled: boolean }) => {
+    setSyncStatus('syncing')
+    try {
+      const results = await tradingConfigService.updateTradingConfig(config)
+      const hasErrors = results.some(result => !result.success)
+
+      if (hasErrors) {
+        setSyncStatus('error')
+        console.error('Trading config sync errors:', results.filter(r => !r.success))
+      } else {
+        setSyncStatus('success')
+      }
+
+      setTimeout(() => setSyncStatus('idle'), 3000)
+    } catch (error) {
+      console.error('Error syncing trading config:', error)
+      setSyncStatus('error')
+      setTimeout(() => setSyncStatus('idle'), 3000)
+    }
+  }
+
+  // Check services health
+  const checkServicesHealth = async () => {
+    try {
+      const health = await tradingConfigService.checkServicesHealth()
+      setServicesHealth(health)
+    } catch (error) {
+      console.error('Error checking services health:', error)
+      setServicesHealth({ orchestrator: false, marketAnalysis: false, overall: false })
+    }
+  }
+
+  // Load current config from backend on mount
+  useEffect(() => {
+    const loadCurrentConfig = async () => {
+      try {
+        const config = await tradingConfigService.getCurrentConfig()
+        if (config) {
+          updateSetting('tradingEnabled', config.tradingEnabled)
+          updateSetting('sessionTargetingEnabled', config.sessionTargetingEnabled)
+        }
+      } catch (error) {
+        console.error('Error loading current config:', error)
+      }
+    }
+
+    loadCurrentConfig()
+    checkServicesHealth()
+
+    // Set up periodic health checks
+    const healthInterval = setInterval(checkServicesHealth, 30000) // Every 30 seconds
+    return () => clearInterval(healthInterval)
+  }, [])
+
+  // Reset settings wrapper (kept for emergency reset if needed)
   const handleResetSettings = () => {
     resetSettings()
   }
@@ -75,26 +178,12 @@ export default function SettingsPage() {
             <div className="flex items-center space-x-3">
               {lastSaved && (
                 <span className="text-sm text-gray-400">
-                  Last saved: {lastSaved.toLocaleTimeString()}
+                  Settings auto-saved at {lastSaved.toLocaleTimeString()}
                 </span>
               )}
-              {hasUnsavedChanges && (
-                <button
-                  onClick={handleResetSettings}
-                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-                >
-                  Reset
-                </button>
-              )}
-              <button
-                onClick={saveSettings}
-                disabled={!hasUnsavedChanges || saveStatus === 'saving'}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
-              >
-                {saveStatus === 'saving' ? 'Saving...' : 
-                 saveStatus === 'saved' ? 'Saved ✓' : 
-                 saveStatus === 'error' ? 'Error ✗' : 'Save Changes'}
-              </button>
+              <div className="text-sm text-green-400">
+                ✓ Auto-save enabled
+              </div>
             </div>
           </div>
 
@@ -153,81 +242,57 @@ export default function SettingsPage() {
                       </select>
                     </div>
                     
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Enable Notifications
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.notifications}
-                        onChange={(e) => handleSettingChange('notifications', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Sound Alerts
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.soundAlerts}
-                        onChange={(e) => handleSettingChange('soundAlerts', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
+                    <ToggleSwitch
+                      id="notifications"
+                      checked={settings.notifications}
+                      onChange={(checked) => handleImmediateSave('notifications', checked)}
+                      label="Enable Notifications"
+                      size="sm"
+                    />
+
+                    <ToggleSwitch
+                      id="sound-alerts"
+                      checked={settings.soundAlerts}
+                      onChange={(checked) => handleImmediateSave('soundAlerts', checked)}
+                      label="Sound Alerts"
+                      size="sm"
+                    />
                   </div>
                 </Card>
 
                 <Card title="Dashboard Preferences">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Show OANDA Integration
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.showOandaIntegration}
-                        onChange={(e) => handleSettingChange('showOandaIntegration', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Show Health Checks
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.showHealthChecks}
-                        onChange={(e) => handleSettingChange('showHealthChecks', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Auto Refresh
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.autoRefresh}
-                        onChange={(e) => handleSettingChange('autoRefresh', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-300">
-                        Compact Mode
-                      </label>
-                      <input
-                        type="checkbox"
-                        checked={settings.compactMode}
-                        onChange={(e) => handleSettingChange('compactMode', e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500"
-                      />
-                    </div>
+                    <ToggleSwitch
+                      id="show-oanda"
+                      checked={settings.showOandaIntegration}
+                      onChange={(checked) => handleImmediateSave('showOandaIntegration', checked)}
+                      label="Show OANDA Integration"
+                      size="sm"
+                    />
+
+                    <ToggleSwitch
+                      id="show-health"
+                      checked={settings.showHealthChecks}
+                      onChange={(checked) => handleImmediateSave('showHealthChecks', checked)}
+                      label="Show Health Checks"
+                      size="sm"
+                    />
+
+                    <ToggleSwitch
+                      id="auto-refresh"
+                      checked={settings.autoRefresh}
+                      onChange={(checked) => handleImmediateSave('autoRefresh', checked)}
+                      label="Auto Refresh"
+                      size="sm"
+                    />
+
+                    <ToggleSwitch
+                      id="compact-mode"
+                      checked={settings.compactMode}
+                      onChange={(checked) => handleImmediateSave('compactMode', checked)}
+                      label="Compact Mode"
+                      size="sm"
+                    />
                   </div>
                 </Card>
               </Grid>
@@ -235,6 +300,81 @@ export default function SettingsPage() {
 
             {activeTab === 'trading' && (
               <Grid cols={{ default: 1, lg: 2 }}>
+                <Card title="Trading Controls">
+                  <div className="space-y-4">
+                    {/* Services Health Status */}
+                    <div className="p-3 bg-gray-800 rounded border">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-300">System Status</span>
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-2 h-2 rounded-full ${servicesHealth.overall ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span className={`text-xs ${servicesHealth.overall ? 'text-green-400' : 'text-red-400'}`}>
+                            {servicesHealth.overall ? 'Connected' : 'Disconnected'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Orchestrator:</span>
+                          <span className={servicesHealth.orchestrator ? 'text-green-400' : 'text-red-400'}>
+                            {servicesHealth.orchestrator ? '✓' : '✗'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Market Analysis:</span>
+                          <span className={servicesHealth.marketAnalysis ? 'text-green-400' : 'text-red-400'}>
+                            {servicesHealth.marketAnalysis ? '✓' : '✗'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Trading Enable Toggle */}
+                    <ToggleSwitch
+                      id="trading-enabled"
+                      checked={settings.tradingEnabled}
+                      onChange={(checked) => handleTradingConfigChange('tradingEnabled', checked)}
+                      disabled={!servicesHealth.overall}
+                      loading={syncStatus === 'syncing'}
+                      label="Enable Trading"
+                      description="Master switch to enable/disable all trading operations"
+                      size="md"
+                    />
+
+                    {/* Session Targeting Toggle */}
+                    <ToggleSwitch
+                      id="session-targeting"
+                      checked={settings.sessionTargetingEnabled}
+                      onChange={(checked) => handleTradingConfigChange('sessionTargetingEnabled', checked)}
+                      disabled={!settings.tradingEnabled || !servicesHealth.overall}
+                      loading={syncStatus === 'syncing'}
+                      label="Session-Targeted Trading"
+                      description="Use session-specific parameters (Tokyo: 85%, London: 72%, NY: 70%)"
+                      size="md"
+                    />
+
+                    {/* Info Box */}
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded">
+                      <p className="text-blue-400 text-xs">
+                        💡 Session targeting optimizes confidence thresholds and risk-reward ratios based on GMT trading sessions for better performance.
+                      </p>
+                    </div>
+
+                    {/* Sync Status */}
+                    {syncStatus !== 'idle' && (
+                      <div className={`p-2 rounded text-xs ${
+                        syncStatus === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400' :
+                        syncStatus === 'error' ? 'bg-red-500/10 border border-red-500/20 text-red-400' :
+                        'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                      }`}>
+                        {syncStatus === 'syncing' && '🔄 Syncing with trading services...'}
+                        {syncStatus === 'success' && '✅ Configuration updated successfully'}
+                        {syncStatus === 'error' && '❌ Failed to sync configuration'}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
                 <Card title="Risk Management">
                   <div className="space-y-4">
                     <div>

@@ -18,6 +18,11 @@ class TradingSession(Enum):
 # Session-targeted trading configuration
 SESSION_TARGETING_ENABLED = True  # Toggle for session-specific parameters
 
+# Core trading instruments (maintained from original config)
+CORE_TRADING_INSTRUMENTS = [
+    "EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CHF"
+]
+
 # Session-specific optimized parameters
 SESSION_PARAMETERS = {
     TradingSession.TOKYO: {
