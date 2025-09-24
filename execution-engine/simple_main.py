@@ -94,6 +94,13 @@ except ImportError:
     print("Structlog not available - using basic logging")
     STRUCTLOG_AVAILABLE = False
 
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    print("aiohttp not available - FIFO checking disabled")
+    AIOHTTP_AVAILABLE = False
+
 # Basic logging setup
 if STRUCTLOG_AVAILABLE:
     structlog.configure(
@@ -113,6 +120,89 @@ else:
     import logging
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+
+def format_oanda_price(price: float, instrument: str) -> str:
+    """
+    Format price according to OANDA's precision requirements.
+
+    OANDA precision rules:
+    - JPY pairs (USD/JPY, EUR/JPY, GBP/JPY, etc.): 3 decimal places
+    - Most other major pairs: 5 decimal places
+    - Some exotic pairs: 4 decimal places
+    """
+    if not price:
+        return None
+
+    # JPY pairs use 3 decimal places
+    if 'JPY' in instrument.upper():
+        return f"{float(price):.3f}"
+
+    # Exotic pairs that use 4 decimal places
+    exotic_4_decimal = ['USD_TRY', 'EUR_TRY', 'GBP_TRY', 'USD_ZAR', 'EUR_ZAR',
+                       'USD_MXN', 'EUR_MXN', 'USD_PLN', 'EUR_PLN']
+
+    if instrument.upper() in exotic_4_decimal:
+        return f"{float(price):.4f}"
+
+    # Most major pairs use 5 decimal places
+    return f"{float(price):.5f}"
+
+async def check_fifo_violations(instrument: str, side: str, units: int, account_id: str) -> Dict[str, Any]:
+    """
+    Check for potential FIFO violations before placing an order.
+    FIFO (First In, First Out) rule requires closing the oldest position first
+    before opening a new position in the opposite direction.
+    """
+    if not AIOHTTP_AVAILABLE:
+        return {"fifo_violation": False, "error": "aiohttp not available"}
+
+    try:
+        api_key = os.getenv("OANDA_API_KEY")
+        base_url = "https://api-fxpractice.oanda.com"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # Get current positions for this instrument
+        async with aiohttp.ClientSession() as session:
+            url = f"{base_url}/v3/accounts/{account_id}/positions/{instrument}"
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    position = data.get("position", {})
+
+                    current_long_units = float(position.get("long", {}).get("units", 0))
+                    current_short_units = float(position.get("short", {}).get("units", 0))
+
+                    # Check for FIFO violations
+                    new_units = units if side == "buy" else -units
+
+                    # If we have existing positions and trying to open opposite direction
+                    if ((current_long_units > 0 and new_units < 0) or
+                        (current_short_units < 0 and new_units > 0)):
+
+                        return {
+                            "fifo_violation": True,
+                            "current_long": current_long_units,
+                            "current_short": current_short_units,
+                            "new_units": new_units,
+                            "suggestion": "Close existing position first or adjust order size"
+                        }
+
+                    return {
+                        "fifo_violation": False,
+                        "current_long": current_long_units,
+                        "current_short": current_short_units,
+                        "new_units": new_units
+                    }
+
+                return {"fifo_violation": False, "error": f"Could not check positions: {response.status}"}
+
+    except Exception as e:
+        logger.error(f"Error checking FIFO violations: {e}")
+        return {"fifo_violation": False, "error": str(e)}
 
 class PositionMonitor:
     """Position monitoring service for exit conditions"""
@@ -415,18 +505,20 @@ if FASTAPI_AVAILABLE:
                         default_sl_pips = 30  # Conservative 30 pip stop
                         default_tp_pips = 45  # 1.5:1 R:R ratio
                     
-                    # Calculate actual prices
+                    # Calculate actual prices with proper precision
+                    precision = 3 if 'JPY' in instrument.upper() else 5
+
                     if side == "buy":
                         if not stop_loss_price:
-                            stop_loss_price = round(entry_price - (default_sl_pips * pip_size), 5)
+                            stop_loss_price = round(entry_price - (default_sl_pips * pip_size), precision)
                         if not take_profit_price:
-                            take_profit_price = round(entry_price + (default_tp_pips * pip_size), 5)
+                            take_profit_price = round(entry_price + (default_tp_pips * pip_size), precision)
                     else:  # sell
                         if not stop_loss_price:
-                            stop_loss_price = round(entry_price + (default_sl_pips * pip_size), 5)
+                            stop_loss_price = round(entry_price + (default_sl_pips * pip_size), precision)
                         if not take_profit_price:
-                            take_profit_price = round(entry_price - (default_tp_pips * pip_size), 5)
-                    
+                            take_profit_price = round(entry_price - (default_tp_pips * pip_size), precision)
+
                     logger.warning(f"Using default TP/SL for {instrument}: SL={stop_loss_price}, TP={take_profit_price}")
                 
                 # Convert side to units (OANDA uses positive/negative units)
@@ -442,29 +534,48 @@ if FASTAPI_AVAILABLE:
                     }
                 }
                 
-                # Add stop loss order if provided
+                # Check for FIFO violations before placing order
+                account_id = order_data.get("account_id", os.getenv("OANDA_ACCOUNT_ID", "101-001-21040028-001"))
+                fifo_check = await check_fifo_violations(instrument, side, units, account_id)
+
+                if fifo_check.get("fifo_violation"):
+                    logger.warning(f"FIFO violation detected for {instrument}: {fifo_check}")
+                    # Continue with order but log the warning - OANDA will handle the violation
+
+                # Add stop loss order if provided (with proper price formatting)
                 if stop_loss_price:
+                    formatted_sl = format_oanda_price(stop_loss_price, instrument)
                     oanda_order_data["order"]["stopLossOnFill"] = {
-                        "price": str(float(stop_loss_price))
+                        "price": formatted_sl,
+                        "timeInForce": "GTC",
+                        "triggerMode": "TOP_OF_BOOK"
                     }
-                    logger.info(f"Adding stop loss at {stop_loss_price}")
-                
-                # Add take profit order if provided
+                    logger.info(f"Adding stop loss at {formatted_sl} (formatted from {stop_loss_price})")
+
+                # Add take profit order if provided (with proper price formatting)
                 if take_profit_price:
+                    formatted_tp = format_oanda_price(take_profit_price, instrument)
                     oanda_order_data["order"]["takeProfitOnFill"] = {
-                        "price": str(float(take_profit_price))
+                        "price": formatted_tp,
+                        "timeInForce": "GTC"
                     }
-                    logger.info(f"Adding take profit at {take_profit_price}")
+                    logger.info(f"Adding take profit at {formatted_tp} (formatted from {take_profit_price})")
                 
                 # OANDA API configuration
                 api_key = os.getenv("OANDA_API_KEY")
                 base_url = "https://api-fxpractice.oanda.com"
-                
+
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
-                
+
+                # Check for FIFO violations before placing order
+                fifo_violations = await check_fifo_violations(account_id, instrument, units_int, api_key, base_url)
+                if fifo_violations:
+                    logger.warning(f"FIFO violations detected for {instrument}: {fifo_violations}")
+                    logger.info(f"Proceeding with order placement despite FIFO warnings (may be rejected by OANDA)")
+
                 # Place order with OANDA
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
