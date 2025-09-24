@@ -18,7 +18,8 @@ import {
   Calendar,
   Filter,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Target
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import RealtimePnLTracker from './RealtimePnLTracker'
@@ -26,16 +27,17 @@ import HistoricalPerformanceDashboard from './HistoricalPerformanceDashboard'
 import RiskAnalyticsDashboard from './RiskAnalyticsDashboard'
 import AgentComparisonDashboard from './AgentComparisonDashboard'
 import ComplianceReportGenerator from './ComplianceReportGenerator'
+import PerformanceTrackingDashboard from './PerformanceTrackingDashboard'
 import { TradeBreakdown, ComplianceReport } from '@/types/performanceAnalytics'
 
 interface PerformanceAnalyticsDashboardProps {
   accountIds: string[]
-  initialView?: 'overview' | 'realtime' | 'historical' | 'risk' | 'agents' | 'compliance'
+  initialView?: 'overview' | 'realtime' | 'historical' | 'risk' | 'agents' | 'compliance' | 'tracking'
   onTradeSelect?: (trade: TradeBreakdown) => void
   onReportGenerated?: (report: ComplianceReport) => void
 }
 
-type ViewMode = 'overview' | 'realtime' | 'historical' | 'risk' | 'agents' | 'compliance'
+type ViewMode = 'overview' | 'realtime' | 'historical' | 'risk' | 'agents' | 'compliance' | 'tracking'
 
 interface ViewConfig {
   id: ViewMode
@@ -117,6 +119,13 @@ export default function PerformanceAnalyticsDashboard({
       icon: FileText,
       description: 'Generate and export compliance reports',
       component: ComplianceReportGenerator
+    },
+    {
+      id: 'tracking',
+      name: 'Performance Tracking',
+      icon: Target,
+      description: 'Real-time tracking vs Monte Carlo projections with automated alerts',
+      component: PerformanceTrackingDashboard
     }
   ]
 
@@ -194,6 +203,12 @@ export default function PerformanceAnalyticsDashboard({
         return {
           accountIds: selectedAccountIds,
           onReportGenerated
+        }
+      case 'tracking':
+        return {
+          ...baseProps,
+          refreshInterval,
+          autoRefresh
         }
       default:
         return baseProps
