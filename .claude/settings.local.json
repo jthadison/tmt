@@ -64,7 +64,11 @@
       "Bash(cmd //c:*)",
       "WebFetch(domain:localhost)",
       "Bash(tasklist)",
-      "Bash(PORT=8082 python:*)"
+      "Bash(PORT=8082 python:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": [],
