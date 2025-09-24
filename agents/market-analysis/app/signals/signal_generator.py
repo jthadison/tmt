@@ -756,38 +756,39 @@ class SignalGenerator:
 
         current_session = self._get_current_session()
 
-        # Session-optimized parameters - UPDATED POST 12-MONTH BACKTEST
-        # Reduced confidence thresholds by 5-8% for viable signal generation
+        # STABILIZED_V1 parameters - STABILITY IMPROVEMENTS IMPLEMENTATION
+        # Regularized parameters closer to Universal Cycle 4 baseline for improved stability
+        # Walk-forward stability improvement target: 34.4/100 → 60+/100
         session_params = {
             TradingSession.LONDON: {
-                'confidence_threshold': 62.0,  # Reduced from 72% (10% reduction)
-                'min_risk_reward': 3.0,        # Slightly reduced from 3.2 for more signals
-                'atr_multiplier_stop': 0.45,
-                'source': 'cycle_5_london_optimized_v2'
+                'confidence_threshold': 68.0,  # Regularized from 62% → closer to universal 70%
+                'min_risk_reward': 2.9,        # Regularized from 3.0 → closer to universal 2.8
+                'atr_multiplier_stop': 0.55,   # Regularized from 0.45 → closer to universal 0.6
+                'source': 'stabilized_london_v1'
             },
             TradingSession.NEW_YORK: {
-                'confidence_threshold': 62.0,  # Reduced from 70% (8% reduction)
-                'min_risk_reward': 2.8,
-                'atr_multiplier_stop': 0.6,
-                'source': 'cycle_4_newyork_optimized_v2'
+                'confidence_threshold': 68.0,  # Improved from 62% → better stability
+                'min_risk_reward': 2.8,        # Keep optimal (matches universal)
+                'atr_multiplier_stop': 0.6,    # Keep optimal (matches universal)
+                'source': 'stabilized_newyork_v1'
             },
             TradingSession.TOKYO: {
-                'confidence_threshold': 75.0,  # Reduced from 85% (10% reduction)
-                'min_risk_reward': 3.5,        # Reduced from 4.0 for more signals
-                'atr_multiplier_stop': 0.35,   # Slightly increased for better stops
-                'source': 'cycle_2_tokyo_optimized_v2'
+                'confidence_threshold': 72.0,  # Reduced from 75% → improve signal frequency
+                'min_risk_reward': 3.2,        # Reduced from 3.5 → improve stability
+                'atr_multiplier_stop': 0.5,    # Regularized from 0.35 → closer to universal
+                'source': 'stabilized_tokyo_v1'
             },
             TradingSession.SYDNEY: {
-                'confidence_threshold': 68.0,  # Reduced from 78% (10% reduction)
-                'min_risk_reward': 3.2,        # Reduced from 3.5 for more signals
-                'atr_multiplier_stop': 0.4,
-                'source': 'cycle_3_sydney_optimized_v2'
+                'confidence_threshold': 69.0,  # Improved from 68% → closer to universal
+                'min_risk_reward': 3.0,        # Reduced from 3.2 → improve stability
+                'atr_multiplier_stop': 0.55,   # Regularized from 0.4 → closer to universal
+                'source': 'stabilized_sydney_v1'
             },
             TradingSession.LONDON_NY_OVERLAP: {
-                'confidence_threshold': 62.0,  # Reduced from 70% (8% reduction)
-                'min_risk_reward': 2.8,
-                'atr_multiplier_stop': 0.6,
-                'source': 'cycle_4_overlap_optimized_v2'
+                'confidence_threshold': 68.0,  # Improved from 62% → better stability
+                'min_risk_reward': 2.8,        # Keep optimal (matches universal)
+                'atr_multiplier_stop': 0.6,    # Keep optimal (matches universal)
+                'source': 'stabilized_overlap_v1'
             }
         }
 
