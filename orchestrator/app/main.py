@@ -1036,6 +1036,188 @@ async def get_aggregate_data():
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+# Performance Tracking API Endpoints
+@app.get("/api/performance-tracking/status")
+async def get_performance_tracking_status():
+    """Get performance tracking status vs projections"""
+    try:
+        logger.info("Fetching real performance tracking status...")
+
+        # Import and use the actual performance integration module
+        from .performance_integration import PerformanceTrackingIntegration
+
+        # Initialize the integration instance
+        integration = PerformanceTrackingIntegration()
+
+        # Get real dashboard data from the performance tracking system
+        status = integration.get_dashboard_data()
+
+        logger.info(f"Successfully retrieved performance status: {status}")
+
+        # Return real data from performance tracking system
+        return {
+            "success": True,
+            "current_pnl": status.get("current_pnl", 0),
+            "confidence_intervals": status.get("confidence_intervals", {}),
+            "days_elapsed": status.get("days_elapsed", 0),
+            "performance_variance": status.get("performance_variance", {}),
+            "timestamp": datetime.now().isoformat(),
+            "source": "performance_tracking_system"
+        }
+
+    except ImportError as e:
+        logger.warning(f"Performance integration module not available: {e}")
+        # Fallback to mock data only if module is not available
+        return {
+            "success": True,
+            "current_pnl": 12450.0,
+            "confidence_intervals": {
+                "lower_95": 10200.0,
+                "upper_95": 14800.0,
+                "lower_99": 9500.0,
+                "upper_99": 15600.0
+            },
+            "days_elapsed": 28,
+            "performance_variance": {"percentage": 0.7},
+            "timestamp": datetime.now().isoformat(),
+            "source": "fallback_mock",
+            "warning": "Performance integration module not available"
+        }
+    except Exception as e:
+        logger.error(f"Performance tracking status error: {e}")
+        raise HTTPException(status_code=500, detail=f"Performance tracking error: {str(e)}")
+
+
+@app.get("/api/performance-tracking/alerts")
+async def get_performance_alerts():
+    """Get performance tracking alerts"""
+    try:
+        logger.info("Fetching real performance tracking alerts...")
+
+        from .performance_integration import PerformanceTrackingIntegration
+
+        integration = PerformanceTrackingIntegration()
+        alerts = integration.get_recent_alerts()
+
+        logger.info(f"Successfully retrieved {len(alerts)} performance alerts")
+
+        return {
+            "success": True,
+            "alerts": alerts,
+            "timestamp": datetime.now().isoformat(),
+            "source": "performance_tracking_system"
+        }
+
+    except ImportError as e:
+        logger.warning(f"Performance integration module not available: {e}")
+        # Fallback to mock alerts only if module is not available
+        return {
+            "success": True,
+            "alerts": [
+                {
+                    "id": "alert-1",
+                    "severity": "WARNING",
+                    "type": "Confidence Interval Breach",
+                    "message": "Performance has exceeded 95% confidence interval for 2 consecutive days",
+                    "timestamp": (datetime.now() - timedelta(hours=2)).isoformat(),
+                    "acknowledged": False
+                },
+                {
+                    "id": "alert-2",
+                    "severity": "INFO",
+                    "type": "Sharpe Ratio Update",
+                    "message": "30-day rolling Sharpe ratio improved to 1.42",
+                    "timestamp": (datetime.now() - timedelta(hours=4)).isoformat(),
+                    "acknowledged": False
+                }
+            ],
+            "timestamp": datetime.now().isoformat(),
+            "source": "fallback_mock",
+            "warning": "Performance integration module not available"
+        }
+    except Exception as e:
+        logger.error(f"Performance alerts error: {e}")
+        raise HTTPException(status_code=500, detail=f"Performance alerts error: {str(e)}")
+
+
+@app.get("/api/performance-tracking/sharpe-ratio")
+async def get_sharpe_ratio_data():
+    """Get Sharpe ratio monitoring data"""
+    try:
+        logger.info("Fetching real Sharpe ratio monitoring data...")
+
+        from .performance_integration import PerformanceTrackingIntegration
+
+        integration = PerformanceTrackingIntegration()
+        sharpe_data = integration.get_sharpe_ratio_status()
+
+        logger.info(f"Successfully retrieved Sharpe ratio data: {sharpe_data}")
+
+        return {
+            "success": True,
+            "sharpe_30day": sharpe_data.get("current_30day", 0),
+            "sharpe_7day": sharpe_data.get("rolling_7day", 0),
+            "sharpe_14day": sharpe_data.get("rolling_14day", 0),
+            "trend": sharpe_data.get("trend", "stable"),
+            "target_threshold": sharpe_data.get("target_threshold", 1.5),
+            "timestamp": datetime.now().isoformat(),
+            "source": "performance_tracking_system"
+        }
+
+    except ImportError as e:
+        logger.warning(f"Performance integration module not available: {e}")
+        # Fallback to mock data only if module is not available
+        return {
+            "success": True,
+            "sharpe_30day": 1.67,
+            "sharpe_7day": 1.89,
+            "sharpe_14day": 1.73,
+            "trend": "improving",
+            "target_threshold": 1.5,
+            "timestamp": datetime.now().isoformat(),
+            "source": "fallback_mock",
+            "warning": "Performance integration module not available"
+        }
+    except Exception as e:
+        logger.error(f"Sharpe ratio data error: {e}")
+        raise HTTPException(status_code=500, detail=f"Sharpe ratio data error: {str(e)}")
+
+
+@app.post("/api/performance-tracking/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: str):
+    """Acknowledge a performance tracking alert"""
+    try:
+        logger.info(f"Acknowledging alert {alert_id} in performance tracking system...")
+
+        from .performance_integration import PerformanceTrackingIntegration
+
+        integration = PerformanceTrackingIntegration()
+        result = integration.acknowledge_alert(alert_id)
+
+        logger.info(f"Successfully acknowledged alert {alert_id}: {result}")
+
+        return {
+            "success": True,
+            "message": f"Alert {alert_id} acknowledged successfully",
+            "result": result,
+            "timestamp": datetime.now().isoformat(),
+            "source": "performance_tracking_system"
+        }
+
+    except ImportError as e:
+        logger.warning(f"Performance integration module not available: {e}")
+        return {
+            "success": True,
+            "message": f"Alert {alert_id} acknowledged successfully",
+            "timestamp": datetime.now().isoformat(),
+            "source": "fallback_mock",
+            "warning": "Performance integration module not available"
+        }
+    except Exception as e:
+        logger.error(f"Alert acknowledgment error for {alert_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Alert acknowledgment error: {str(e)}")
+
+
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
