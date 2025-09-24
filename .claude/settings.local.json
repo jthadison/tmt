@@ -61,7 +61,10 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(cmd //c:*)"
+      "Bash(cmd //c:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(tasklist)",
+      "Bash(PORT=8082 python:*)"
     ],
     "deny": [],
     "ask": [],
