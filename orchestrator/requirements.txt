@@ -78,3 +78,6 @@ environs==10.3.0
 
 # Scheduling
 schedule==1.2.0
+
+# Authentication
+PyJWT==2.8.0

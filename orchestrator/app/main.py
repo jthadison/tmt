@@ -35,7 +35,12 @@ from .rollback_monitor import get_rollback_monitor_service
 from .recovery_validator import get_recovery_validator
 from .emergency_contacts import get_emergency_contact_system
 from .forward_test_position_sizing import get_forward_test_sizing
-from .performance_alert_scheduler import get_alert_scheduler
+from .async_alert_scheduler import get_async_alert_scheduler
+from .alert_auth import (
+    get_auth_config, get_current_user, require_view_status, require_view_history,
+    require_trigger_manual, require_enable_disable, require_admin,
+    LoginRequest, LoginResponse, UserInfoResponse, AlertUser
+)
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
@@ -1667,18 +1672,67 @@ async def toggle_forward_test_sizing():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Performance Alert Scheduler API Endpoints
+# Authentication endpoints for performance alerts
+@app.post("/api/performance-alerts/auth/login", response_model=LoginResponse)
+async def login_for_alerts(request: LoginRequest):
+    """Login with API key and receive JWT token"""
+    try:
+        auth_config = get_auth_config()
+
+        if not auth_config.enabled:
+            raise HTTPException(status_code=400, detail="Authentication not enabled")
+
+        user = auth_config.verify_api_key(request.api_key)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        # Create JWT token
+        access_token = auth_config.create_jwt_token(user)
+
+        return LoginResponse(
+            access_token=access_token,
+            expires_in=auth_config.jwt_expire_hours * 3600,
+            user={
+                "user_id": user.user_id,
+                "username": user.username,
+                "roles": [role.value for role in user.roles],
+                "permissions": [perm.value for perm in user.permissions]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during alert login: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/performance-alerts/auth/me", response_model=UserInfoResponse)
+async def get_current_user_info(user: AlertUser = Depends(get_current_user)):
+    """Get current user information"""
+    return UserInfoResponse(
+        user_id=user.user_id,
+        username=user.username,
+        roles=[role.value for role in user.roles],
+        permissions=[perm.value for perm in user.permissions],
+        last_used=user.last_used.isoformat() if user.last_used else None,
+        enabled=user.enabled
+    )
+
+
+# Performance Alert Scheduler API Endpoints (with authentication)
 @app.get("/api/performance-alerts/schedule/status")
-async def get_alert_schedule_status():
+async def get_alert_schedule_status(user: AlertUser = Depends(require_view_status)):
     """Get performance alert scheduler status"""
     try:
-        alert_scheduler = get_alert_scheduler()
+        alert_scheduler = get_async_alert_scheduler()
         status = alert_scheduler.get_schedule_status()
 
         return {
             "success": True,
             "data": status,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "authenticated_user": user.username if user else "system"
         }
 
     except Exception as e:
@@ -1687,10 +1741,13 @@ async def get_alert_schedule_status():
 
 
 @app.post("/api/performance-alerts/schedule/trigger/{alert_name}")
-async def manually_trigger_scheduled_alert(alert_name: str):
+async def manually_trigger_scheduled_alert(
+    alert_name: str,
+    user: AlertUser = Depends(require_trigger_manual)
+):
     """Manually trigger a scheduled performance alert"""
     try:
-        alert_scheduler = get_alert_scheduler()
+        alert_scheduler = get_async_alert_scheduler()
 
         # Find the alert config
         alert_config = None
@@ -1702,13 +1759,14 @@ async def manually_trigger_scheduled_alert(alert_name: str):
         if not alert_config:
             raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
 
-        # Execute the alert manually
-        alert_scheduler._execute_scheduled_alert(alert_config)
+        # Execute the alert manually (async)
+        await alert_scheduler._execute_alert_function(alert_config)
 
         return {
             "success": True,
             "message": f"Alert '{alert_name}' executed successfully",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "triggered_by": user.username
         }
 
     except HTTPException:
@@ -1719,7 +1777,10 @@ async def manually_trigger_scheduled_alert(alert_name: str):
 
 
 @app.get("/api/performance-alerts/schedule/summary/{hours}")
-async def get_alert_summary(hours: int = 24):
+async def get_alert_summary(
+    hours: int = 24,
+    user: AlertUser = Depends(require_view_history)
+):
     """Get alert summary for specified hours"""
     try:
         if hours < 1 or hours > 168:  # Max 1 week
@@ -1731,7 +1792,8 @@ async def get_alert_summary(hours: int = 24):
         return {
             "success": True,
             "data": summary,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "requested_by": user.username
         }
 
     except HTTPException:
@@ -1742,21 +1804,24 @@ async def get_alert_summary(hours: int = 24):
 
 
 @app.post("/api/performance-alerts/schedule/enable/{alert_name}")
-async def enable_scheduled_alert(alert_name: str):
+async def enable_scheduled_alert(
+    alert_name: str,
+    user: AlertUser = Depends(require_enable_disable)
+):
     """Enable a scheduled performance alert"""
     try:
-        alert_scheduler = get_alert_scheduler()
+        alert_scheduler = get_async_alert_scheduler()
 
         # Find and enable the alert
         for config in alert_scheduler.scheduled_alerts:
             if config.name == alert_name:
                 config.enabled = True
-                alert_scheduler._setup_schedules()  # Re-setup schedules
 
                 return {
                     "success": True,
                     "message": f"Alert '{alert_name}' enabled successfully",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "modified_by": user.username
                 }
 
         raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
@@ -1769,21 +1834,24 @@ async def enable_scheduled_alert(alert_name: str):
 
 
 @app.post("/api/performance-alerts/schedule/disable/{alert_name}")
-async def disable_scheduled_alert(alert_name: str):
+async def disable_scheduled_alert(
+    alert_name: str,
+    user: AlertUser = Depends(require_enable_disable)
+):
     """Disable a scheduled performance alert"""
     try:
-        alert_scheduler = get_alert_scheduler()
+        alert_scheduler = get_async_alert_scheduler()
 
         # Find and disable the alert
         for config in alert_scheduler.scheduled_alerts:
             if config.name == alert_name:
                 config.enabled = False
-                alert_scheduler._setup_schedules()  # Re-setup schedules
 
                 return {
                     "success": True,
                     "message": f"Alert '{alert_name}' disabled successfully",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "modified_by": user.username
                 }
 
         raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
