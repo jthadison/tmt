@@ -33,6 +33,7 @@ from .emergency_rollback import get_emergency_rollback_system, RollbackTrigger
 from .rollback_monitor import get_rollback_monitor_service
 from .recovery_validator import get_recovery_validator
 from .emergency_contacts import get_emergency_contact_system
+from .forward_test_position_sizing import get_forward_test_sizing
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
@@ -1589,6 +1590,79 @@ async def acknowledge_alert(alert_id: str):
     except Exception as e:
         logger.error(f"Alert acknowledgment error for {alert_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Alert acknowledgment error: {str(e)}")
+
+
+# Forward Test Position Sizing Management
+class ForwardMetricsUpdate(BaseModel):
+    walk_forward_stability: Optional[float] = None
+    out_of_sample_validation: Optional[float] = None
+    overfitting_score: Optional[float] = None
+    kurtosis_exposure: Optional[float] = None
+    months_of_data: Optional[int] = None
+
+
+@app.get("/position-sizing/forward-test/status")
+async def get_forward_test_sizing_status():
+    """Get current forward test position sizing status"""
+    try:
+        forward_sizing = get_forward_test_sizing()
+        status = await forward_sizing.get_current_sizing_status()
+        return {
+            "success": True,
+            "data": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting forward test sizing status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/position-sizing/forward-test/update-metrics")
+async def update_forward_test_metrics(request: ForwardMetricsUpdate):
+    """Update forward test metrics"""
+    try:
+        forward_sizing = get_forward_test_sizing()
+
+        # Convert request to dict, filtering out None values
+        metrics_dict = {k: v for k, v in request.dict().items() if v is not None}
+
+        if not metrics_dict:
+            raise HTTPException(status_code=400, detail="No valid metrics provided")
+
+        await forward_sizing.update_forward_metrics(metrics_dict)
+
+        return {
+            "success": True,
+            "message": "Forward test metrics updated successfully",
+            "updated_metrics": metrics_dict,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating forward test metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/position-sizing/forward-test/toggle")
+async def toggle_forward_test_sizing():
+    """Toggle forward test position sizing on/off"""
+    try:
+        current_state = os.getenv("USE_FORWARD_TEST_SIZING", "true").lower() == "true"
+        new_state = not current_state
+
+        # This would typically update environment or configuration
+        # For now, we'll just return the current state and instruction
+        return {
+            "success": True,
+            "current_state": current_state,
+            "message": f"To toggle forward test sizing, set environment variable USE_FORWARD_TEST_SIZING={str(new_state).lower()}",
+            "restart_required": True,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error toggling forward test sizing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # WebSocket endpoint for real-time updates

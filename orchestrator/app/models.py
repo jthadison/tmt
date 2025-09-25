@@ -40,6 +40,15 @@ class TradeResult(BaseModel):
     account_id: Optional[str] = None
 
 
+class TradingSession(str, Enum):
+    """Trading session enumeration"""
+    SYDNEY = "sydney"
+    TOKYO = "tokyo"
+    LONDON = "london"
+    NEW_YORK = "new_york"
+    OVERLAP = "overlap"
+
+
 class AgentStatus(str, Enum):
     """Agent status enumeration"""
     ACTIVE = "active"
