@@ -68,7 +68,10 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr diff:*)",
       "Bash(gh pr merge:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(npm test:*)",
+      "Bash(gh:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": [],
