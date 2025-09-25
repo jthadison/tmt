@@ -225,7 +225,9 @@ class TradeSyncService:
     async def _add_trade(self, oanda_trade: Dict[str, Any]) -> bool:
         """Add a new trade to database"""
         trade_data = self._convert_oanda_to_db_format(oanda_trade)
-        trade_data["status"] = TradeStatus.OPEN
+        # Ensure status is set
+        if "status" not in trade_data:
+            trade_data["status"] = TradeStatus.OPEN
         return await self.db.upsert_trade(trade_data)
 
     async def _update_trade(self, oanda_trade: Dict[str, Any], db_trade: Dict[str, Any]) -> bool:
@@ -316,6 +318,7 @@ class TradeSyncService:
             "take_profit": float(oanda_trade.get("takeProfitOrder", {}).get("price", 0)) if oanda_trade.get("takeProfitOrder") else None,
             "pnl_unrealized": float(oanda_trade.get("unrealizedPL", 0)),
             "commission": float(oanda_trade.get("financing", 0)),
+            "status": TradeStatus.OPEN,
             "metadata": {
                 "oanda_state": oanda_trade.get("state"),
                 "margin_used": oanda_trade.get("marginUsed"),

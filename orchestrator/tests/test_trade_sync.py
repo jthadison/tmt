@@ -73,6 +73,36 @@ def mock_oanda_client():
     )
     client.get_account_info = AsyncMock(return_value=mock_account)
 
+    # Mock reconciliation methods
+    client.get_open_trades = AsyncMock(return_value={
+        "trades": [
+            {
+                "id": "1001",
+                "instrument": "EUR_USD",
+                "currentUnits": "1000",
+                "unrealizedPL": "50.0",
+                "stopLossOrder": None,
+                "takeProfitOrder": None
+            },
+            {
+                "id": "1002",
+                "instrument": "GBP_USD",
+                "currentUnits": "-500",
+                "unrealizedPL": "-25.0",
+                "stopLossOrder": None,
+                "takeProfitOrder": None
+            }
+        ]
+    })
+
+    client.get_account = AsyncMock(return_value={
+        "account": {
+            "id": "test-account-001",
+            "unrealizedPL": "25.0",
+            "balance": "100000.0"
+        }
+    })
+
     return client
 
 
@@ -136,7 +166,7 @@ async def test_database_operations(test_db):
 
 
 @pytest.mark.asyncio
-async def test_sync_service(mock_oanda_client, mock_event_bus):
+async def test_sync_service(mock_oanda_client, mock_event_bus, test_db):
     """Test trade synchronization service"""
     sync_service = TradeSyncService(
         oanda_client=mock_oanda_client,
@@ -144,7 +174,10 @@ async def test_sync_service(mock_oanda_client, mock_event_bus):
         sync_interval=30
     )
 
-    await sync_service.initialize()
+    # Override with test database
+    sync_service.db = test_db
+    # Don't call initialize as that would create tables again
+    # await sync_service.initialize()
 
     # Perform sync
     result = await sync_service.sync_trades()
@@ -172,18 +205,21 @@ async def test_sync_service(mock_oanda_client, mock_event_bus):
     # Verify events were published
     assert mock_event_bus.publish.call_count == 2
 
-    await sync_service.db.close()
+    # Don't close the database - it's managed by the test fixture
 
 
 @pytest.mark.asyncio
-async def test_reconciliation(mock_oanda_client):
+async def test_reconciliation(mock_oanda_client, test_db):
     """Test reconciliation service"""
     reconciliation = TradeReconciliation(
         oanda_client=mock_oanda_client,
         auto_fix=True
     )
 
-    await reconciliation.initialize()
+    # Override with test database
+    reconciliation.db = test_db
+    # Don't call initialize as that would create tables again
+    # await reconciliation.initialize()
 
     # Add a trade that doesn't exist in OANDA (orphaned)
     orphaned_trade = {
@@ -210,7 +246,7 @@ async def test_reconciliation(mock_oanda_client):
         # Auto-fix should mark it as closed
         assert fixed_trade["status"] == TradeStatus.CLOSED
 
-    await reconciliation.db.close()
+    # Don't close the database - it's managed by the test fixture
 
 
 @pytest.mark.asyncio
