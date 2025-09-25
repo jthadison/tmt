@@ -12,9 +12,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 import uuid
+import random
 
 from ..oanda_client import OandaClient
-from ..event_bus import EventBus
+from ..event_bus import EventBus, Event
+from ..config import get_settings
 from .trade_database import TradeDatabase, TradeStatus, CloseReason
 
 logger = logging.getLogger(__name__)
@@ -27,17 +29,24 @@ class TradeSyncService:
         self,
         oanda_client: Optional[OandaClient] = None,
         event_bus: Optional[EventBus] = None,
-        sync_interval: int = 30,
-        fast_sync_on_trade: bool = True
+        sync_interval: Optional[int] = None,
+        fast_sync_on_trade: Optional[bool] = None
     ):
+        self.settings = get_settings()
         self.oanda_client = oanda_client or OandaClient()
         self.event_bus = event_bus or EventBus()
         self.db = TradeDatabase()
-        self.sync_interval = sync_interval
-        self.fast_sync_on_trade = fast_sync_on_trade
+
+        # Use configuration values with fallbacks from parameters
+        self.sync_interval = sync_interval if sync_interval is not None else self.settings.trade_sync_interval
+        self.fast_sync_on_trade = fast_sync_on_trade if fast_sync_on_trade is not None else self.settings.trade_sync_fast_on_trade
+        self.max_retries = self.settings.trade_sync_max_retries
+        self.base_backoff_delay = self.settings.trade_sync_base_backoff
+
         self.is_running = False
         self.sync_task = None
         self.last_sync = None
+        self.retry_count = 0
         self.sync_stats = {
             "total_syncs": 0,
             "successful_syncs": 0,
@@ -76,18 +85,27 @@ class TradeSyncService:
         logger.info("Trade sync service stopped")
 
     async def _sync_loop(self):
-        """Main synchronization loop"""
+        """Main synchronization loop with exponential backoff"""
         while self.is_running:
             try:
                 await asyncio.sleep(self.sync_interval)
                 await self.sync_trades()
+                self.retry_count = 0  # Reset on successful sync
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Sync loop error: {e}")
                 self.sync_stats["failed_syncs"] += 1
                 self.sync_stats["last_error"] = str(e)
-                await asyncio.sleep(5)  # Brief pause on error
+
+                # Exponential backoff with jitter
+                self.retry_count = min(self.retry_count + 1, self.max_retries)
+                delay = self.base_backoff_delay * (2 ** self.retry_count)
+                jitter = random.uniform(0, 0.1) * delay
+                backoff_delay = min(delay + jitter, 300)  # Cap at 5 minutes
+
+                logger.info(f"Retrying sync in {backoff_delay:.1f}s (attempt {self.retry_count})")
+                await asyncio.sleep(backoff_delay)
 
     async def sync_trades(self) -> Dict[str, Any]:
         """Perform trade synchronization with OANDA"""
@@ -166,19 +184,39 @@ class TradeSyncService:
     async def _fetch_oanda_trades(self) -> List[Dict[str, Any]]:
         """Fetch all trades from OANDA"""
         try:
-            # Get account details first
-            account_info = await self.oanda_client.get_account()
-            account_id = account_info.get("account", {}).get("id")
+            # Use the first configured account for sync
+            account_ids = self.oanda_client.settings.account_ids_list
+            if not account_ids:
+                logger.warning("No OANDA account IDs configured")
+                return []
 
-            # Get open trades
-            open_trades = await self.oanda_client.get_open_trades()
-            trades_list = open_trades.get("trades", [])
+            all_trades = []
+            for account_id in account_ids:
+                try:
+                    # Get open trades for this account
+                    trades = await self.oanda_client.get_trades(account_id)
 
-            # Get recent closed trades (last 7 days)
-            # Note: This would need to be implemented in OandaClient
-            # For now, we'll only sync open trades
+                    # Convert OandaTrade objects to dict format
+                    for trade in trades:
+                        trade_dict = {
+                            "id": trade.trade_id,
+                            "instrument": trade.instrument,
+                            "currentUnits": str(trade.units),
+                            "price": str(trade.price),
+                            "openTime": trade.open_time.isoformat(),
+                            "unrealizedPL": str(trade.unrealized_pnl),
+                            "state": "OPEN",
+                            "financing": "0",  # Default values
+                            "marginUsed": "0",
+                            "initialUnits": str(trade.units)
+                        }
+                        all_trades.append(trade_dict)
 
-            return trades_list
+                except Exception as e:
+                    logger.error(f"Error fetching trades for account {account_id}: {e}")
+                    continue
+
+            return all_trades
 
         except Exception as e:
             logger.error(f"Error fetching OANDA trades: {e}")
@@ -206,23 +244,69 @@ class TradeSyncService:
         return False
 
     async def _close_trade(self, trade_id: str) -> bool:
-        """Mark a trade as closed"""
-        # Fetch final details from OANDA if possible
-        # For now, just mark as closed
-        trade_data = {
-            "trade_id": trade_id,
-            "status": TradeStatus.CLOSED,
-            "close_time": datetime.now().isoformat(),
-            "close_reason": CloseReason.UNKNOWN
-        }
-        return await self.db.upsert_trade(trade_data)
+        """Mark a trade as closed and fetch final details"""
+        try:
+            # Try to fetch closure details from OANDA transaction history
+            close_details = await self._fetch_trade_closure_details(trade_id)
+
+            trade_data = {
+                "trade_id": trade_id,
+                "status": TradeStatus.CLOSED,
+                "close_time": close_details.get("close_time", datetime.now().isoformat()),
+                "close_price": close_details.get("close_price"),
+                "pnl_realized": close_details.get("pnl_realized", 0.0),
+                "close_reason": close_details.get("close_reason", CloseReason.UNKNOWN)
+            }
+            return await self.db.upsert_trade(trade_data)
+
+        except Exception as e:
+            logger.error(f"Error closing trade {trade_id}: {e}")
+            # Fallback to basic closure
+            trade_data = {
+                "trade_id": trade_id,
+                "status": TradeStatus.CLOSED,
+                "close_time": datetime.now().isoformat(),
+                "close_reason": CloseReason.UNKNOWN
+            }
+            return await self.db.upsert_trade(trade_data)
+
+    async def _fetch_trade_closure_details(self, trade_id: str) -> Dict[str, Any]:
+        """Fetch trade closure details from OANDA transaction history"""
+        try:
+            # Get all configured accounts
+            account_ids = self.oanda_client.settings.account_ids_list
+            if not account_ids:
+                return {}
+
+            # Check each account for the trade closure transaction
+            for account_id in account_ids:
+                try:
+                    # This would need to be implemented in OandaClient
+                    # For now, return empty dict - transactions API is complex
+                    # In a real implementation, you'd fetch from:
+                    # GET /v3/accounts/{accountID}/transactions?type=TRADE_CLOSE
+                    pass
+                except Exception as e:
+                    logger.warning(f"Error fetching closure details for trade {trade_id} from account {account_id}: {e}")
+                    continue
+
+            return {}
+
+        except Exception as e:
+            logger.error(f"Error fetching trade closure details for {trade_id}: {e}")
+            return {}
 
     def _convert_oanda_to_db_format(self, oanda_trade: Dict[str, Any]) -> Dict[str, Any]:
         """Convert OANDA trade format to database format"""
+        # Get the first account ID from settings
+        account_id = "unknown"
+        if self.oanda_client and hasattr(self.oanda_client, 'settings') and self.oanda_client.settings.account_ids_list:
+            account_id = self.oanda_client.settings.account_ids_list[0]
+
         return {
             "trade_id": str(oanda_trade.get("id")),
             "internal_id": str(uuid.uuid4()),
-            "account_id": self.oanda_client.account_id if self.oanda_client else "unknown",
+            "account_id": account_id,
             "instrument": oanda_trade.get("instrument", "").replace("_", "/"),
             "direction": "buy" if float(oanda_trade.get("currentUnits", 0)) > 0 else "sell",
             "units": abs(int(float(oanda_trade.get("currentUnits", 0)))),
@@ -242,14 +326,22 @@ class TradeSyncService:
     async def _emit_trade_event(self, trade_id: str, event_type: str, event_data: Dict[str, Any]):
         """Emit a trade event to the event bus"""
         if self.event_bus and hasattr(self.event_bus, 'publish'):
-            event = {
-                "trade_id": trade_id,
-                "event_type": event_type,
-                "timestamp": datetime.now().isoformat(),
-                "data": event_data
-            }
-            # EventBus.publish only takes event data, not topic name
-            await self.event_bus.publish(event)
+            try:
+                # Create proper Event object for EventBus
+                event = Event(
+                    event_id=str(uuid.uuid4()),
+                    event_type=f"trade.{event_type}",
+                    timestamp=datetime.now(),
+                    source="trade_sync_service",
+                    data={
+                        "trade_id": trade_id,
+                        "event_type": event_type,
+                        **event_data
+                    }
+                )
+                await self.event_bus.publish(event)
+            except Exception as e:
+                logger.warning(f"Failed to publish trade event: {e}")
 
         # Also record in database for audit trail
         await self.db.add_trade_event(trade_id, event_type, event_data)

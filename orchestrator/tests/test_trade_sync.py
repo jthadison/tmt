@@ -33,42 +33,55 @@ async def test_db():
 def mock_oanda_client():
     """Create a mock OANDA client"""
     client = Mock()
-    client.account_id = "test-account-001"
 
-    # Mock get_account method
-    client.get_account = AsyncMock(return_value={
-        "account": {
-            "id": "test-account-001",
-            "balance": 100000.0,
-            "unrealizedPL": 150.50
-        }
-    })
+    # Mock settings with account IDs
+    client.settings = Mock()
+    client.settings.account_ids_list = ["test-account-001"]
 
-    # Mock get_open_trades method
-    client.get_open_trades = AsyncMock(return_value={
-        "trades": [
-            {
-                "id": "1001",
-                "instrument": "EUR_USD",
-                "currentUnits": "1000",
-                "price": "1.1250",
-                "openTime": "2025-09-25T10:00:00Z",
-                "unrealizedPL": "50.00",
-                "stopLossOrder": {"price": "1.1200"},
-                "takeProfitOrder": {"price": "1.1300"}
-            },
-            {
-                "id": "1002",
-                "instrument": "GBP_USD",
-                "currentUnits": "-500",
-                "price": "1.3500",
-                "openTime": "2025-09-25T11:00:00Z",
-                "unrealizedPL": "-25.00"
-            }
-        ]
-    })
+    # Mock OandaTrade objects
+    from orchestrator.app.oanda_client import OandaTrade
+    mock_trade_1 = OandaTrade(
+        trade_id="1001",
+        instrument="EUR_USD",
+        units=1000.0,
+        price=1.1250,
+        unrealized_pnl=50.0,
+        open_time=datetime(2025, 9, 25, 10, 0, 0)
+    )
+    mock_trade_2 = OandaTrade(
+        trade_id="1002",
+        instrument="GBP_USD",
+        units=-500.0,
+        price=1.3500,
+        unrealized_pnl=-25.0,
+        open_time=datetime(2025, 9, 25, 11, 0, 0)
+    )
+
+    # Mock get_trades method
+    client.get_trades = AsyncMock(return_value=[mock_trade_1, mock_trade_2])
+
+    # Mock get_account_info method
+    from orchestrator.app.oanda_client import OandaAccount
+    mock_account = OandaAccount(
+        account_id="test-account-001",
+        balance=100000.0,
+        unrealized_pnl=150.50,
+        margin_used=1000.0,
+        margin_available=99000.0,
+        open_trade_count=2,
+        currency="USD"
+    )
+    client.get_account_info = AsyncMock(return_value=mock_account)
 
     return client
+
+
+@pytest.fixture
+def mock_event_bus():
+    """Create a mock EventBus"""
+    event_bus = Mock()
+    event_bus.publish = AsyncMock()
+    return event_bus
 
 
 @pytest.mark.asyncio
@@ -123,10 +136,11 @@ async def test_database_operations(test_db):
 
 
 @pytest.mark.asyncio
-async def test_sync_service(mock_oanda_client):
+async def test_sync_service(mock_oanda_client, mock_event_bus):
     """Test trade synchronization service"""
     sync_service = TradeSyncService(
         oanda_client=mock_oanda_client,
+        event_bus=mock_event_bus,
         sync_interval=30
     )
 
@@ -154,6 +168,9 @@ async def test_sync_service(mock_oanda_client):
     assert gbp_trade is not None
     assert gbp_trade["direction"] == "sell"
     assert gbp_trade["units"] == 500
+
+    # Verify events were published
+    assert mock_event_bus.publish.call_count == 2
 
     await sync_service.db.close()
 

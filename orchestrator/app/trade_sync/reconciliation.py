@@ -13,6 +13,7 @@ from decimal import Decimal
 import json
 
 from ..oanda_client import OandaClient
+from ..config import get_settings
 from .trade_database import TradeDatabase, TradeStatus
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,17 @@ class TradeReconciliation:
     def __init__(
         self,
         oanda_client: Optional[OandaClient] = None,
-        reconciliation_interval_hours: int = 1,
-        auto_fix: bool = True
+        reconciliation_interval_hours: Optional[int] = None,
+        auto_fix: Optional[bool] = None
     ):
+        self.settings = get_settings()
         self.oanda_client = oanda_client or OandaClient()
         self.db = TradeDatabase()
-        self.reconciliation_interval = timedelta(hours=reconciliation_interval_hours)
-        self.auto_fix = auto_fix
+
+        # Use configuration values with fallbacks from parameters
+        interval_hours = reconciliation_interval_hours if reconciliation_interval_hours is not None else self.settings.trade_reconciliation_interval_hours
+        self.reconciliation_interval = timedelta(hours=interval_hours)
+        self.auto_fix = auto_fix if auto_fix is not None else self.settings.trade_sync_auto_fix
         self.last_reconciliation = None
         self.issues = []
         self.is_running = False

@@ -37,11 +37,14 @@ class CloseReason(str, Enum):
 
 
 class TradeDatabase:
-    """Manages trade data persistence and retrieval"""
+    """Manages trade data persistence and retrieval with connection pooling"""
 
-    def __init__(self, db_path: str = "trades.db"):
+    def __init__(self, db_path: str = "trades.db", max_connections: int = 5):
         self.db_path = db_path
+        self.max_connections = max_connections
         self.connection = None
+        self.connection_pool = []
+        self.pool_lock = asyncio.Lock()
 
     async def initialize(self):
         """Initialize database connection and create tables if needed"""
@@ -168,6 +171,77 @@ class TradeDatabase:
         except Exception as e:
             logger.error(f"Error upserting trade: {e}")
             return False
+
+    async def bulk_upsert_trades(self, trades_data: List[Dict[str, Any]]) -> int:
+        """Bulk insert or update multiple trade records"""
+        if not trades_data:
+            return 0
+
+        successful_count = 0
+        try:
+            # Prepare all trade data
+            trade_params = []
+            for trade_data in trades_data:
+                metadata = json.dumps(trade_data.get("metadata", {}))
+                now = datetime.now().isoformat()
+
+                params = (
+                    trade_data["trade_id"],
+                    trade_data.get("internal_id", trade_data["trade_id"]),
+                    trade_data.get("signal_id"),
+                    trade_data["account_id"],
+                    trade_data["instrument"],
+                    trade_data["direction"],
+                    trade_data["units"],
+                    trade_data.get("entry_price"),
+                    trade_data.get("entry_time"),
+                    trade_data.get("stop_loss"),
+                    trade_data.get("take_profit"),
+                    trade_data.get("close_price"),
+                    trade_data.get("close_time"),
+                    trade_data["status"],
+                    trade_data.get("pnl_realized", 0),
+                    trade_data.get("pnl_unrealized", 0),
+                    trade_data.get("commission", 0),
+                    trade_data.get("swap", 0),
+                    trade_data.get("close_reason"),
+                    now,
+                    metadata,
+                    now
+                )
+                trade_params.append(params)
+
+            # Execute bulk insert/update
+            await self.connection.executemany("""
+                INSERT INTO trades (
+                    trade_id, internal_id, signal_id, account_id, instrument,
+                    direction, units, entry_price, entry_time, stop_loss,
+                    take_profit, close_price, close_time, status,
+                    pnl_realized, pnl_unrealized, commission, swap,
+                    close_reason, last_sync_time, metadata, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trade_id) DO UPDATE SET
+                    status = excluded.status,
+                    close_price = excluded.close_price,
+                    close_time = excluded.close_time,
+                    pnl_realized = excluded.pnl_realized,
+                    pnl_unrealized = excluded.pnl_unrealized,
+                    commission = excluded.commission,
+                    swap = excluded.swap,
+                    close_reason = excluded.close_reason,
+                    last_sync_time = excluded.last_sync_time,
+                    metadata = excluded.metadata,
+                    updated_at = excluded.updated_at
+            """, trade_params)
+
+            await self.connection.commit()
+            successful_count = len(trades_data)
+            logger.info(f"Bulk upserted {successful_count} trades")
+
+        except Exception as e:
+            logger.error(f"Error bulk upserting trades: {e}")
+
+        return successful_count
 
     async def get_active_trades(self) -> List[Dict[str, Any]]:
         """Get all open trades"""
@@ -307,8 +381,37 @@ class TradeDatabase:
             "total_pnl": (row["realized_pnl"] or 0) + (row["unrealized_pnl"] or 0)
         }
 
+    async def _get_connection(self):
+        """Get a connection from the pool or create a new one"""
+        async with self.pool_lock:
+            if self.connection_pool:
+                return self.connection_pool.pop()
+            elif len(self.connection_pool) < self.max_connections:
+                conn = await aiosqlite.connect(self.db_path)
+                conn.row_factory = aiosqlite.Row
+                return conn
+            else:
+                # Pool is full, use the main connection
+                return self.connection
+
+    async def _return_connection(self, conn):
+        """Return a connection to the pool"""
+        if conn != self.connection:
+            async with self.pool_lock:
+                if len(self.connection_pool) < self.max_connections:
+                    self.connection_pool.append(conn)
+                else:
+                    await conn.close()
+
     async def close(self):
-        """Close database connection"""
+        """Close all database connections"""
         if self.connection:
             await self.connection.close()
-            logger.info("Trade database connection closed")
+            logger.info("Trade database main connection closed")
+
+        # Close all pooled connections
+        async with self.pool_lock:
+            for conn in self.connection_pool:
+                await conn.close()
+            self.connection_pool.clear()
+            logger.info(f"Closed {len(self.connection_pool)} pooled connections")

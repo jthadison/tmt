@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     agent_health_check_interval: int = Field(30, env="AGENT_HEALTH_CHECK_INTERVAL")
     agent_startup_timeout: int = Field(60, env="AGENT_STARTUP_TIMEOUT")
     agent_request_timeout: int = Field(10, env="AGENT_REQUEST_TIMEOUT")
+
+    # Trade synchronization settings
+    trade_sync_interval: int = Field(30, env="TRADE_SYNC_INTERVAL")
+    trade_reconciliation_interval_hours: int = Field(1, env="TRADE_RECONCILIATION_INTERVAL_HOURS")
+    trade_sync_auto_fix: bool = Field(True, env="TRADE_SYNC_AUTO_FIX")
+    trade_sync_fast_on_trade: bool = Field(True, env="TRADE_SYNC_FAST_ON_TRADE")
+    trade_sync_max_retries: int = Field(3, env="TRADE_SYNC_MAX_RETRIES")
+    trade_sync_base_backoff: float = Field(1.0, env="TRADE_SYNC_BASE_BACKOFF")
     
     # Trading risk management
     max_concurrent_trades: int = Field(3, env="MAX_CONCURRENT_TRADES")
