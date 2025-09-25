@@ -25,6 +25,7 @@ from .oanda_client import OandaClient
 from .safety_monitor import SafetyMonitor
 from .exceptions import OrchestratorException
 from .trade_executor import TradeExecutor
+from .performance_alert_scheduler import get_alert_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,9 @@ class TradingOrchestrator:
         self.circuit_breaker = CircuitBreakerManager(self.event_bus)
         self.safety_monitor = SafetyMonitor(self.event_bus, self.oanda_client)
         self.trade_executor = TradeExecutor()
+
+        # Performance monitoring components
+        self.alert_scheduler = get_alert_scheduler()
         
         # Execution engine integration
         self.execution_engine_url = "http://localhost:8082"
@@ -81,6 +85,9 @@ class TradingOrchestrator:
             await self.event_bus.start()
             await self.agent_manager.start()
             await self.safety_monitor.start()
+
+            # Start performance alert scheduler
+            await self.alert_scheduler.start()
             
             # Test OANDA connection
             await self._test_oanda_connection()
@@ -129,6 +136,7 @@ class TradingOrchestrator:
                 await asyncio.gather(*self.background_tasks, return_exceptions=True)
             
             # Stop components
+            await self.alert_scheduler.stop()
             await self.safety_monitor.stop()
             await self.agent_manager.stop()
             await self.oanda_client.close()

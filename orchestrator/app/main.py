@@ -8,6 +8,7 @@ Central coordination service for the TMT Trading System that manages
 import asyncio
 import json
 import logging
+import os
 import signal
 import sys
 from contextlib import asynccontextmanager
@@ -34,6 +35,7 @@ from .rollback_monitor import get_rollback_monitor_service
 from .recovery_validator import get_recovery_validator
 from .emergency_contacts import get_emergency_contact_system
 from .forward_test_position_sizing import get_forward_test_sizing
+from .performance_alert_scheduler import get_alert_scheduler
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
@@ -1665,6 +1667,134 @@ async def toggle_forward_test_sizing():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Performance Alert Scheduler API Endpoints
+@app.get("/api/performance-alerts/schedule/status")
+async def get_alert_schedule_status():
+    """Get performance alert scheduler status"""
+    try:
+        alert_scheduler = get_alert_scheduler()
+        status = alert_scheduler.get_schedule_status()
+
+        return {
+            "success": True,
+            "data": status,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting alert schedule status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/performance-alerts/schedule/trigger/{alert_name}")
+async def manually_trigger_scheduled_alert(alert_name: str):
+    """Manually trigger a scheduled performance alert"""
+    try:
+        alert_scheduler = get_alert_scheduler()
+
+        # Find the alert config
+        alert_config = None
+        for config in alert_scheduler.scheduled_alerts:
+            if config.name == alert_name:
+                alert_config = config
+                break
+
+        if not alert_config:
+            raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
+
+        # Execute the alert manually
+        alert_scheduler._execute_scheduled_alert(alert_config)
+
+        return {
+            "success": True,
+            "message": f"Alert '{alert_name}' executed successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error manually triggering alert {alert_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/performance-alerts/schedule/summary/{hours}")
+async def get_alert_summary(hours: int = 24):
+    """Get alert summary for specified hours"""
+    try:
+        if hours < 1 or hours > 168:  # Max 1 week
+            raise HTTPException(status_code=400, detail="Hours must be between 1 and 168")
+
+        alert_system = get_alert_system()
+        summary = alert_system.get_alert_summary(hours)
+
+        return {
+            "success": True,
+            "data": summary,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting alert summary for {hours} hours: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/performance-alerts/schedule/enable/{alert_name}")
+async def enable_scheduled_alert(alert_name: str):
+    """Enable a scheduled performance alert"""
+    try:
+        alert_scheduler = get_alert_scheduler()
+
+        # Find and enable the alert
+        for config in alert_scheduler.scheduled_alerts:
+            if config.name == alert_name:
+                config.enabled = True
+                alert_scheduler._setup_schedules()  # Re-setup schedules
+
+                return {
+                    "success": True,
+                    "message": f"Alert '{alert_name}' enabled successfully",
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error enabling alert {alert_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/performance-alerts/schedule/disable/{alert_name}")
+async def disable_scheduled_alert(alert_name: str):
+    """Disable a scheduled performance alert"""
+    try:
+        alert_scheduler = get_alert_scheduler()
+
+        # Find and disable the alert
+        for config in alert_scheduler.scheduled_alerts:
+            if config.name == alert_name:
+                config.enabled = False
+                alert_scheduler._setup_schedules()  # Re-setup schedules
+
+                return {
+                    "success": True,
+                    "message": f"Alert '{alert_name}' disabled successfully",
+                    "timestamp": datetime.now().isoformat()
+                }
+
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_name}' not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error disabling alert {alert_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -1672,7 +1802,7 @@ async def websocket_endpoint(websocket: WebSocket):
     if not orchestrator:
         await websocket.close(code=1000, reason="Orchestrator not initialized")
         return
-    
+
     await orchestrator.handle_websocket(websocket)
 
 
