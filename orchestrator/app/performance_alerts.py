@@ -10,7 +10,7 @@ Implements comprehensive alert system for performance tracking including:
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, List, Optional, Callable, Any, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum

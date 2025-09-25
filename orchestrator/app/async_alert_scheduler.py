@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 import functools
 
 from .performance_alerts import get_alert_system
-from .performance_tracking import PerformanceTracker, AlertSeverity
+from .performance_tracking import AutomatedPerformanceTracker, AlertSeverity
 from .monte_carlo_projections import get_monte_carlo_engine
 from .alert_schedule_config import get_schedule_config, AlertScheduleConfig
 

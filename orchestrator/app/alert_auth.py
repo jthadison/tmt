@@ -11,7 +11,7 @@ import hmac
 import secrets
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import jwt
@@ -328,7 +328,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-    user: Dict[str, any]
+    user: Dict[str, Any]
 
 
 class UserInfoResponse(BaseModel):

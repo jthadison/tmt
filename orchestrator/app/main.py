@@ -12,9 +12,9 @@ import os
 import signal
 import sys
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, List
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -134,6 +134,28 @@ async def lifespan(app: FastAPI):
         emergency_contacts = get_emergency_contact_system()
         logger.info("Emergency contact system initialized successfully")
 
+        # Initialize trade sync services
+        from .trade_sync import TradeSyncService, TradeReconciliation
+
+        app.state.trade_sync = TradeSyncService(
+            oanda_client=oanda_client,
+            event_bus=orchestrator.event_bus if orchestrator else None,
+            sync_interval=30,
+            fast_sync_on_trade=True
+        )
+        await app.state.trade_sync.initialize()
+        await app.state.trade_sync.start()
+        logger.info("Trade sync service started successfully")
+
+        app.state.trade_reconciliation = TradeReconciliation(
+            oanda_client=oanda_client,
+            reconciliation_interval_hours=1,
+            auto_fix=True
+        )
+        await app.state.trade_reconciliation.initialize()
+        await app.state.trade_reconciliation.start()
+        logger.info("Trade reconciliation service started successfully")
+
         yield
         
     except Exception as e:
@@ -155,7 +177,18 @@ async def lifespan(app: FastAPI):
             logger.info("Shutting down Trading System Orchestrator...")
             await orchestrator.stop()
             logger.info("Trading System Orchestrator stopped")
-        
+
+        # Stop trade sync services
+        if hasattr(app.state, "trade_sync"):
+            logger.info("Stopping trade sync service...")
+            await app.state.trade_sync.stop()
+            logger.info("Trade sync service stopped")
+
+        if hasattr(app.state, "trade_reconciliation"):
+            logger.info("Stopping trade reconciliation service...")
+            await app.state.trade_reconciliation.stop()
+            logger.info("Trade reconciliation service stopped")
+
         if oanda_client:
             await oanda_client.close()
             logger.info("OANDA client shutdown complete")
@@ -1879,6 +1912,170 @@ def signal_handler(signum, frame):
     """Handle shutdown signals"""
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     sys.exit(0)
+
+
+# ========================= Trade Sync API Endpoints =========================
+
+@app.get("/trades/active")
+async def get_active_trades():
+    """Returns all currently open positions from synchronized database"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        trades = await app.state.trade_sync.db.get_active_trades()
+        return {
+            "success": True,
+            "count": len(trades),
+            "trades": trades,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting active trades: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/trades/history")
+async def get_trade_history(days: int = 30):
+    """Returns closed trades for specified period"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        trades = await app.state.trade_sync.db.get_closed_trades(days)
+        stats = await app.state.trade_sync.db.get_performance_stats(days)
+
+        return {
+            "success": True,
+            "period_days": days,
+            "count": len(trades),
+            "trades": trades,
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting trade history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/trades/sync")
+async def force_sync():
+    """Manually trigger OANDA synchronization"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        result = await app.state.trade_sync.force_sync()
+        return {
+            "success": True,
+            "sync_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error forcing sync: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/trades/stats")
+async def get_trade_statistics():
+    """Returns performance metrics and statistics"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        stats = await app.state.trade_sync.db.get_performance_stats()
+        counts = await app.state.trade_sync.db.get_trade_count()
+        pnl = await app.state.trade_sync.db.calculate_total_pnl()
+        sync_status = await app.state.trade_sync.get_sync_status()
+
+        return {
+            "success": True,
+            "performance": stats,
+            "trade_counts": counts,
+            "pnl": pnl,
+            "sync_status": sync_status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting trade statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/trades/sync/status")
+async def get_sync_status():
+    """Get current synchronization status"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        status = await app.state.trade_sync.get_sync_status()
+        return {
+            "success": True,
+            "status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/trades/reconciliation")
+async def force_reconciliation():
+    """Manually trigger trade reconciliation"""
+    try:
+        if not hasattr(app.state, "trade_reconciliation"):
+            raise HTTPException(status_code=503, detail="Trade reconciliation service not initialized")
+
+        result = await app.state.trade_reconciliation.force_reconciliation()
+        return {
+            "success": True,
+            "reconciliation_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error forcing reconciliation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/trades/reconciliation/status")
+async def get_reconciliation_status():
+    """Get current reconciliation status"""
+    try:
+        if not hasattr(app.state, "trade_reconciliation"):
+            raise HTTPException(status_code=503, detail="Trade reconciliation service not initialized")
+
+        status = await app.state.trade_reconciliation.get_reconciliation_status()
+        return {
+            "success": True,
+            "status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting reconciliation status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/trades/{trade_id}")
+async def get_trade_details(trade_id: str):
+    """Get details for a specific trade"""
+    try:
+        if not hasattr(app.state, "trade_sync"):
+            raise HTTPException(status_code=503, detail="Trade sync service not initialized")
+
+        trade = await app.state.trade_sync.db.get_trade_by_id(trade_id)
+        if not trade:
+            raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found")
+
+        return {
+            "success": True,
+            "trade": trade,
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting trade {trade_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 signal.signal(signal.SIGINT, signal_handler)
