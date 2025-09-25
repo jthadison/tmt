@@ -41,6 +41,28 @@ class IntelligentSignalGenerator:
 
         self.signal_counter = 0
 
+        # Performance monitoring
+        self.pattern_detection_stats = {
+            "total_calls": 0,
+            "successful_calls": 0,
+            "failed_calls": 0,
+            "total_response_time": 0.0,
+            "average_response_time": 0.0
+        }
+
+        # Signal quality metrics
+        self.signal_quality_metrics = {
+            "total_signals_generated": 0,
+            "signals_by_confidence": {"75-80": 0, "80-85": 0, "85-90": 0, "90+": 0},
+            "signals_by_pattern": {},
+            "signals_by_instrument": {},
+            "average_confidence": 0.0,
+            "average_risk_reward": 0.0,
+            "pattern_success_rate": {},
+            "total_confidence_sum": 0.0,
+            "total_risk_reward_sum": 0.0
+        }
+
     async def analyze_market_and_generate_signals(self) -> List[Dict]:
         """Main analysis method - replaces random signal generation"""
         signals = []
@@ -94,36 +116,80 @@ class IntelligentSignalGenerator:
 
     async def _get_wyckoff_patterns(self, instrument: str) -> Dict:
         """Get Wyckoff pattern analysis from Pattern Detection agent"""
-        url = f"{self.pattern_detection_url}/detect_patterns"
-        payload = {
-            "instrument": instrument,
-            "timeframe": "1h",
-            "lookback_periods": 100
-        }
+        start_time = asyncio.get_event_loop().time()
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    logger.warning(f"Pattern detection failed for {instrument}: {response.status}")
-                    return {"patterns_found": [], "pattern_count": 0}
+        try:
+            self.pattern_detection_stats["total_calls"] += 1
+
+            url = f"{self.pattern_detection_url}/detect_patterns"
+            payload = {
+                "instrument": instrument,
+                "timeframe": "1h",
+                "lookback_periods": 100
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        self.pattern_detection_stats["successful_calls"] += 1
+                        result = await response.json()
+
+                        # Record response time
+                        response_time = asyncio.get_event_loop().time() - start_time
+                        self.pattern_detection_stats["total_response_time"] += response_time
+                        self.pattern_detection_stats["average_response_time"] = (
+                            self.pattern_detection_stats["total_response_time"] /
+                            self.pattern_detection_stats["total_calls"]
+                        )
+
+                        return result
+                    else:
+                        self.pattern_detection_stats["failed_calls"] += 1
+                        logger.warning(f"Pattern detection failed for {instrument}: {response.status}")
+                        return {"patterns_found": [], "pattern_count": 0}
+
+        except Exception as e:
+            self.pattern_detection_stats["failed_calls"] += 1
+            logger.error(f"Error calling pattern detection for {instrument}: {e}")
+            return {"patterns_found": [], "pattern_count": 0}
 
     async def _get_vpa_analysis(self, instrument: str) -> Dict:
         """Get Volume Price Analysis from Pattern Detection agent"""
-        url = f"{self.pattern_detection_url}/analyze_volume"
-        payload = {
-            "instrument": instrument,
-            "timeframe": "1h"
-        }
+        start_time = asyncio.get_event_loop().time()
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    logger.warning(f"VPA analysis failed for {instrument}: {response.status}")
-                    return {"confidence_score": 0.0, "volume_analysis": {}}
+        try:
+            self.pattern_detection_stats["total_calls"] += 1
+
+            url = f"{self.pattern_detection_url}/analyze_volume"
+            payload = {
+                "instrument": instrument,
+                "timeframe": "1h"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        self.pattern_detection_stats["successful_calls"] += 1
+                        result = await response.json()
+
+                        # Record response time
+                        response_time = asyncio.get_event_loop().time() - start_time
+                        self.pattern_detection_stats["total_response_time"] += response_time
+                        self.pattern_detection_stats["average_response_time"] = (
+                            self.pattern_detection_stats["total_response_time"] /
+                            self.pattern_detection_stats["total_calls"]
+                        )
+
+                        return result
+                    else:
+                        self.pattern_detection_stats["failed_calls"] += 1
+                        logger.warning(f"VPA analysis failed for {instrument}: {response.status}")
+                        return {"confidence_score": 0.0, "volume_analysis": {}}
+
+        except Exception as e:
+            self.pattern_detection_stats["failed_calls"] += 1
+            logger.error(f"Error calling VPA analysis for {instrument}: {e}")
+            return {"confidence_score": 0.0, "volume_analysis": {}}
 
     async def _combine_analyses(self, instrument: str, wyckoff_data: Dict, vpa_data: Dict) -> Optional[Dict]:
         """Combine Wyckoff and VPA analyses to generate trading signal"""
@@ -173,17 +239,20 @@ class IntelligentSignalGenerator:
 
         # Generate signal
         self.signal_counter += 1
+        overall_confidence = self._calculate_overall_confidence(strong_patterns, vpa_confidence)
+        pattern_type = self._get_primary_pattern(strong_patterns, vpa_signals)
+
         signal = {
             "id": f"intelligent_signal_{self.signal_counter:06d}",
             "instrument": instrument,
             "direction": direction,
-            "confidence": self._calculate_overall_confidence(strong_patterns, vpa_confidence),
+            "confidence": overall_confidence,
             "entry_price": entry_data["entry"],
             "stop_loss": entry_data["stop_loss"],
             "take_profit": entry_data["take_profit"],
             "units": units,
             "risk_reward_ratio": round(risk_reward, 2),
-            "pattern_type": self._get_primary_pattern(strong_patterns, vpa_signals),
+            "pattern_type": pattern_type,
             "timeframe": "1H",
             "timestamp": datetime.now().isoformat(),
             "source": "intelligent_analysis",
@@ -191,9 +260,13 @@ class IntelligentSignalGenerator:
                 "wyckoff_patterns": len(strong_patterns),
                 "vpa_confidence": vpa_confidence,
                 "smart_money_flow": vpa_analysis.get("smart_money_flow"),
-                "volume_trend": vpa_analysis.get("volume_trend")
+                "volume_trend": vpa_analysis.get("volume_trend"),
+                "stop_distance_pips": entry_data.get("stop_distance_pips", 0)
             }
         }
+
+        # Track signal quality metrics
+        self._track_signal_quality(signal)
 
         return signal
 
@@ -247,27 +320,26 @@ class IntelligentSignalGenerator:
 
     def _calculate_entry_levels(self, instrument: str, current_price: float, direction: str,
                                patterns: List[Dict], vpa_analysis: Dict) -> Optional[Dict]:
-        """Calculate entry, stop loss, and take profit levels"""
+        """Calculate entry, stop loss, and take profit levels with improved pip accuracy"""
 
-        # Base pip value
-        pip_value = 0.0001 if "JPY" not in instrument else 0.01
+        # Accurate pip values for different instrument types
+        pip_info = self._get_pip_info(instrument)
+        pip_value = pip_info["pip_value"]
+        precision = pip_info["precision"]
 
         # Dynamic stop loss based on analysis
+        base_stop_pips = 25  # Base stop in pips
+
         if patterns and patterns[0].get("atr_multiple"):
             # Use ATR-based stops if available from pattern analysis
-            stop_distance = patterns[0]["atr_multiple"] * pip_value * 10
-        else:
-            # Conservative default stops
-            stop_distance = pip_value * 25  # 25 pips default
+            base_stop_pips = max(15, min(50, int(patterns[0]["atr_multiple"] * 20)))
 
-        # Adjust for volatility
-        volatility = vpa_analysis.get("strength", "medium").lower()
-        if volatility == "high":
-            stop_distance *= 1.5
-        elif volatility == "low":
-            stop_distance *= 0.7
+        # Adjust stop distance based on VPA strength and volatility
+        volatility_multiplier = self._get_volatility_multiplier(vpa_analysis)
+        stop_distance_pips = base_stop_pips * volatility_multiplier
+        stop_distance = stop_distance_pips * pip_value
 
-        # Calculate levels
+        # Calculate levels with proper precision
         if direction == "long":
             entry = current_price
             stop_loss = entry - stop_distance
@@ -278,10 +350,54 @@ class IntelligentSignalGenerator:
             take_profit = entry - (stop_distance * self.min_risk_reward)
 
         return {
-            "entry": round(entry, 5),
-            "stop_loss": round(stop_loss, 5),
-            "take_profit": round(take_profit, 5)
+            "entry": round(entry, precision),
+            "stop_loss": round(stop_loss, precision),
+            "take_profit": round(take_profit, precision),
+            "stop_distance_pips": round(stop_distance_pips, 1)
         }
+
+    def _get_pip_info(self, instrument: str) -> Dict[str, Any]:
+        """Get accurate pip value and precision for different instrument types"""
+        if "JPY" in instrument:
+            # JPY pairs: 1 pip = 0.01
+            return {"pip_value": 0.01, "precision": 3}
+        elif any(major in instrument for major in ["XAU", "XAG", "GOLD", "SILVER"]):
+            # Precious metals: 1 pip = 0.01 for gold, 0.001 for silver
+            if "XAU" in instrument or "GOLD" in instrument:
+                return {"pip_value": 0.01, "precision": 2}
+            else:
+                return {"pip_value": 0.001, "precision": 3}
+        elif any(crypto in instrument for crypto in ["BTC", "ETH", "LTC"]):
+            # Crypto pairs: 1 pip = 0.1 or 1.0 depending on pair
+            return {"pip_value": 1.0, "precision": 1}
+        else:
+            # Standard forex pairs: 1 pip = 0.0001
+            return {"pip_value": 0.0001, "precision": 5}
+
+    def _get_volatility_multiplier(self, vpa_analysis: Dict) -> float:
+        """Calculate volatility multiplier based on VPA analysis"""
+        strength = vpa_analysis.get("strength", "medium").lower()
+        volume_trend = vpa_analysis.get("volume_trend", "normal").lower()
+
+        multiplier = 1.0
+
+        # Adjust based on strength
+        if strength == "very_strong":
+            multiplier *= 1.4
+        elif strength == "strong":
+            multiplier *= 1.2
+        elif strength == "weak":
+            multiplier *= 0.8
+        elif strength == "very_weak":
+            multiplier *= 0.6
+
+        # Adjust based on volume trend
+        if volume_trend in ["climactic", "high"]:
+            multiplier *= 1.3
+        elif volume_trend == "low":
+            multiplier *= 0.7
+
+        return max(0.5, min(2.0, multiplier))  # Cap between 0.5x and 2.0x
 
     def _calculate_overall_confidence(self, patterns: List[Dict], vpa_confidence: float) -> float:
         """Calculate overall signal confidence"""
@@ -326,11 +442,98 @@ class IntelligentSignalGenerator:
         return max(1000, min(position_size, 10000))  # Between 1k and 10k units
 
     async def _get_current_price(self, instrument: str) -> Optional[float]:
-        """Get current market price"""
-        # This would connect to OANDA API or use cached price data
-        # For now, return a placeholder - in real implementation,
-        # this would fetch actual market prices
-        return 1.1750  # Placeholder price
+        """Get current market price from OANDA API"""
+        try:
+            # Use OANDA API to get real-time pricing
+            oanda_api_key = os.getenv("OANDA_API_KEY")
+            oanda_account_id = os.getenv("OANDA_ACCOUNT_ID")
+
+            if not oanda_api_key or not oanda_account_id:
+                logger.warning("OANDA credentials not available, using fallback price")
+                return self._get_fallback_price(instrument)
+
+            url = f"https://api-fxpractice.oanda.com/v3/accounts/{oanda_account_id}/pricing"
+            params = {"instruments": instrument}
+            headers = {
+                "Authorization": f"Bearer {oanda_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        prices = data.get("prices", [])
+                        if prices:
+                            bid = float(prices[0].get("bids", [{}])[0].get("price", 0))
+                            ask = float(prices[0].get("asks", [{}])[0].get("price", 0))
+                            mid_price = (bid + ask) / 2
+                            return mid_price
+
+            logger.warning(f"Failed to fetch price for {instrument}, using fallback")
+            return self._get_fallback_price(instrument)
+
+        except Exception as e:
+            logger.error(f"Error fetching current price for {instrument}: {e}")
+            return self._get_fallback_price(instrument)
+
+    def _get_fallback_price(self, instrument: str) -> float:
+        """Get fallback price for instruments when OANDA API is unavailable"""
+        fallback_prices = {
+            "EUR_USD": 1.0850,
+            "GBP_USD": 1.2650,
+            "USD_JPY": 149.50,
+            "AUD_USD": 0.6750,
+            "USD_CHF": 0.9150,
+            "EUR_GBP": 0.8580,
+            "USD_CAD": 1.3650
+        }
+        return fallback_prices.get(instrument, 1.0000)
+
+    def _track_signal_quality(self, signal: Dict):
+        """Track signal quality metrics for performance monitoring"""
+        metrics = self.signal_quality_metrics
+
+        # Update counters
+        metrics["total_signals_generated"] += 1
+        confidence = signal["confidence"]
+        risk_reward = signal["risk_reward_ratio"]
+        pattern_type = signal["pattern_type"]
+        instrument = signal["instrument"]
+
+        # Track confidence distribution
+        if confidence >= 90:
+            metrics["signals_by_confidence"]["90+"] += 1
+        elif confidence >= 85:
+            metrics["signals_by_confidence"]["85-90"] += 1
+        elif confidence >= 80:
+            metrics["signals_by_confidence"]["80-85"] += 1
+        else:
+            metrics["signals_by_confidence"]["75-80"] += 1
+
+        # Track by pattern type
+        metrics["signals_by_pattern"][pattern_type] = metrics["signals_by_pattern"].get(pattern_type, 0) + 1
+
+        # Track by instrument
+        metrics["signals_by_instrument"][instrument] = metrics["signals_by_instrument"].get(instrument, 0) + 1
+
+        # Update running averages
+        metrics["total_confidence_sum"] += confidence
+        metrics["total_risk_reward_sum"] += risk_reward
+        metrics["average_confidence"] = metrics["total_confidence_sum"] / metrics["total_signals_generated"]
+        metrics["average_risk_reward"] = metrics["total_risk_reward_sum"] / metrics["total_signals_generated"]
+
+    def get_performance_stats(self) -> Dict:
+        """Get comprehensive performance statistics"""
+        return {
+            "pattern_detection_stats": self.pattern_detection_stats.copy(),
+            "signal_quality_metrics": self.signal_quality_metrics.copy(),
+            "hourly_limits": {
+                "signals_sent_this_hour": self.signals_sent_this_hour,
+                "max_signals_per_hour": self.max_signals_per_hour,
+                "current_hour": self.current_hour
+            }
+        }
 
     def _reset_hourly_limits(self):
         """Reset hourly signal limits if hour has changed"""
