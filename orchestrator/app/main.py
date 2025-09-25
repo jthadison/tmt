@@ -23,16 +23,35 @@ import uvicorn
 
 from .orchestrator import TradingOrchestrator
 from .models import (
-    SystemStatus, AgentStatus, AccountStatus, 
+    SystemStatus, AgentStatus, AccountStatus,
     TradeSignal, SystemMetrics, EmergencyStopRequest
 )
 from .config import get_settings
 from .exceptions import OrchestratorException
 from .oanda_client import OandaClient
+from .emergency_rollback import get_emergency_rollback_system, RollbackTrigger
+from .rollback_monitor import get_rollback_monitor_service
+from .recovery_validator import get_recovery_validator
+from .emergency_contacts import get_emergency_contact_system
+from .forward_test_position_sizing import get_forward_test_sizing
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
     agentId: Optional[str] = None
+
+# Emergency rollback request models
+class EmergencyRollbackRequest(BaseModel):
+    reason: Optional[str] = "Manual emergency rollback"
+    notify_contacts: Optional[bool] = True
+
+class RollbackConditionUpdate(BaseModel):
+    trigger_type: str
+    enabled: bool
+    threshold_value: float
+    threshold_unit: str
+    consecutive_periods: int
+    description: str
+    priority: int
 
 # Configure logging
 logging.basicConfig(
@@ -44,6 +63,12 @@ logger = logging.getLogger(__name__)
 # Global orchestrator instance
 orchestrator: TradingOrchestrator = None
 oanda_client: OandaClient = None
+
+# Global emergency rollback system
+emergency_rollback = None
+rollback_monitor = None
+recovery_validator = None
+emergency_contacts = None
 
 # Mock broker accounts storage for development
 mock_broker_accounts = [
@@ -70,22 +95,38 @@ mock_broker_accounts = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    global orchestrator, oanda_client
-    
+    global orchestrator, oanda_client, emergency_rollback
+
     logger.info("Starting Trading System Orchestrator...")
-    
+
     try:
         # Initialize orchestrator
         orchestrator = TradingOrchestrator()
-        
+
         # Start orchestrator
         await orchestrator.start()
         logger.info("Trading System Orchestrator started successfully")
-        
+
         # Initialize OANDA client
         oanda_client = OandaClient()
         logger.info("OANDA client initialized successfully")
-        
+
+        # Initialize emergency rollback system
+        emergency_rollback = get_emergency_rollback_system(orchestrator)
+        logger.info("Emergency rollback system initialized successfully")
+
+        # Initialize rollback monitoring service
+        rollback_monitor = get_rollback_monitor_service(orchestrator)
+        logger.info("Rollback monitoring service initialized successfully")
+
+        # Initialize recovery validator
+        recovery_validator = get_recovery_validator(orchestrator)
+        logger.info("Recovery validator initialized successfully")
+
+        # Initialize emergency contact system
+        emergency_contacts = get_emergency_contact_system()
+        logger.info("Emergency contact system initialized successfully")
+
         yield
         
     except Exception as e:
@@ -241,7 +282,7 @@ async def get_circuit_breaker_status():
     """Get detailed circuit breaker status"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
-    
+
     try:
         status = await orchestrator.circuit_breaker.get_status()
         return {
@@ -252,6 +293,339 @@ async def get_circuit_breaker_status():
     except Exception as e:
         logger.error(f"Error getting circuit breaker status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get circuit breaker status: {str(e)}")
+
+
+# Emergency Rollback endpoints
+@app.post("/emergency-rollback")
+async def execute_emergency_rollback(request: EmergencyRollbackRequest):
+    """Execute emergency rollback to Cycle 4 parameters - ONE-CLICK ROLLBACK"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        logger.info(f"🚨 Emergency rollback requested: {request.reason}")
+
+        rollback_event = await emergency_rollback.execute_emergency_rollback(
+            trigger_type=RollbackTrigger.MANUAL,
+            reason=request.reason,
+            notify_contacts=request.notify_contacts
+        )
+
+        # Automatically trigger recovery validation
+        validation_report = None
+        if recovery_validator:
+            try:
+                logger.info("🔍 Automatically triggering recovery validation...")
+                validation_report = await recovery_validator.validate_recovery(rollback_event.event_id)
+                logger.info(f"✅ Recovery validation completed: {validation_report.overall_status.value}")
+            except Exception as validation_error:
+                logger.error(f"❌ Recovery validation failed: {validation_error}")
+
+        return {
+            "status": "Emergency rollback completed successfully",
+            "event_id": rollback_event.event_id,
+            "previous_mode": rollback_event.previous_mode,
+            "new_mode": rollback_event.new_mode,
+            "validation_successful": rollback_event.validation_results.get("rollback_successful", False),
+            "contacts_notified": rollback_event.emergency_contacts_notified,
+            "timestamp": rollback_event.timestamp.isoformat(),
+            "recovery_validation": {
+                "triggered": validation_report is not None,
+                "status": validation_report.overall_status.value if validation_report else None,
+                "score": validation_report.overall_score if validation_report else None,
+                "recovery_confirmed": validation_report.recovery_confirmed if validation_report else None
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Emergency rollback failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Emergency rollback failed: {str(e)}")
+
+
+@app.get("/emergency-rollback/status")
+async def get_rollback_status():
+    """Get current emergency rollback system status"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        return emergency_rollback.get_rollback_status()
+    except Exception as e:
+        logger.error(f"Error getting rollback status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get rollback status: {str(e)}")
+
+
+@app.get("/emergency-rollback/history")
+async def get_rollback_history(limit: int = 10):
+    """Get emergency rollback history"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        return {
+            "history": emergency_rollback.get_rollback_history(limit),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting rollback history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get rollback history: {str(e)}")
+
+
+@app.post("/emergency-rollback/check-triggers")
+async def check_automatic_triggers():
+    """Check if automatic rollback conditions are met"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        # Get current performance data (mock for now)
+        performance_data = {
+            "walk_forward_stability": 34.4,  # From forward testing document
+            "overfitting_score": 0.634,      # From forward testing document
+            "consecutive_losses": 2,
+            "max_drawdown_percent": 3.2,
+            "confidence_interval_breach_days": 1,
+            "performance_decline_percent": 5.5
+        }
+
+        trigger = await emergency_rollback.check_automatic_triggers(performance_data)
+
+        return {
+            "trigger_detected": trigger is not None,
+            "trigger_type": trigger.value if trigger else None,
+            "performance_data": performance_data,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking automatic triggers: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check triggers: {str(e)}")
+
+
+@app.post("/emergency-rollback/conditions")
+async def update_rollback_conditions(conditions: List[RollbackConditionUpdate]):
+    """Update automatic rollback trigger conditions"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        condition_data = [condition.dict() for condition in conditions]
+        emergency_rollback.update_rollback_conditions(condition_data)
+
+        return {
+            "status": "Rollback conditions updated successfully",
+            "conditions_count": len(conditions),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating rollback conditions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update conditions: {str(e)}")
+
+
+# Rollback Monitoring endpoints
+@app.post("/rollback-monitor/start")
+async def start_rollback_monitoring():
+    """Start automatic rollback monitoring service"""
+    if not rollback_monitor:
+        raise HTTPException(status_code=503, detail="Rollback monitoring service not initialized")
+
+    try:
+        # Start monitoring in background task
+        asyncio.create_task(rollback_monitor.start_monitoring())
+
+        return {
+            "status": "Automatic rollback monitoring started",
+            "check_interval_seconds": rollback_monitor.check_interval,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error starting rollback monitoring: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
+
+
+@app.post("/rollback-monitor/stop")
+async def stop_rollback_monitoring():
+    """Stop automatic rollback monitoring service"""
+    if not rollback_monitor:
+        raise HTTPException(status_code=503, detail="Rollback monitoring service not initialized")
+
+    try:
+        await rollback_monitor.stop_monitoring()
+
+        return {
+            "status": "Automatic rollback monitoring stopped",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error stopping rollback monitoring: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop monitoring: {str(e)}")
+
+
+@app.get("/rollback-monitor/status")
+async def get_rollback_monitoring_status():
+    """Get current rollback monitoring service status"""
+    if not rollback_monitor:
+        raise HTTPException(status_code=503, detail="Rollback monitoring service not initialized")
+
+    try:
+        status = rollback_monitor.get_monitoring_status()
+        return status
+
+    except Exception as e:
+        logger.error(f"Error getting monitoring status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get monitoring status: {str(e)}")
+
+
+# Recovery Validation endpoints
+@app.post("/recovery-validation/{rollback_event_id}")
+async def validate_recovery(rollback_event_id: str):
+    """Validate performance recovery after rollback"""
+    if not recovery_validator:
+        raise HTTPException(status_code=503, detail="Recovery validator not initialized")
+
+    try:
+        logger.info(f"🔍 Manual recovery validation requested for rollback {rollback_event_id}")
+
+        validation_report = await recovery_validator.validate_recovery(rollback_event_id)
+
+        return {
+            "rollback_event_id": rollback_event_id,
+            "validation_status": validation_report.overall_status.value,
+            "validation_score": validation_report.overall_score,
+            "recovery_confirmed": validation_report.recovery_confirmed,
+            "validation_started": validation_report.validation_started.isoformat(),
+            "validation_completed": validation_report.validation_completed.isoformat() if validation_report.validation_completed else None,
+            "validation_results": [
+                {
+                    "type": result.validation_type.value,
+                    "status": result.status.value,
+                    "score": result.score,
+                    "threshold": result.threshold,
+                    "message": result.message,
+                    "timestamp": result.timestamp.isoformat()
+                }
+                for result in validation_report.validations
+            ],
+            "recommendations": validation_report.recommendations
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Recovery validation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Recovery validation failed: {str(e)}")
+
+
+@app.get("/recovery-validation/history")
+async def get_recovery_validation_history(limit: int = 5):
+    """Get recovery validation history"""
+    if not recovery_validator:
+        raise HTTPException(status_code=503, detail="Recovery validator not initialized")
+
+    try:
+        return {
+            "history": recovery_validator.get_validation_history(limit),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting validation history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get validation history: {str(e)}")
+
+
+# Emergency Contact Management endpoints
+@app.get("/emergency-contacts")
+async def get_emergency_contacts():
+    """Get all emergency contacts"""
+    if not emergency_contacts:
+        raise HTTPException(status_code=503, detail="Emergency contact system not initialized")
+
+    try:
+        contacts = emergency_contacts.get_contacts()
+        return {
+            "contacts": contacts,
+            "total_count": len(contacts),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting emergency contacts: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get emergency contacts: {str(e)}")
+
+
+@app.get("/emergency-contacts/notification-history")
+async def get_notification_history(limit: int = 10):
+    """Get recent notification history"""
+    if not emergency_contacts:
+        raise HTTPException(status_code=503, detail="Emergency contact system not initialized")
+
+    try:
+        history = emergency_contacts.get_notification_history(limit)
+        return {
+            "history": history,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting notification history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get notification history: {str(e)}")
+
+
+@app.post("/emergency-contacts/test-notification")
+async def test_emergency_notification():
+    """Test emergency notification system"""
+    if not emergency_contacts:
+        raise HTTPException(status_code=503, detail="Emergency contact system not initialized")
+
+    try:
+        # Prepare test event data
+        test_event_data = {
+            "trigger_type": "TEST",
+            "reason": "Emergency notification system test",
+            "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+            "event_id": f"test_{int(datetime.now().timestamp())}",
+            "previous_mode": "session_targeted",
+            "new_mode": "test_mode",
+            "validation_status": "TEST",
+            "system_impact": "No impact - this is a test",
+            "recovery_validation": "Test validation data",
+            "escalation_delay_minutes": 5
+        }
+
+        # Send test notifications
+        from .emergency_contacts import ContactType, NotificationPriority
+        notification_results = await emergency_contacts.notify_emergency_contacts(
+            event_type="emergency_rollback",
+            event_data=test_event_data,
+            priority=NotificationPriority.LOW,
+            contact_types=[ContactType.TECHNICAL]  # Only notify technical contacts for tests
+        )
+
+        successful_notifications = sum(1 for result in notification_results if result.success)
+        total_notifications = len(notification_results)
+
+        return {
+            "status": "Test notifications sent",
+            "total_notifications": total_notifications,
+            "successful_notifications": successful_notifications,
+            "success_rate": f"{successful_notifications}/{total_notifications}",
+            "results": [
+                {
+                    "contact_id": result.contact_id,
+                    "channel": result.channel.value,
+                    "success": result.success,
+                    "timestamp": result.timestamp.isoformat(),
+                    "error": result.error_message
+                }
+                for result in notification_results
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error testing notifications: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to test notifications: {str(e)}")
 
 
 # Agent management endpoints
@@ -1216,6 +1590,79 @@ async def acknowledge_alert(alert_id: str):
     except Exception as e:
         logger.error(f"Alert acknowledgment error for {alert_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Alert acknowledgment error: {str(e)}")
+
+
+# Forward Test Position Sizing Management
+class ForwardMetricsUpdate(BaseModel):
+    walk_forward_stability: Optional[float] = None
+    out_of_sample_validation: Optional[float] = None
+    overfitting_score: Optional[float] = None
+    kurtosis_exposure: Optional[float] = None
+    months_of_data: Optional[int] = None
+
+
+@app.get("/position-sizing/forward-test/status")
+async def get_forward_test_sizing_status():
+    """Get current forward test position sizing status"""
+    try:
+        forward_sizing = get_forward_test_sizing()
+        status = await forward_sizing.get_current_sizing_status()
+        return {
+            "success": True,
+            "data": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting forward test sizing status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/position-sizing/forward-test/update-metrics")
+async def update_forward_test_metrics(request: ForwardMetricsUpdate):
+    """Update forward test metrics"""
+    try:
+        forward_sizing = get_forward_test_sizing()
+
+        # Convert request to dict, filtering out None values
+        metrics_dict = {k: v for k, v in request.dict().items() if v is not None}
+
+        if not metrics_dict:
+            raise HTTPException(status_code=400, detail="No valid metrics provided")
+
+        await forward_sizing.update_forward_metrics(metrics_dict)
+
+        return {
+            "success": True,
+            "message": "Forward test metrics updated successfully",
+            "updated_metrics": metrics_dict,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating forward test metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/position-sizing/forward-test/toggle")
+async def toggle_forward_test_sizing():
+    """Toggle forward test position sizing on/off"""
+    try:
+        current_state = os.getenv("USE_FORWARD_TEST_SIZING", "true").lower() == "true"
+        new_state = not current_state
+
+        # This would typically update environment or configuration
+        # For now, we'll just return the current state and instruction
+        return {
+            "success": True,
+            "current_state": current_state,
+            "message": f"To toggle forward test sizing, set environment variable USE_FORWARD_TEST_SIZING={str(new_state).lower()}",
+            "restart_required": True,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error toggling forward test sizing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # WebSocket endpoint for real-time updates

@@ -7,7 +7,7 @@ import asyncio
 import logging
 from typing import Dict, Optional, List, Any
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import aiohttp
 import os
 from enum import Enum
@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 class OrderSide(Enum):
     BUY = "buy"
     SELL = "sell"
+
+
+class TradingMode(Enum):
+    PAPER = "paper"
+    LIVE = "live"
 
 
 class TradeExecutor:
@@ -56,6 +61,10 @@ class TradeExecutor:
         
         # Track active trades
         self.active_trades = {}
+
+        # Trading mode
+        mode_str = os.getenv("TRADING_MODE", "paper").lower()
+        self.mode = TradingMode.LIVE if mode_str == "live" else TradingMode.PAPER
         self.daily_trades = 0
         self.daily_losses = Decimal("0")
         
@@ -225,31 +234,63 @@ class TradeExecutor:
         Calculate position size using advanced position sizing engine
         """
         try:
-            # Import here to avoid circular dependency
-            from .position_sizing import get_position_sizing_engine
-            
-            # Use advanced position sizing engine
-            sizing_engine = get_position_sizing_engine()
-            
-            # Get mock OANDA client for sizing calculation
-            mock_oanda_client = self._create_mock_oanda_client()
-            
-            # Calculate optimal position size
-            sizing_result = await sizing_engine.calculate_position_size(
-                signal, account_id, mock_oanda_client
-            )
-            
-            if not sizing_result.is_safe_to_trade:
-                logger.warning(f"Position sizing blocked for {signal.instrument}: {'; '.join(sizing_result.warning_messages)}")
-                return 0
-            
-            logger.info(f"Advanced position sizing for {signal.instrument}: "
-                       f"{sizing_result.recommended_units} units "
-                       f"(risk: {sizing_result.effective_risk_percent:.1f}%, "
-                       f"concentration after: {sizing_result.concentration_after_trade:.1f}%)")
-            
-            return sizing_result.recommended_units
-            
+            # Check if we should use forward test position sizing
+            use_forward_test_sizing = os.getenv("USE_FORWARD_TEST_SIZING", "true").lower() == "true"
+
+            if use_forward_test_sizing:
+                # Import forward test position sizing
+                from .forward_test_position_sizing import get_forward_test_sizing
+                from .models import TradingSession
+
+                # Get current trading session
+                current_session = self._get_current_trading_session()
+
+                # Use forward test position sizing engine
+                sizing_engine = get_forward_test_sizing()
+                mock_oanda_client = self._create_mock_oanda_client()
+
+                # Calculate with forward test controls
+                sizing_result = await sizing_engine.calculate_enhanced_position_size(
+                    signal, account_id, mock_oanda_client, current_session
+                )
+
+                if not sizing_result.is_safe_to_trade:
+                    logger.warning(f"Forward test sizing blocked {signal.instrument}: {'; '.join(sizing_result.forward_test_warnings)}")
+                    # Still allow small positions for paper trading
+                    if self.mode == TradingMode.PAPER:
+                        return min(1000, abs(sizing_result.recommended_units)) if sizing_result.recommended_units else 0
+                    return 0
+
+                logger.info(f"Forward test position sizing for {signal.instrument}: "
+                           f"{sizing_result.final_units} units "
+                           f"(stability: {sizing_result.stability_reduction_factor:.2f}, "
+                           f"validation: {sizing_result.validation_reduction_factor:.2f}, "
+                           f"phase: {sizing_result.current_allocation_phase})")
+
+                return sizing_result.recommended_units
+
+            else:
+                # Use standard position sizing
+                from .position_sizing import get_position_sizing_engine
+
+                sizing_engine = get_position_sizing_engine()
+                mock_oanda_client = self._create_mock_oanda_client()
+
+                sizing_result = await sizing_engine.calculate_position_size(
+                    signal, account_id, mock_oanda_client
+                )
+
+                if not sizing_result.is_safe_to_trade:
+                    logger.warning(f"Position sizing blocked for {signal.instrument}: {'; '.join(sizing_result.warning_messages)}")
+                    return 0
+
+                logger.info(f"Standard position sizing for {signal.instrument}: "
+                           f"{sizing_result.recommended_units} units "
+                           f"(risk: {sizing_result.effective_risk_percent:.1f}%, "
+                           f"concentration after: {sizing_result.concentration_after_trade:.1f}%)")
+
+                return sizing_result.recommended_units
+
         except Exception as e:
             logger.error(f"Error calculating position size: {e}")
             # Fallback to legacy calculation
@@ -300,6 +341,29 @@ class TradeExecutor:
                     return []
         
         return MockOandaClient(self)
+
+    def _get_current_trading_session(self):
+        """Determine current trading session based on GMT time"""
+        from .models import TradingSession
+
+        now_utc = datetime.now(timezone.utc)
+        hour = now_utc.hour
+
+        # Session times in GMT/UTC
+        if 22 <= hour or hour < 7:  # 10 PM - 7 AM GMT
+            # Check for overlap (0-2 GMT is London/NY overlap)
+            if 0 <= hour < 2:
+                return TradingSession.OVERLAP
+            return TradingSession.SYDNEY if hour >= 22 else TradingSession.TOKYO
+        elif 7 <= hour < 16:  # 7 AM - 4 PM GMT
+            return TradingSession.LONDON
+        elif 13 <= hour < 22:  # 1 PM - 10 PM GMT
+            # Check for overlap (13-16 GMT is London/NY overlap)
+            if 13 <= hour < 16:
+                return TradingSession.OVERLAP
+            return TradingSession.NEW_YORK
+        else:
+            return TradingSession.NEW_YORK  # Default
     
     async def _legacy_position_size_calculation(self, signal: TradeSignal, account_id: str) -> int:
         """Legacy position size calculation as fallback"""
