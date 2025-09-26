@@ -571,7 +571,7 @@ if FASTAPI_AVAILABLE:
                 }
 
                 # Check for FIFO violations before placing order
-                fifo_violations = await check_fifo_violations(account_id, instrument, units_int, api_key, base_url)
+                fifo_violations = await check_fifo_violations(instrument, side, units, account_id)
                 if fifo_violations:
                     logger.warning(f"FIFO violations detected for {instrument}: {fifo_violations}")
                     logger.info(f"Proceeding with order placement despite FIFO warnings (may be rejected by OANDA)")
