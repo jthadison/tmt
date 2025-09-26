@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,9 +25,9 @@ class TradingPipelineTest:
     
     def __init__(self):
         self.services = {
-            "orchestrator": "http://localhost:8000",
-            "market_analysis": "http://localhost:8002",
-            "execution_engine": "http://localhost:8004"
+            "orchestrator": "http://localhost:8089",
+            "market_analysis": "http://localhost:8001",
+            "execution_engine": "http://localhost:8082"
         }
         self.test_results = {}
     
@@ -109,7 +109,7 @@ class TradingPipelineTest:
             async with aiohttp.ClientSession() as session:
                 # Test market overview endpoint
                 async with session.get(
-                    f"{self.services['market_analysis']}/api/market-overview", 
+                    f"{self.services['market_analysis']}/status",
                     timeout=10
                 ) as response:
                     if response.status == 200:
@@ -164,7 +164,7 @@ class TradingPipelineTest:
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        f"{self.services['market_analysis']}/api/signals/{instrument}",
+                        f"{self.services['market_analysis']}/signals/recent?symbol={instrument}",
                         timeout=10
                     ) as response:
                         if response.status == 200:
@@ -252,16 +252,16 @@ class TradingPipelineTest:
         
         # Create test order
         test_order = {
-            "account_id": "test_account",
+            "signal_id": f"TEST_{int(time.time())}",
             "instrument": "EUR_USD",
-            "order_type": "market",
             "side": "buy",
             "units": 1000,
-            "take_profit_price": 1.0600,
+            "confidence": 75.0,
             "stop_loss_price": 1.0450,
-            "client_extensions": {
-                "id": f"test_order_{int(time.time())}",
-                "tag": "integration_test",
+            "take_profit_price": 1.0600,
+            "account_id": "test_account",
+            "metadata": {
+                "source": "integration_test",
                 "comment": "End-to-end pipeline test"
             }
         }
@@ -269,7 +269,7 @@ class TradingPipelineTest:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.services['execution_engine']}/api/orders",
+                    f"{self.services['execution_engine']}/orders/market",
                     json=test_order,
                     timeout=10
                 ) as response:

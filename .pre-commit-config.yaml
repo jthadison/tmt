@@ -92,6 +92,25 @@ repos:
       - id: commitizen-branch
         stages: [push]
 
+  # Custom hooks for critical trading system tests
+  - repo: local
+    hooks:
+      - id: test-execution-engine
+        name: Test Execution Engine Critical Functions
+        entry: python test-execution-engine.py
+        language: system
+        pass_filenames: false
+        files: execution-engine/.*\.py$
+        description: "Validates execution engine to prevent trading bugs like units_int error"
+
+      - id: run-critical-tests
+        name: Run Critical Trading System Tests
+        entry: python run_all_tests.py
+        language: system
+        pass_filenames: false
+        stages: [commit]
+        description: "Runs comprehensive test suite before commit"
+
 # Configuration
 default_language_version:
   python: python3.11
