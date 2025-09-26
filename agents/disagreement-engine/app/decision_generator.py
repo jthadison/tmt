@@ -1,8 +1,8 @@
 """
 Decision Generator - Creates individual account decisions based on personality.
 """
-import random
 import logging
+import hashlib
 from typing import Dict, Optional
 from datetime import datetime
 
@@ -108,7 +108,9 @@ class DecisionGenerator:
         # Step 2: Check if risk exceeds personal threshold
         if risk_assessment.combined_risk_level > risk_assessment.risk_threshold:
             decision.decision = DecisionType.SKIP
-            decision.reasoning = random.choice(SKIP_REASONS)
+            # Use deterministic reason selection based on risk level
+            reason_index = int((risk_assessment.combined_risk_level * 100) % len(SKIP_REASONS))
+            decision.reasoning = SKIP_REASONS[reason_index]
             logger.debug(f"Account {account_id} skipping due to risk: {risk_assessment.combined_risk_level:.2f} > {risk_assessment.risk_threshold:.2f}")
             return decision
         
@@ -119,7 +121,10 @@ class DecisionGenerator:
         # Step 4: Determine if this is a modification or straight take
         if self._has_significant_modifications(modifications):
             decision.decision = DecisionType.MODIFY
-            decision.reasoning = random.choice(MODIFICATION_REASONS)
+            # Use deterministic reason based on personality hash
+            hash_val = hashlib.md5(f"{account_id}{signal.symbol}{signal.timestamp}".encode()).hexdigest()
+            reason_index = int(hash_val, 16) % len(MODIFICATION_REASONS)
+            decision.reasoning = MODIFICATION_REASONS[reason_index]
             logger.debug(f"Account {account_id} modifying signal")
         else:
             decision.decision = DecisionType.TAKE
@@ -148,7 +153,7 @@ class DecisionGenerator:
             account_id=account['id'],
             personality_id=personality.personality_id,
             decision=DecisionType.SKIP,
-            reasoning=random.choice(SKIP_REASONS),
+            reasoning=SKIP_REASONS[0],  # Default skip reason
             risk_assessment=RiskAssessment(
                 personal_risk_level=0.8,  # High risk assumed for skip
                 market_risk_level=0.5,
@@ -196,7 +201,10 @@ class DecisionGenerator:
         impatience = 1.0 - biases.risk_aversion  # Risk averse = more patient
         max_delay = 30 * (1 - impatience)  # 0 to 30 seconds
         if max_delay > 1:  # Only add timing if meaningful delay
-            modifications.timing = random.uniform(0, max_delay)
+            # Deterministic timing based on personality traits
+            hash_val = hashlib.md5(f"{personality.personality_id}{signal.symbol}".encode()).hexdigest()
+            timing_factor = (int(hash_val[:8], 16) % 100) / 100.0
+            modifications.timing = max_delay * timing_factor
         
         # 4. Position sizing based on risk aversion
         risk_aversion = biases.risk_aversion
@@ -205,8 +213,14 @@ class DecisionGenerator:
         modifications.size = base_size * size_multiplier
         
         # 5. Direction contrarian check
-        if biases.crowd_following < 0.2 and random.random() < 0.1:  # 10% chance for strong contrarians
-            modifications.direction = 'short' if signal.direction.value == 'long' else 'long'
+        # Deterministic contrarian behavior based on personality
+        contrarian_threshold = 0.2
+        if biases.crowd_following < contrarian_threshold:
+            # Use hash to determine if this signal triggers contrarian behavior
+            hash_val = hashlib.md5(f"{personality.personality_id}{signal.signal_id}".encode()).hexdigest()
+            contrarian_factor = (int(hash_val[:4], 16) % 100) / 100.0
+            if contrarian_factor < (contrarian_threshold - biases.crowd_following):
+                modifications.direction = 'short' if signal.direction.value == 'long' else 'long'
         
         logger.debug(f"Applied modifications: TP={tp_multiplier:.2f}x, SL={sl_multiplier:.2f}x, "
                     f"size={size_multiplier:.2f}x, delay={modifications.timing or 0:.1f}s")
@@ -241,32 +255,49 @@ class DecisionGenerator:
 
     def _should_force_disagreement(self, personality: DisagreementProfile) -> bool:
         """Check if we should force a disagreement based on base disagreement rate."""
-        return random.random() < personality.base_disagreement_rate
+        # Deterministic disagreement based on personality and time
+        hash_val = hashlib.md5(f"{personality.personality_id}{datetime.now().hour}".encode()).hexdigest()
+        disagreement_factor = (int(hash_val[:8], 16) % 100) / 100.0
+        return disagreement_factor < personality.base_disagreement_rate
 
     def _force_disagreement(self, decision: AccountDecision, signal: OriginalSignal) -> AccountDecision:
         """Force a disagreement by modifying or skipping the decision."""
-        disagreement_type = random.choice(['skip', 'modify_significant'])
-        
+        # Deterministic disagreement type based on signal and personality
+        hash_val = hashlib.md5(f"{decision.personality_id}{signal.signal_id}".encode()).hexdigest()
+        disagreement_selector = int(hash_val[:2], 16) % 2
+        disagreement_type = 'skip' if disagreement_selector == 0 else 'modify_significant'
+
         if disagreement_type == 'skip':
             decision.decision = DecisionType.SKIP
-            decision.reasoning = random.choice(SKIP_REASONS)
+            reason_index = int(hash_val[2:4], 16) % len(SKIP_REASONS)
+            decision.reasoning = SKIP_REASONS[reason_index]
             
         else:  # modify_significant
             decision.decision = DecisionType.MODIFY
             
             # Make a significant modification
-            modification_type = random.choice(['tp', 'sl', 'size', 'direction'])
-            
+            # Deterministic modification type selection
+            hash_val = hashlib.md5(f"{decision.personality_id}{signal.signal_id}modify".encode()).hexdigest()
+            mod_selector = int(hash_val[:2], 16) % 4
+            modification_types = ['tp', 'sl', 'size', 'direction']
+            modification_type = modification_types[mod_selector]
+
             if modification_type == 'tp':
-                decision.modifications.take_profit = signal.take_profit * random.uniform(0.6, 1.4)
+                # Deterministic TP adjustment
+                adjustment_factor = 0.6 + (int(hash_val[2:4], 16) % 80) / 100.0  # 0.6 to 1.4
+                decision.modifications.take_profit = signal.take_profit * adjustment_factor
                 decision.reasoning = "Adjusted profit target based on personal analysis"
-                
+
             elif modification_type == 'sl':
-                decision.modifications.stop_loss = signal.stop_loss * random.uniform(0.7, 1.3)
+                # Deterministic SL adjustment
+                adjustment_factor = 0.7 + (int(hash_val[4:6], 16) % 60) / 100.0  # 0.7 to 1.3
+                decision.modifications.stop_loss = signal.stop_loss * adjustment_factor
                 decision.reasoning = "Modified stop loss for better risk management"
-                
+
             elif modification_type == 'size':
-                decision.modifications.size = (decision.modifications.size or 0.01) * random.uniform(0.5, 0.8)
+                # Deterministic size adjustment
+                adjustment_factor = 0.5 + (int(hash_val[6:8], 16) % 30) / 100.0  # 0.5 to 0.8
+                decision.modifications.size = (decision.modifications.size or 0.01) * adjustment_factor
                 decision.reasoning = "Reduced position size due to market uncertainty"
                 
             elif modification_type == 'direction':

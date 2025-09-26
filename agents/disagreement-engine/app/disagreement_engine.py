@@ -2,8 +2,8 @@
 Main Disagreement Engine implementation.
 Generates 15-20% disagreement rate across accounts to avoid correlation.
 """
-import random
 import logging
+import hashlib
 from typing import List, Dict, Tuple
 from datetime import datetime
 import numpy as np
@@ -125,7 +125,11 @@ class DisagreementEngine:
         personalities: Dict[str, DisagreementProfile]
     ) -> float:
         """Calculate what percentage of accounts should participate in this signal."""
-        base_rate = random.uniform(*self.target_participation_rate)
+        # Deterministic participation rate based on signal properties
+        signal_hash = hashlib.md5(f"{signal.signal_id}{signal.timestamp}".encode()).hexdigest()
+        rate_factor = (int(signal_hash[:8], 16) % 100) / 100.0
+        min_rate, max_rate = self.target_participation_rate
+        base_rate = min_rate + (max_rate - min_rate) * rate_factor
         
         # Adjust based on signal strength
         strength_adjustment = (signal.strength - 0.5) * 0.1  # ±5% adjustment
@@ -143,9 +147,13 @@ class DisagreementEngine:
         """Select which accounts will participate in the signal."""
         target_count = int(len(accounts) * participation_rate)
         
-        # Randomly select participants
-        # In real implementation, this could consider account-specific factors
-        participants = random.sample(accounts, min(target_count, len(accounts)))
+        # Deterministically select participants based on signal and accounts
+        # Sort accounts by a hash of their ID and the signal to get deterministic ordering
+        sorted_accounts = sorted(
+            accounts,
+            key=lambda acc: hashlib.md5(f"{acc}{signal.signal_id}".encode()).hexdigest()
+        )
+        participants = sorted_accounts[:min(target_count, len(accounts))]
         
         return participants
 
@@ -191,15 +199,20 @@ class DisagreementEngine:
                 
             # Force disagreement if both are taking the same action
             if decision1.decision == decision2.decision == DecisionType.TAKE:
-                # Randomly choose one to modify
-                if random.random() < 0.5:
+                # Deterministically choose one to modify based on account IDs
+                hash_val = hashlib.md5(f"{acc1}{acc2}".encode()).hexdigest()
+                modify_first = int(hash_val[:2], 16) % 2 == 0
+                if modify_first:
                     decision1.decision = DecisionType.SKIP
                     decision1.reasoning = "Avoiding correlation with related account"
                     logger.debug(f"Forced {account1_id} to skip to reduce correlation with {account2_id}")
                 else:
                     # Modify decision2 significantly
                     decision2.decision = DecisionType.MODIFY
-                    decision2.modifications.take_profit = signal.take_profit * random.uniform(0.7, 1.3)
+                    # Deterministic TP modification based on accounts
+                    tp_hash = hashlib.md5(f"{account2_id}{signal.signal_id}tp".encode()).hexdigest()
+                    tp_factor = 0.7 + (int(tp_hash[:4], 16) % 600) / 1000.0  # 0.7 to 1.3
+                    decision2.modifications.take_profit = signal.take_profit * tp_factor
                     decision2.reasoning = "Personal profit target preference"
                     logger.debug(f"Forced {account2_id} to modify TP to reduce correlation with {account1_id}")
                 

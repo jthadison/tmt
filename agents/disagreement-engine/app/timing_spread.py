@@ -2,8 +2,8 @@
 Timing Spread Mechanism - Manages entry timing distribution.
 Implements AC3: Entry timing spreads increased during high-signal periods.
 """
-import random
 import logging
+import hashlib
 from typing import List, Dict, Tuple
 from datetime import datetime, timedelta
 import numpy as np
@@ -172,8 +172,13 @@ class TimingSpreadEngine:
         else:  # random
             timings = self._random_distribution(num_accounts, timing_spread)
         
-        # Shuffle to randomize account assignment
-        random.shuffle(timings)
+        # Deterministic shuffle based on signal ID
+        # Create reproducible ordering based on signal
+        signal_hash = hashlib.md5(f"{num_accounts}{distribution_type}{datetime.now().hour}".encode()).hexdigest()
+        indices = list(range(len(timings)))
+        # Sort indices based on hash to create deterministic shuffle
+        indices.sort(key=lambda x: hashlib.md5(f"{signal_hash}{x}".encode()).hexdigest())
+        timings = [timings[i] for i in indices]
         
         logger.debug(f"Generated {distribution_type} timing distribution: "
                     f"min={min(timings):.1f}s, max={max(timings):.1f}s, "
@@ -184,18 +189,30 @@ class TimingSpreadEngine:
     def _select_distribution_type(self) -> str:
         """Select timing distribution type based on current conditions."""
         
+        # Deterministic distribution selection based on time and mode
+        hour_hash = hashlib.md5(f"{datetime.now().hour}{datetime.now().minute // 10}".encode()).hexdigest()
+        selector = int(hour_hash[:2], 16) % 100
+
         if self.high_signal_mode:
             # During high signal periods, prefer more spread out distributions
-            return random.choices(
-                ["staggered", "uniform", "random", "clustered"],
-                weights=[0.4, 0.3, 0.2, 0.1]
-            )[0]
+            if selector < 40:
+                return "staggered"
+            elif selector < 70:
+                return "uniform"
+            elif selector < 90:
+                return "random"
+            else:
+                return "clustered"
         else:
             # Normal periods, more natural clustering
-            return random.choices(
-                ["clustered", "random", "uniform", "staggered"],
-                weights=[0.4, 0.3, 0.2, 0.1]
-            )[0]
+            if selector < 40:
+                return "clustered"
+            elif selector < 70:
+                return "random"
+            elif selector < 90:
+                return "uniform"
+            else:
+                return "staggered"
 
     def _uniform_distribution(self, num_accounts: int, spread: float) -> List[float]:
         """Create uniform timing distribution."""
@@ -213,9 +230,12 @@ class TimingSpreadEngine:
         num_clusters = min(3, max(2, num_accounts // 3))
         accounts_per_cluster = num_accounts // num_clusters
         
-        cluster_centers = [
-            random.uniform(0, spread) for _ in range(num_clusters)
-        ]
+        # Deterministic cluster centers
+        cluster_centers = []
+        for i in range(num_clusters):
+            center_hash = hashlib.md5(f"cluster{i}{spread}".encode()).hexdigest()
+            center_position = (int(center_hash[:8], 16) % 100) / 100.0
+            cluster_centers.append(spread * center_position)
         cluster_centers.sort()
         
         for i, center in enumerate(cluster_centers):
@@ -225,7 +245,10 @@ class TimingSpreadEngine:
             
             # Add accounts around cluster center
             for j in range(cluster_size):
-                offset = random.gauss(0, spread * 0.1)  # Small variance around center
+                # Deterministic offset around cluster center
+                offset_hash = hashlib.md5(f"{i}{j}{center}".encode()).hexdigest()
+                offset_factor = ((int(offset_hash[:4], 16) % 200) - 100) / 1000.0  # -0.1 to 0.1
+                offset = spread * offset_factor
                 timing = max(0, center + offset)
                 timings.append(timing)
         
@@ -242,15 +265,23 @@ class TimingSpreadEngine:
         for i in range(num_accounts):
             # Base timing with small random offset
             base_timing = i * base_interval
-            offset = random.uniform(-base_interval * 0.2, base_interval * 0.2)
+            # Deterministic offset
+            offset_hash = hashlib.md5(f"uniform{i}{base_timing}".encode()).hexdigest()
+            offset_factor = ((int(offset_hash[:4], 16) % 40) - 20) / 100.0  # -0.2 to 0.2
+            offset = base_interval * offset_factor
             timing = max(0, base_timing + offset)
             timings.append(timing)
         
         return timings
 
     def _random_distribution(self, num_accounts: int, spread: float) -> List[float]:
-        """Create random timing distribution."""
-        return [random.uniform(0, spread) for _ in range(num_accounts)]
+        """Create pseudo-random timing distribution (deterministic)."""
+        timings = []
+        for i in range(num_accounts):
+            timing_hash = hashlib.md5(f"random{i}{spread}".encode()).hexdigest()
+            timing_factor = (int(timing_hash[:8], 16) % 10000) / 10000.0
+            timings.append(spread * timing_factor)
+        return timings
 
     def _apply_personality_timing(
         self,
@@ -269,8 +300,10 @@ class TimingSpreadEngine:
         # Risk-averse traders tend to wait longer
         risk_adjustment = risk_aversion * 10  # Up to 10 seconds
         
-        # Non-conformist traders vary timing more
-        conformity_adjustment = (1.0 - conformity) * random.uniform(-5, 15)
+        # Non-conformist traders vary timing more (deterministic)
+        conformity_hash = hashlib.md5(f"{conformity}{base_timing}".encode()).hexdigest()
+        conformity_factor = ((int(conformity_hash[:4], 16) % 200) - 50) / 10.0  # -5 to 15
+        conformity_adjustment = (1.0 - conformity) * conformity_factor
         
         # Apply situational modifiers for time of day
         time_modifier = self._get_time_of_day_modifier(personality)
@@ -298,14 +331,18 @@ class TimingSpreadEngine:
             return time_modifiers[str(current_hour)] * 5  # Scale to seconds
         
         # Default modifiers for different sessions
+        # Deterministic session-based timing adjustments
+        session_hash = hashlib.md5(f"session{current_hour}{datetime.now().minute}".encode()).hexdigest()
+        session_factor = (int(session_hash[:4], 16) % 100) / 100.0
+
         if 8 <= current_hour <= 12:  # London session
-            return random.uniform(-2, 2)
-        elif 13 <= current_hour <= 17:  # NY session  
-            return random.uniform(-3, 5)  # Slightly more delay during busy NY hours
+            return -2 + (4 * session_factor)  # -2 to 2
+        elif 13 <= current_hour <= 17:  # NY session
+            return -3 + (8 * session_factor)  # -3 to 5
         elif 22 <= current_hour or current_hour <= 6:  # Asian session
-            return random.uniform(0, 8)  # More cautious during Asian hours
+            return 8 * session_factor  # 0 to 8
         else:  # Overlap periods
-            return random.uniform(-1, 3)
+            return -1 + (4 * session_factor)  # -1 to 3
 
     def get_timing_statistics(self, recent_decisions: List[AccountDecision]) -> Dict[str, float]:
         """Get timing spread statistics for monitoring."""

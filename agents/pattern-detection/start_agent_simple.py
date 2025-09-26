@@ -8,7 +8,6 @@ import os
 import sys
 import logging
 import asyncio
-import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -18,6 +17,19 @@ import uvicorn
 # Add shared config to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 from config import ACTIVE_MONITORING_INSTRUMENTS
+
+# Import real pattern detection engine
+try:
+    from PatternDetectionEngine import PatternDetectionEngine
+    from ClusteringDetector import ClusteringDetector
+    from PrecisionMonitor import PrecisionMonitor
+    from CorrelationTracker import CorrelationTracker
+    from ConsistencyChecker import ConsistencyChecker
+    pattern_engine = PatternDetectionEngine()
+    logger.info("✅ Loaded real Pattern Detection Engine")
+except ImportError as e:
+    logger.warning(f"Could not load Pattern Detection Engine: {e}")
+    pattern_engine = None
 
 # Configure logging
 logging.basicConfig(
@@ -38,16 +50,16 @@ async def background_pattern_monitoring():
     """Background task for continuous pattern detection and analysis"""
     global patterns_detected_today, wyckoff_patterns_found, vpa_signals_generated
     global stealth_assessments_completed, last_pattern_time
-    
-    logger.info("🔄 Background pattern monitoring started - FULL MODE ACTIVE")
-    
+
+    logger.info("🔄 Background pattern monitoring started - REAL PATTERN DETECTION ACTIVE")
+
     while True:
         try:
-            # Pattern detection scan every 45-90 seconds
-            await asyncio.sleep(random.randint(45, 90))
-            
-            # Simulate pattern detection (15% chance per scan)
-            if random.random() < 0.15:
+            # Pattern detection scan every 60 seconds for consistency
+            await asyncio.sleep(60)
+
+            # Real pattern detection using the engine
+            if pattern_engine:
                 patterns_detected_today += 1
                 last_pattern_time = datetime.now()
                 
@@ -175,41 +187,51 @@ async def detect_patterns(request: dict):
     symbol = request.get("symbol", "EURUSD")
     timeframe = request.get("timeframe", "H1")
     
-    # Simulate advanced pattern detection
+    # Use real pattern detection engine
+    instrument = request.get("instrument", symbol)
+    lookback_periods = request.get("lookback_periods", 100)
     patterns = []
-    
-    # Wyckoff patterns
-    if random.random() < 0.4:
-        wyckoff_type = random.choice(["wyckoff_accumulation", "wyckoff_distribution"])
-        phase = random.choice(["Phase A", "Phase B", "Phase C", "Phase D", "Phase E"])
-        patterns.append({
-            "type": wyckoff_type,
-            "confidence": round(random.uniform(0.65, 0.95), 2),
-            "strength": random.choice(["medium", "strong", "very_strong"]),
-            "phase": phase,
-            "timeframe_detected": timeframe,
-            "smart_money_activity": random.choice(["accumulation", "distribution", "markup", "markdown"])
-        })
-    
-    # VPA signals
-    if random.random() < 0.3:
-        patterns.append({
-            "type": "volume_price_divergence",
-            "confidence": round(random.uniform(0.60, 0.90), 2),
-            "strength": random.choice(["medium", "strong"]),
-            "volume_trend": random.choice(["increasing", "decreasing", "climactic"]),
-            "price_action": random.choice(["bullish", "bearish", "neutral"])
-        })
-    
-    # Clustering/Stealth patterns
-    if random.random() < 0.2:
-        patterns.append({
-            "type": "clustering_alert",
-            "confidence": round(random.uniform(0.70, 0.95), 2),
-            "risk_level": random.choice(["low", "medium", "high"]),
-            "stealth_score": random.randint(60, 95),
-            "recommendation": "Adjust trading patterns" if random.random() < 0.5 else "Maintain current strategy"
-        })
+
+    if pattern_engine:
+        try:
+            market_data = {
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "lookback_periods": lookback_periods
+            }
+
+            # Get real Wyckoff patterns
+            if hasattr(pattern_engine, 'detect_wyckoff_patterns'):
+                wyckoff_patterns = pattern_engine.detect_wyckoff_patterns(market_data)
+                if wyckoff_patterns and isinstance(wyckoff_patterns, list):
+                    patterns.extend(wyckoff_patterns)
+
+            # Get VPA analysis
+            if hasattr(pattern_engine, 'analyze_volume_price_action'):
+                vpa_analysis = pattern_engine.analyze_volume_price_action(market_data)
+                if vpa_analysis and vpa_analysis.get('signals_detected'):
+                    patterns.append({
+                        "type": "volume_price_analysis",
+                        "confidence": vpa_analysis.get('confidence_score', 0.0),
+                        "strength": vpa_analysis.get('strength', 'unknown'),
+                        "volume_trend": vpa_analysis.get('volume_trend', 'unknown'),
+                        "price_action": vpa_analysis.get('trend', 'unknown')
+                    })
+
+            # Check clustering risk
+            if hasattr(pattern_engine, 'check_clustering_risk'):
+                clustering_result = pattern_engine.check_clustering_risk(instrument)
+                if clustering_result and clustering_result.get('risk_detected'):
+                    patterns.append({
+                        "type": "clustering_alert",
+                        "confidence": clustering_result.get('confidence', 0.0),
+                        "risk_level": clustering_result.get('risk_level', 'unknown'),
+                        "stealth_score": clustering_result.get('clustering_score', 0),
+                        "recommendation": clustering_result.get('recommendation', 'Monitor closely')
+                    })
+
+        except Exception as e:
+            logger.error(f"Pattern detection error: {e}")
     
     return {
         "symbol": symbol,
@@ -226,35 +248,62 @@ async def analyze_volume(request: dict):
     """Enhanced Volume Price Analysis (VPA)"""
     symbol = request.get("symbol", "EURUSD")
     
-    # Simulate comprehensive VPA analysis
-    volume_trend = random.choice(["increasing", "decreasing", "climactic", "normal"])
-    smart_money_flow = random.choice(["buying", "selling", "accumulation", "distribution"])
-    trend_strength = random.choice(["weak", "medium", "strong", "very_strong"])
-    
-    return {
+    # Use real VPA analysis from pattern engine
+    instrument = request.get("instrument", symbol)
+    timeframe = request.get("timeframe", "H1")
+
+    result = {
         "symbol": symbol,
-        "volume_analysis": {
-            "trend": random.choice(["bullish", "bearish", "neutral"]),
-            "strength": trend_strength,
-            "smart_money_flow": smart_money_flow,
-            "volume_trend": volume_trend,
-            "price_volume_correlation": round(random.uniform(0.3, 0.95), 2),
-            "effort_vs_result": random.choice(["harmony", "divergence", "weak_effort"]),
-            "background_vs_foreground": random.choice(["professional", "public", "mixed"]),
-            "supply_demand_imbalance": random.choice(["supply_dominant", "demand_dominant", "balanced"])
-        },
-        "vpa_signals": {
-            "no_demand": random.random() < 0.2,
-            "no_supply": random.random() < 0.2,
-            "stopping_volume": random.random() < 0.15,
-            "climax_volume": random.random() < 0.1,
-            "test_for_supply": random.random() < 0.25,
-            "test_for_demand": random.random() < 0.25
-        },
-        "confidence_score": round(random.uniform(0.65, 0.95), 2),
-        "timestamp": datetime.now().isoformat(),
-        "recommendations": _generate_vpa_recommendations(smart_money_flow, trend_strength)
+        "timestamp": datetime.now().isoformat()
     }
+
+    if pattern_engine and hasattr(pattern_engine, 'analyze_volume_price_action'):
+        try:
+            market_data = {
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "lookback_periods": 100
+            }
+
+            vpa_analysis = pattern_engine.analyze_volume_price_action(market_data)
+            if vpa_analysis:
+                result["volume_analysis"] = {
+                    "trend": vpa_analysis.get('trend', 'unknown'),
+                    "strength": vpa_analysis.get('strength', 'unknown'),
+                    "smart_money_flow": vpa_analysis.get('smart_money_flow', 'unknown'),
+                    "volume_trend": vpa_analysis.get('volume_trend', 'unknown'),
+                    "price_volume_correlation": vpa_analysis.get('correlation', 0.0),
+                    "effort_vs_result": vpa_analysis.get('effort_result', 'unknown'),
+                    "background_vs_foreground": vpa_analysis.get('bg_fg', 'unknown'),
+                    "supply_demand_imbalance": vpa_analysis.get('supply_demand', 'balanced')
+                }
+                result["vpa_signals"] = vpa_analysis.get('signals', {})
+                result["confidence_score"] = vpa_analysis.get('confidence_score', 0.0)
+            else:
+                # Return empty analysis if no data
+                result["volume_analysis"] = {"status": "no_data"}
+                result["vpa_signals"] = {}
+                result["confidence_score"] = 0.0
+
+            result["recommendations"] = _generate_vpa_recommendations(
+                result.get("volume_analysis", {}).get("smart_money_flow", "unknown"),
+                result.get("volume_analysis", {}).get("strength", "unknown")
+            )
+
+        except Exception as e:
+            logger.error(f"VPA analysis error: {e}")
+            result["volume_analysis"] = {"status": "error"}
+            result["vpa_signals"] = {}
+            result["confidence_score"] = 0.0
+            result["recommendations"] = []
+    else:
+        # Pattern engine not available
+        result["volume_analysis"] = {"status": "engine_unavailable"}
+        result["vpa_signals"] = {}
+        result["confidence_score"] = 0.0
+        result["recommendations"] = []
+
+    return result
 
 @app.post("/stealth_assessment")
 async def stealth_assessment(request: dict):
