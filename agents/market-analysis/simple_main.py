@@ -292,8 +292,8 @@ async def background_market_monitoring():
                 intelligent_generator.min_confidence_threshold = session_confidence
                 intelligent_generator.min_risk_reward = session_rr
 
-                # Scan markets for opportunities
-                signals = await intelligent_generator.scan_markets()
+                # Analyze markets and generate signals
+                signals = await intelligent_generator.analyze_market_and_generate_signals()
 
                 if signals:
                     for signal_data in signals:

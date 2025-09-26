@@ -60,44 +60,60 @@ async def background_pattern_monitoring():
 
             # Real pattern detection using the engine
             if pattern_engine:
-                patterns_detected_today += 1
-                last_pattern_time = datetime.now()
-                
-                # Generate different types of patterns
-                pattern_types = ["wyckoff_accumulation", "wyckoff_distribution", "volume_spike", 
-                               "smart_money_flow", "clustering_alert", "vpa_signal"]
-                pattern_type = random.choice(pattern_types)
-                instrument = random.choice(active_monitoring_instruments)
-                confidence = random.randint(65, 95)
-                
-                if "wyckoff" in pattern_type:
-                    wyckoff_patterns_found += 1
-                    phase = random.choice(["accumulation", "markup", "distribution", "markdown"])
-                    logger.info(f"📊 WYCKOFF PATTERN DETECTED: {pattern_type} - {instrument} - Phase: {phase} - Confidence: {confidence}%")
-                elif "volume" in pattern_type or "vpa" in pattern_type:
-                    vpa_signals_generated += 1
-                    direction = random.choice(["bullish", "bearish"])
-                    strength = random.choice(["medium", "strong", "very_strong"])
-                    logger.info(f"📈 VPA SIGNAL: {pattern_type} - {instrument} - {direction} {strength} - Confidence: {confidence}%")
-                elif "clustering" in pattern_type:
-                    risk_level = random.choice(["low", "medium", "high"])
-                    stealth_score = random.randint(65, 95)
-                    logger.info(f"🔍 CLUSTERING ANALYSIS: {instrument} - Risk: {risk_level} - Stealth Score: {stealth_score}%")
-                else:
-                    logger.info(f"💡 PATTERN ALERT: {pattern_type} - {instrument} - Confidence: {confidence}%")
-                
+                # Scan all monitored instruments for real patterns
+                for instrument in active_monitoring_instruments:
+                    try:
+                        # Prepare market data for pattern detection
+                        market_data = {
+                            "instrument": instrument,
+                            "timeframe": "H1",
+                            "lookback_periods": 100
+                        }
+
+                        # Try to detect real patterns using pattern engine methods
+                        try:
+                            # Detect Wyckoff patterns
+                            wyckoff_result = pattern_engine.detect_wyckoff_patterns(market_data) if hasattr(pattern_engine, 'detect_wyckoff_patterns') else None
+                            if wyckoff_result and isinstance(wyckoff_result, list) and len(wyckoff_result) > 0:
+                                patterns_detected_today += 1
+                                wyckoff_patterns_found += len(wyckoff_result)
+                                last_pattern_time = datetime.now()
+                                for pattern in wyckoff_result:
+                                    logger.info(f"📊 WYCKOFF PATTERN DETECTED: {pattern.get('type', 'Unknown')} - {instrument} - Phase: {pattern.get('phase', 'Unknown')} - Confidence: {pattern.get('confidence', 0) * 100:.1f}%")
+
+                            # Analyze volume price action
+                            vpa_result = pattern_engine.analyze_volume_price_action(market_data) if hasattr(pattern_engine, 'analyze_volume_price_action') else None
+                            if vpa_result and vpa_result.get('signals_detected'):
+                                patterns_detected_today += 1
+                                vpa_signals_generated += 1
+                                logger.info(f"📈 VPA SIGNAL: {instrument} - Trend: {vpa_result.get('trend', 'Unknown')} - Volume: {vpa_result.get('volume_trend', 'Unknown')}")
+
+                            # Check clustering risk
+                            if hasattr(pattern_engine, 'check_clustering_risk'):
+                                clustering_result = pattern_engine.check_clustering_risk(instrument)
+                                if clustering_result and clustering_result.get('risk_detected'):
+                                    patterns_detected_today += 1
+                                    logger.info(f"🔍 CLUSTERING ANALYSIS: {instrument} - Risk: {clustering_result.get('risk_level', 'Unknown')}")
+                        except Exception as e:
+                            logger.debug(f"Pattern detection error for {instrument}: {e}")
+                    except Exception as e:
+                        logger.error(f"Error processing {instrument}: {e}")
+
                 logger.info(f"🎯 Total patterns detected today: {patterns_detected_today}")
             
-            # Stealth assessment every 10-15 minutes (lower frequency)
-            if random.random() < 0.05:
-                stealth_assessments_completed += 1
-                overall_stealth = random.randint(70, 95)
-                risk_level = "low" if overall_stealth > 80 else "medium" if overall_stealth > 70 else "high"
-                logger.info(f"🛡️ STEALTH ASSESSMENT COMPLETED - Overall Score: {overall_stealth}% - Risk: {risk_level}")
+            # Perform stealth assessment periodically
+            if patterns_detected_today > 0 and patterns_detected_today % 20 == 0:
+                if pattern_engine and hasattr(pattern_engine, 'generate_stealth_report'):
+                    try:
+                        stealth_report = pattern_engine.generate_stealth_report()
+                        if stealth_report:
+                            stealth_assessments_completed += 1
+                            logger.info(f"🛡️ STEALTH ASSESSMENT COMPLETED - Overall Score: {stealth_report.get('stealth_score', 0):.1f}% - Risk: {stealth_report.get('risk_level', 'Unknown')}")
+                    except Exception as e:
+                        logger.debug(f"Stealth assessment error: {e}")
             
             # Log monitoring activity periodically
-            if random.random() < 0.25:
-                logger.info(f"🔍 Pattern monitoring active - scanning {len(active_monitoring_instruments)} instruments")
+            logger.debug(f"🔍 Pattern monitoring active - scanning {len(active_monitoring_instruments)} instruments")
                 
         except Exception as e:
             logger.error(f"Error in pattern monitoring: {e}")
