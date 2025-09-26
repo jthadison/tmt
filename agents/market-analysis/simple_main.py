@@ -8,7 +8,6 @@ import os
 import sys
 import logging
 import asyncio
-import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +22,9 @@ from typing import Optional, List, Dict, Any
 # Add shared config to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 from config import CORE_TRADING_INSTRUMENTS
+
+# Import intelligent signal generator
+from intelligent_signal_generator import IntelligentSignalGenerator
 
 # Import session targeting configuration
 try:
@@ -266,105 +268,73 @@ async def send_signal_to_orchestrator(signal_data):
 async def background_market_monitoring():
     """Background task for market monitoring and signal generation"""
     global signals_generated_today, last_signal_time
-    
+
     logger.info("🔄 Background market monitoring started")
-    
+
+    # Initialize intelligent signal generator
+    intelligent_generator = IntelligentSignalGenerator()
+    logger.info("✅ Initialized Intelligent Signal Generator for background monitoring")
+
     while True:
         try:
-            # Market scanning every 5-15 minutes for more realistic trading frequency
-            await asyncio.sleep(random.randint(300, 900))  # 5-15 minutes
-            
+            # Market scanning every 10 minutes for consistent monitoring
+            await asyncio.sleep(600)  # Fixed 10-minute interval
+
             # Get current session parameters
             current_params = get_current_parameters()
             session_confidence = current_params.get('confidence_threshold', 70.0)
             session_rr = current_params.get('min_risk_reward', 2.0)
             current_session = current_params.get('current_session', 'unknown')
 
-            # Reduced signal generation (3% chance per scan for ~1-2 signals/hour max)
-            if random.random() < 0.03:
-                signals_generated_today += 1
-                last_signal_time = datetime.now()
+            # Generate signals using intelligent signal generator with real market analysis
+            try:
+                # Set session-specific parameters for the intelligent generator
+                intelligent_generator.min_confidence_threshold = session_confidence
+                intelligent_generator.min_risk_reward = session_rr
 
-                instruments = CORE_TRADING_INSTRUMENTS  # Using centralized instrument config
-                instrument = random.choice(instruments)
-                signal_type = random.choice(["BUY", "SELL"])
+                # Analyze markets and generate signals
+                signals = await intelligent_generator.analyze_market_and_generate_signals()
 
-                # Use session-specific confidence threshold
-                min_confidence = int(session_confidence)
-                max_confidence = min(95, int(session_confidence + 15))
-                confidence = random.randint(min_confidence, max_confidence)
-                
-                # Get current market price for realistic entry price
-                entry_price = await get_current_market_price(instrument)
-                
-                # Calculate proper stop-loss and take-profit based on signal direction
-                risk_pips = random.randint(20, 50)  # Risk in pips
-                # Use session-specific risk-reward ratio
-                reward_ratio = random.uniform(session_rr, min(session_rr + 1.0, 5.0))  # Session-based R:R
-                
-                pip_value = 0.0001 if instrument != "USD_JPY" else 0.01
-                risk_amount = risk_pips * pip_value
-                reward_amount = risk_amount * reward_ratio
-                
-                if signal_type.lower() == "buy":
-                    stop_loss = round(entry_price - risk_amount, 4)
-                    take_profit = round(entry_price + reward_amount, 4)
-                else:  # SELL
-                    stop_loss = round(entry_price + risk_amount, 4) 
-                    take_profit = round(entry_price - reward_amount, 4)
-                
-                # Create structured trading signal
-                signal_data = {
-                    "signal_id": f"MA_{int(datetime.now().timestamp())}",
-                    "symbol": instrument,
-                    "signal_type": signal_type.lower(),
-                    "confidence": confidence,
-                    "entry_price": entry_price,
-                    "stop_loss": stop_loss,
-                    "take_profit": take_profit,
-                    "position_size": 1000,  # Units
-                    "timeframe": "1h",
-                    "pattern_type": random.choice(["wyckoff_spring", "wyckoff_upthrust", "vpa_confirmation"]),
-                    "agent_id": "market_analysis_001",
-                    "generated_at": datetime.now().isoformat(),
-                    "market_context": {
-                        "trend": random.choice(["bullish", "bearish", "sideways"]),
-                        "volatility": random.choice(["low", "normal", "high"]),
-                        "volume": random.choice(["below_average", "average", "above_average"]),
-                        "trading_session": current_session,
-                        "session_parameters": current_params
-                    },
-                    "risk_reward_ratio": round(reward_ratio, 2),
-                    "risk_pips": risk_pips,
-                    "session_targeted": SESSION_TARGETING_ENABLED
-                }
+                if signals:
+                    for signal_data in signals:
+                        signals_generated_today += 1
+                        last_signal_time = datetime.now()
 
-                # Store signal in database if available
-                if signal_db_initialized:
-                    try:
-                        success = await store_signal_in_db(signal_data)
-                        if success:
-                            logger.info(f"💾 Signal {signal_data['signal_id']} stored in database")
+                        # Add session information to signal
+                        signal_data["market_context"]["trading_session"] = current_session
+                        signal_data["market_context"]["session_parameters"] = current_params
+                        signal_data["session_targeted"] = SESSION_TARGETING_ENABLED
+
+                        # Store signal in database if available
+                        if signal_db_initialized:
+                            try:
+                                success = await store_signal_in_db(signal_data)
+                                if success:
+                                    logger.info(f"💾 Signal {signal_data['signal_id']} stored in database")
+                                else:
+                                    logger.warning(f"⚠️ Failed to store signal {signal_data['signal_id']} in database")
+                            except Exception as e:
+                                logger.error(f"❌ Error storing signal in database: {e}")
+
+                        logger.info(f"📈 INTELLIGENT SIGNAL GENERATED: {signal_data['signal_type'].upper()} {signal_data['symbol']} - Confidence: {signal_data['confidence']}%")
+
+                        # Send signal to orchestrator for execution
+                        signal_sent = await send_signal_to_orchestrator(signal_data)
+
+                        if signal_sent:
+                            logger.info(f"🚀 Signal sent to orchestrator for trade execution")
                         else:
-                            logger.warning(f"⚠️ Failed to store signal {signal_data['signal_id']} in database")
-                    except Exception as e:
-                        logger.error(f"❌ Error storing signal in database: {e}")
-                
-                logger.info(f"📈 TRADING SIGNAL GENERATED: {signal_type} {instrument} - Confidence: {confidence}%")
-                
-                # Send signal to orchestrator for execution
-                signal_sent = await send_signal_to_orchestrator(signal_data)
-                
-                if signal_sent:
-                    logger.info(f"🚀 Signal sent to orchestrator for trade execution")
+                            logger.warning(f"⚠️ Signal generated but not sent to orchestrator")
+
+                    logger.info(f"🎯 Total signals today: {signals_generated_today}")
                 else:
-                    logger.warning(f"⚠️ Signal generated but not sent to orchestrator")
-                
-                logger.info(f"🎯 Total signals today: {signals_generated_today}")
-            
+                    logger.debug("No valid trading signals found in current market conditions")
+
+            except Exception as e:
+                logger.error(f"Error generating intelligent signals: {e}")
+
             # Log market activity periodically
-            if random.random() < 0.3:
-                logger.info(f"🔍 Market scan complete - monitoring {len(['EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD'])} instruments")
+            logger.info(f"🔍 Market scan complete - monitoring {len(CORE_TRADING_INSTRUMENTS)} instruments")
                 
         except Exception as e:
             logger.error(f"Error in market monitoring: {e}")
