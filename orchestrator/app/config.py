@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field("your-secret-key", env="JWT_SECRET_KEY")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+
+    # Notification settings
+    slack_webhook_url: Optional[str] = Field(None, env="SLACK_WEBHOOK_URL")
+    notifications_enabled: bool = Field(True, env="NOTIFICATIONS_ENABLED")
     
     # Agent endpoints (auto-discovered or configured)
     agent_endpoints: Dict[str, str] = Field(default_factory=lambda: {

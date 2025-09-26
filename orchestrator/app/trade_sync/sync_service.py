@@ -18,6 +18,7 @@ from ..oanda_client import OandaClient
 from ..event_bus import EventBus, Event
 from ..config import get_settings
 from .trade_database import TradeDatabase, TradeStatus, CloseReason
+from ..notifications import send_trade_notification
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +252,17 @@ class TradeSyncService:
             # Try to fetch closure details from OANDA transaction history
             close_details = await self._fetch_trade_closure_details(trade_id)
 
+            # Get account_id for closure
+            account_id = "unknown"
+            if self.oanda_client and hasattr(self.oanda_client, 'settings') and self.oanda_client.settings.account_ids_list:
+                account_id = self.oanda_client.settings.account_ids_list[0]
+
             trade_data = {
                 "trade_id": trade_id,
+                "account_id": account_id,
+                "instrument": "UNKNOWN",
+                "direction": "buy",
+                "units": 0,
                 "status": TradeStatus.CLOSED,
                 "close_time": close_details.get("close_time", datetime.now().isoformat()),
                 "close_price": close_details.get("close_price"),
@@ -264,8 +274,16 @@ class TradeSyncService:
         except Exception as e:
             logger.error(f"Error closing trade {trade_id}: {e}")
             # Fallback to basic closure
+            account_id = "unknown"
+            if self.oanda_client and hasattr(self.oanda_client, 'settings') and self.oanda_client.settings.account_ids_list:
+                account_id = self.oanda_client.settings.account_ids_list[0]
+
             trade_data = {
                 "trade_id": trade_id,
+                "account_id": account_id,
+                "instrument": "UNKNOWN",
+                "direction": "buy",
+                "units": 0,
                 "status": TradeStatus.CLOSED,
                 "close_time": datetime.now().isoformat(),
                 "close_reason": CloseReason.UNKNOWN
@@ -327,7 +345,7 @@ class TradeSyncService:
         }
 
     async def _emit_trade_event(self, trade_id: str, event_type: str, event_data: Dict[str, Any]):
-        """Emit a trade event to the event bus"""
+        """Emit a trade event to the event bus and send notifications"""
         if self.event_bus and hasattr(self.event_bus, 'publish'):
             try:
                 # Create proper Event object for EventBus
@@ -345,6 +363,12 @@ class TradeSyncService:
                 await self.event_bus.publish(event)
             except Exception as e:
                 logger.warning(f"Failed to publish trade event: {e}")
+
+        # Send Slack notification
+        try:
+            await send_trade_notification(event_data, event_type)
+        except Exception as e:
+            logger.warning(f"Failed to send Slack notification: {e}")
 
         # Also record in database for audit trail
         await self.db.add_trade_event(trade_id, event_type, event_data)
@@ -385,6 +409,12 @@ class TradeSyncService:
         }
 
         await self.db.upsert_trade(trade_data)
+
+        # Send notification for signal execution (before trade opens)
+        try:
+            await send_trade_notification(signal_data, "signal_executed")
+        except Exception as e:
+            logger.warning(f"Failed to send signal execution notification: {e}")
 
         # If fast sync is enabled, trigger immediate sync after brief delay
         if self.fast_sync_on_trade:
