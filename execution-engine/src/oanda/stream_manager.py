@@ -11,6 +11,9 @@ from decimal import Decimal
 from datetime import datetime, timezone
 import asyncio
 import logging
+import json
+import aiohttp
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -224,5 +227,215 @@ class MockStreamManager(StreamManagerInterface):
             logger.error(f"Error in price simulation: {e}")
 
 
-# For backwards compatibility, provide the original class name
-OandaStreamManager = MockStreamManager
+class RealOandaStreamManager(StreamManagerInterface):
+    """Real OANDA streaming manager that connects to actual OANDA streaming API"""
+
+    def __init__(self, api_key: str = None, environment: str = "practice"):
+        self.api_key = api_key or os.getenv("OANDA_API_KEY")
+        self.environment = environment
+
+        if self.environment == "live":
+            self.stream_base = "https://stream-fxtrade.oanda.com"
+        else:
+            self.stream_base = "https://stream-fxpractice.oanda.com"
+
+        self._is_streaming = False
+        self._instruments: List[str] = []
+        self._subscriptions: Dict[str, Callable] = {}
+        self._subscription_counter = 0
+        self._current_prices: Dict[str, PriceUpdate] = {}
+        self._stream_session: Optional[aiohttp.ClientSession] = None
+        self._stream_task: Optional[asyncio.Task] = None
+
+        logger.info(f"Initialized Real OANDA StreamManager for {environment} environment")
+
+    async def start_streaming(self, instruments: List[str]) -> bool:
+        """Start real-time streaming from OANDA"""
+        if not self.api_key:
+            logger.error("OANDA API key not provided - cannot start real streaming")
+            return False
+
+        if self._is_streaming:
+            logger.warning("Streaming already active")
+            return True
+
+        try:
+            self._instruments = instruments
+            self._is_streaming = True
+
+            # Create session with proper headers
+            self._stream_session = aiohttp.ClientSession(
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Accept": "application/stream+json"
+                },
+                timeout=aiohttp.ClientTimeout(total=None, sock_read=30)
+            )
+
+            # Start streaming task
+            self._stream_task = asyncio.create_task(self._stream_prices())
+
+            logger.info(f"Started real OANDA streaming for {len(instruments)} instruments")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to start OANDA streaming: {e}")
+            self._is_streaming = False
+            if self._stream_session:
+                await self._stream_session.close()
+                self._stream_session = None
+            return False
+
+    async def stop_streaming(self) -> bool:
+        """Stop real-time streaming"""
+        if not self._is_streaming:
+            return True
+
+        try:
+            self._is_streaming = False
+
+            if self._stream_task and not self._stream_task.done():
+                self._stream_task.cancel()
+                try:
+                    await self._stream_task
+                except asyncio.CancelledError:
+                    pass
+
+            if self._stream_session:
+                await self._stream_session.close()
+                self._stream_session = None
+
+            logger.info("Stopped OANDA streaming")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error stopping streaming: {e}")
+            return False
+
+    async def _stream_prices(self):
+        """Stream prices from OANDA API"""
+        account_id = os.getenv("OANDA_ACCOUNT_ID")
+        if not account_id:
+            logger.error("OANDA account ID not provided")
+            return
+
+        instruments_param = ",".join(self._instruments)
+        url = f"{self.stream_base}/v3/accounts/{account_id}/pricing/stream"
+
+        try:
+            async with self._stream_session.get(
+                url,
+                params={"instruments": instruments_param}
+            ) as response:
+                if response.status != 200:
+                    logger.error(f"OANDA streaming failed: {response.status}")
+                    return
+
+                logger.info(f"Connected to OANDA streaming API")
+
+                async for line in response.content:
+                    if not self._is_streaming:
+                        break
+
+                    if line:
+                        try:
+                            data = json.loads(line.decode('utf-8'))
+                            await self._process_price_update(data)
+                        except json.JSONDecodeError:
+                            continue
+                        except Exception as e:
+                            logger.error(f"Error processing price update: {e}")
+
+        except asyncio.CancelledError:
+            logger.info("OANDA streaming cancelled")
+        except Exception as e:
+            logger.error(f"OANDA streaming error: {e}")
+
+    async def _process_price_update(self, data: Dict):
+        """Process incoming price update from OANDA"""
+        try:
+            if data.get("type") == "PRICE":
+                instrument = data.get("instrument")
+                if not instrument:
+                    return
+
+                bids = data.get("bids", [])
+                asks = data.get("asks", [])
+
+                if bids and asks:
+                    bid = Decimal(str(bids[0]["price"]))
+                    ask = Decimal(str(asks[0]["price"]))
+
+                    price_update = PriceUpdate(
+                        instrument=instrument,
+                        bid=bid,
+                        ask=ask,
+                        timestamp=datetime.now(timezone.utc)
+                    )
+
+                    self._current_prices[instrument] = price_update
+
+                    # Notify subscribers
+                    for callback in self._subscriptions.values():
+                        try:
+                            await callback(price_update)
+                        except Exception as e:
+                            logger.error(f"Error in price callback: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing OANDA price update: {e}")
+
+    def subscribe_to_prices(self, callback: Callable[[PriceUpdate], None]) -> str:
+        """Subscribe to price updates"""
+        self._subscription_counter += 1
+        subscription_id = f"sub_{self._subscription_counter}"
+        self._subscriptions[subscription_id] = callback
+        logger.info(f"Added real price subscription: {subscription_id}")
+        return subscription_id
+
+    def unsubscribe_from_prices(self, subscription_id: str) -> bool:
+        """Unsubscribe from price updates"""
+        if subscription_id in self._subscriptions:
+            del self._subscriptions[subscription_id]
+            logger.info(f"Removed real price subscription: {subscription_id}")
+            return True
+        return False
+
+    async def get_current_price(self, instrument: str) -> Optional[PriceUpdate]:
+        """Get current price for instrument"""
+        return self._current_prices.get(instrument)
+
+    @property
+    def is_streaming(self) -> bool:
+        """Check if streaming is active"""
+        return self._is_streaming
+
+
+# Configuration-based factory function
+def create_stream_manager(use_mock: bool = None) -> StreamManagerInterface:
+    """Create appropriate stream manager based on configuration"""
+    if use_mock is None:
+        # Try to import trading config, fall back to environment variable
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../shared'))
+            from trading_config import get_trading_config
+            config = get_trading_config()
+            use_mock = config.use_mock_streaming
+            logger.info(f"Using trading config: mock_streaming={use_mock}, mode={config.trading_mode.value}")
+        except ImportError:
+            # Fallback to environment variable
+            use_mock = os.getenv("USE_MOCK_STREAMING", "true").lower() == "true"
+            logger.info(f"Using environment variable: USE_MOCK_STREAMING={use_mock}")
+
+    if use_mock:
+        logger.info("Creating Mock Stream Manager (for simulation/testing)")
+        return MockStreamManager()
+    else:
+        logger.info("Creating Real OANDA Stream Manager (for live trading)")
+        return RealOandaStreamManager()
+
+
+# For backwards compatibility, but now configurable
+OandaStreamManager = create_stream_manager
