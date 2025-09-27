@@ -5,8 +5,8 @@ WORKDIR /app
 
 # Copy package files
 COPY dashboard/package.json ./
-# Install dependencies (this will create package-lock.json)
-RUN npm install --omit=dev
+# Install dependencies (force to ignore platform conflicts)
+RUN npm install --omit=dev --force
 
 # Copy dashboard code
 COPY dashboard/ .

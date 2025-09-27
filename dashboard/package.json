@@ -38,7 +38,6 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
-    "@next/swc-win32-x64-msvc": "^15.4.6",
     "@playwright/test": "^1.54.2",
     "@testing-library/jest-dom": "^6.6.4",
     "@testing-library/react": "^16.3.0",
