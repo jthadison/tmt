@@ -1,0 +1,324 @@
+version: '3.8'
+
+services:
+  # Core Infrastructure
+  redis:
+    image: redis:7-alpine
+    container_name: tmt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - tmt-network
+
+  # Orchestrator Service
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: tmt-orchestrator
+    ports:
+      - "8089:8089"
+    environment:
+      - PORT=8089
+      - ENVIRONMENT=staging
+      - ENABLE_TRADING=false  # Start with trading disabled for safety
+      - OANDA_ENVIRONMENT=practice
+      - MESSAGE_BROKER_URL=redis://redis:6379
+    env_file:
+      - .env.staging
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Execution Engine
+  execution-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.execution-engine
+    container_name: tmt-execution-engine
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Circuit Breaker Agent
+  circuit-breaker:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: circuit-breaker
+        AGENT_PORT: 8084
+    container_name: tmt-circuit-breaker
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Market Analysis Agent
+  market-analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: market-analysis
+        AGENT_PORT: 8001
+    container_name: tmt-market-analysis
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Strategy Analysis Agent
+  strategy-analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: strategy-analysis
+        AGENT_PORT: 8002
+    container_name: tmt-strategy-analysis
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Parameter Optimization Agent
+  parameter-optimization:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: parameter-optimization
+        AGENT_PORT: 8003
+    container_name: tmt-parameter-optimization
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=8003
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Learning Safety Agent
+  learning-safety:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: learning-safety
+        AGENT_PORT: 8004
+    container_name: tmt-learning-safety
+    ports:
+      - "8004:8004"
+    environment:
+      - PORT=8004
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Disagreement Engine Agent
+  disagreement-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: disagreement-engine
+        AGENT_PORT: 8005
+    container_name: tmt-disagreement-engine
+    ports:
+      - "8005:8005"
+    environment:
+      - PORT=8005
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Data Collection Agent
+  data-collection:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: data-collection
+        AGENT_PORT: 8006
+    container_name: tmt-data-collection
+    ports:
+      - "8006:8006"
+    environment:
+      - PORT=8006
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Continuous Improvement Agent
+  continuous-improvement:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: continuous-improvement
+        AGENT_PORT: 8007
+    container_name: tmt-continuous-improvement
+    ports:
+      - "8007:8007"
+    environment:
+      - PORT=8007
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Pattern Detection Agent
+  pattern-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        AGENT_TYPE: pattern-detection
+        AGENT_PORT: 8008
+    container_name: tmt-pattern-detection
+    ports:
+      - "8008:8008"
+    environment:
+      - PORT=8008
+      - ENVIRONMENT=staging
+    env_file:
+      - .env.staging
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Dashboard (Next.js)
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: tmt-dashboard
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+    depends_on:
+      - orchestrator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tmt-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tmt-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - tmt-network
+    restart: unless-stopped
+
+networks:
+  tmt-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:

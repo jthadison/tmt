@@ -1,0 +1,76 @@
+# Prometheus Configuration for TMT Trading System
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Orchestrator metrics
+  - job_name: 'orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8089']
+    metrics_path: '/metrics'
+
+  # Execution Engine metrics
+  - job_name: 'execution-engine'
+    static_configs:
+      - targets: ['execution-engine:8082']
+    metrics_path: '/metrics'
+
+  # Circuit Breaker metrics
+  - job_name: 'circuit-breaker'
+    static_configs:
+      - targets: ['circuit-breaker:8084']
+    metrics_path: '/metrics'
+
+  # Market Analysis Agent metrics
+  - job_name: 'market-analysis'
+    static_configs:
+      - targets: ['market-analysis:8001']
+    metrics_path: '/metrics'
+
+  # Strategy Analysis Agent metrics
+  - job_name: 'strategy-analysis'
+    static_configs:
+      - targets: ['strategy-analysis:8002']
+    metrics_path: '/metrics'
+
+  # Parameter Optimization Agent metrics
+  - job_name: 'parameter-optimization'
+    static_configs:
+      - targets: ['parameter-optimization:8003']
+    metrics_path: '/metrics'
+
+  # Learning Safety Agent metrics
+  - job_name: 'learning-safety'
+    static_configs:
+      - targets: ['learning-safety:8004']
+    metrics_path: '/metrics'
+
+  # Disagreement Engine Agent metrics
+  - job_name: 'disagreement-engine'
+    static_configs:
+      - targets: ['disagreement-engine:8005']
+    metrics_path: '/metrics'
+
+  # Data Collection Agent metrics
+  - job_name: 'data-collection'
+    static_configs:
+      - targets: ['data-collection:8006']
+    metrics_path: '/metrics'
+
+  # Continuous Improvement Agent metrics
+  - job_name: 'continuous-improvement'
+    static_configs:
+      - targets: ['continuous-improvement:8007']
+    metrics_path: '/metrics'
+
+  # Pattern Detection Agent metrics
+  - job_name: 'pattern-detection'
+    static_configs:
+      - targets: ['pattern-detection:8008']
+    metrics_path: '/metrics'
+
+  # Redis metrics (if using redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
