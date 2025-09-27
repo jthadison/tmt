@@ -56,11 +56,17 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Check for required environment variables
-source "$ENV_FILE"
-if [ -z "$OANDA_API_KEY" ] || [ -z "$OANDA_ACCOUNT_IDS" ]; then
-    print_error "Required OANDA credentials not found in $ENV_FILE"
-    print_error "Please set OANDA_API_KEY and OANDA_ACCOUNT_IDS"
+# Check for required environment variables without sourcing
+# Just verify they exist in the file
+if ! grep -q "^OANDA_API_KEY=" "$ENV_FILE"; then
+    print_error "OANDA_API_KEY not found in $ENV_FILE"
+    print_error "Please set OANDA_API_KEY in your .env.staging file"
+    exit 1
+fi
+
+if ! grep -q "^OANDA_ACCOUNT_ID=" "$ENV_FILE"; then
+    print_error "OANDA_ACCOUNT_ID not found in $ENV_FILE"
+    print_error "Please set OANDA_ACCOUNT_ID in your .env.staging file"
     exit 1
 fi
 
@@ -68,17 +74,17 @@ print_success "Pre-deployment checks passed"
 
 # Build and start services
 print_status "Building Docker images..."
-docker-compose -f "$COMPOSE_FILE" build
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build
 
 print_status "Starting core infrastructure (Redis)..."
-docker-compose -f "$COMPOSE_FILE" up -d redis
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d redis
 
 # Wait for Redis to be ready
 print_status "Waiting for Redis to be ready..."
-timeout 30 bash -c 'until docker-compose -f docker-compose.staging.yml exec redis redis-cli ping; do sleep 1; done'
+timeout 30 bash -c 'until docker-compose --env-file .env.staging -f docker-compose.staging.yml exec redis redis-cli ping; do sleep 1; done'
 
 print_status "Starting core services..."
-docker-compose -f "$COMPOSE_FILE" up -d orchestrator execution-engine circuit-breaker
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d orchestrator execution-engine circuit-breaker
 
 # Wait for core services to be healthy
 print_status "Waiting for core services to be healthy..."
@@ -87,7 +93,7 @@ sleep 30
 # Check health of core services
 print_status "Checking health of core services..."
 for service in orchestrator execution-engine circuit-breaker; do
-    if docker-compose -f "$COMPOSE_FILE" ps "$service" | grep -q "healthy"; then
+    if docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps "$service" | grep -q "healthy"; then
         print_success "$service is healthy"
     else
         print_warning "$service may not be fully ready yet"
@@ -95,7 +101,7 @@ for service in orchestrator execution-engine circuit-breaker; do
 done
 
 print_status "Starting AI agents..."
-docker-compose -f "$COMPOSE_FILE" up -d \
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d \
     market-analysis \
     strategy-analysis \
     parameter-optimization \
@@ -106,7 +112,7 @@ docker-compose -f "$COMPOSE_FILE" up -d \
     pattern-detection
 
 print_status "Starting dashboard and monitoring..."
-docker-compose -f "$COMPOSE_FILE" up -d dashboard prometheus grafana
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d dashboard prometheus grafana
 
 # Final health check
 print_status "Performing final health checks..."
@@ -114,7 +120,7 @@ sleep 30
 
 # Display service status
 print_status "Service Status:"
-docker-compose -f "$COMPOSE_FILE" ps
+docker-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
 
 # Display important URLs
 echo
