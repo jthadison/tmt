@@ -61,8 +61,7 @@ mypy==1.7.1
 # OANDA API client (custom or v20)
 # Note: This might need to be installed separately or built from existing agent code
 
-# Circuit breaker pattern
-circuit-breaker==1.4.0
+# Circuit breaker pattern handled by internal circuit-breaker agent
 
 # Rate limiting
 slowapi==0.1.9
