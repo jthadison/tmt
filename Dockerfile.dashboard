@@ -3,12 +3,15 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and config
 COPY dashboard/package.json ./
+COPY dashboard/tsconfig.json ./
+COPY dashboard/next.config.mjs ./
+
 # Install dependencies (force to ignore platform conflicts)
 RUN npm install --omit=dev --force
 
-# Copy dashboard code
+# Copy dashboard source code
 COPY dashboard/ .
 
 # Build the Next.js app
