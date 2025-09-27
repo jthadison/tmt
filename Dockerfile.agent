@@ -32,4 +32,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Run the agent
-CMD ["sh", "-c", "cd /app/agent && python -m main"]
+# Use uvicorn for FastAPI agents
+CMD ["sh", "-c", "cd /app/agent && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
