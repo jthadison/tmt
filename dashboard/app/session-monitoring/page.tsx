@@ -251,22 +251,22 @@ export default function SessionMonitoringPage() {
   return (
     <ProtectedRoute>
       <MainLayout>
-        <div className=\"space-y-8\">
+        <div className="space-y-8">
           {/* Header */}
-          <div className=\"flex items-center justify-between\">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className=\"text-3xl font-bold text-white mb-2\">Session-Specific Monitoring</h1>
-              <p className=\"text-gray-400\">
+              <h1 className="text-3xl font-bold text-white mb-2">Session-Specific Monitoring</h1>
+              <p className="text-gray-400">
                 Real-time performance tracking and position sizing controls by trading session
               </p>
             </div>
-            <div className=\"flex items-center space-x-4\">
-              <div className=\"text-sm text-gray-400\">
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-400">
                 Last updated: {lastUpdate.toLocaleTimeString()}
               </div>
               <button
                 onClick={handleRefresh}
-                className=\"bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors\"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
               >
                 Refresh
               </button>
@@ -277,24 +277,24 @@ export default function SessionMonitoringPage() {
           {activeSessionData && (
             <Card
               title={`🟢 ${activeSessionData.name} Active`}
-              className=\"border-green-500/30 bg-green-500/10\"
+              className="border-green-500/30 bg-green-500/10"
             >
-              <div className=\"grid grid-cols-1 md:grid-cols-4 gap-4\">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <p className=\"text-sm text-gray-400\">Time Frame</p>
-                  <p className=\"text-white font-medium\">{activeSessionData.hours}</p>
+                  <p className="text-sm text-gray-400">Time Frame</p>
+                  <p className="text-white font-medium">{activeSessionData.hours}</p>
                 </div>
                 <div>
-                  <p className=\"text-sm text-gray-400\">Win Rate</p>
-                  <p className=\"text-green-400 font-bold\">{activeSessionData.metrics.winRate.toFixed(1)}%</p>
+                  <p className="text-sm text-gray-400">Win Rate</p>
+                  <p className="text-green-400 font-bold">{activeSessionData.metrics.winRate.toFixed(1)}%</p>
                 </div>
                 <div>
-                  <p className=\"text-sm text-gray-400\">Avg R:R</p>
-                  <p className=\"text-blue-400 font-bold\">{activeSessionData.metrics.avgRiskReward.toFixed(1)}:1</p>
+                  <p className="text-sm text-gray-400">Avg R:R</p>
+                  <p className="text-blue-400 font-bold">{activeSessionData.metrics.avgRiskReward.toFixed(1)}:1</p>
                 </div>
                 <div>
-                  <p className=\"text-sm text-gray-400\">Position Size Reduction</p>
-                  <p className=\"text-red-400 font-bold\">{activeSessionData.metrics.positionSizeReduction}%</p>
+                  <p className="text-sm text-gray-400">Position Size Reduction</p>
+                  <p className="text-red-400 font-bold">{activeSessionData.metrics.positionSizeReduction}%</p>
                 </div>
               </div>
             </Card>
@@ -334,16 +334,16 @@ export default function SessionMonitoringPage() {
           )}
 
           {/* Settings */}
-          <Card title=\"Monitoring Settings\">
-            <div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">
+          <Card title="Monitoring Settings">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className=\"block text-sm font-medium text-gray-400 mb-2\">
+                <label className="block text-sm font-medium text-gray-400 mb-2">
                   Refresh Interval
                 </label>
                 <select
                   value={refreshInterval}
                   onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                  className=\"w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white\"
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white"
                 >
                   <option value={10}>10 seconds</option>
                   <option value={30}>30 seconds</option>
@@ -352,18 +352,18 @@ export default function SessionMonitoringPage() {
                 </select>
               </div>
               <div>
-                <label className=\"block text-sm font-medium text-gray-400 mb-2\">
+                <label className="block text-sm font-medium text-gray-400 mb-2">
                   Current Time (GMT)
                 </label>
-                <div className=\"w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white\">
+                <div className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white">
                   {new Date().toISOString().substr(11, 8)}
                 </div>
               </div>
               <div>
-                <label className=\"block text-sm font-medium text-gray-400 mb-2\">
+                <label className="block text-sm font-medium text-gray-400 mb-2">
                   Next Session
                 </label>
-                <div className=\"w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white capitalize\">
+                <div className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white capitalize">
                   {getNextSession().replace('_', ' ')}
                 </div>
               </div>
