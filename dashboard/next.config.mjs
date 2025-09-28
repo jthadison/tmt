@@ -20,10 +20,19 @@ const nextConfig = {
   },
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     // Add alias resolution for @ paths
+    const baseDir = path.resolve(__dirname)
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname),
+      '@': baseDir,
+      '@/lib': path.resolve(baseDir, 'lib'),
+      '@/components': path.resolve(baseDir, 'components'),
+      '@/hooks': path.resolve(baseDir, 'hooks'),
+      '@/types': path.resolve(baseDir, 'types'),
     }
+
+    // Ensure proper module resolution
+    config.resolve.extensions = ['.ts', '.tsx', '.js', '.jsx', '.json', ...config.resolve.extensions]
+
     return config
   },
 };

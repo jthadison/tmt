@@ -32,8 +32,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
+# Ignore system lib directories but not dashboard/lib
+**/lib/
+!dashboard/lib/
 parts/
 sdist/
 var/
