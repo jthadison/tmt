@@ -2085,9 +2085,9 @@ signal.signal(signal.SIGTERM, signal_handler)
 if __name__ == "__main__":
     # Run the application
     import os
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8089))
     uvicorn.run(
-        "orchestrator.app.main:app",
+        app,  # Pass the app object directly instead of string module path
         host="0.0.0.0",
         port=port,
         reload=False,  # Set to True for development
