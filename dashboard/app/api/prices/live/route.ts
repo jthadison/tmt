@@ -6,6 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOandaClient } from '@/lib/oanda-client'
 
+// Force dynamic rendering - prevent static generation during build
+export const dynamic = 'force-dynamic'
+
 const PRICING_CACHE = new Map<string, { price: number; bid: number; ask: number; timestamp: number }>()
 const CACHE_TTL = 5000 // 5 seconds cache to prevent API abuse
 

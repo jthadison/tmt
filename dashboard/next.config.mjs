@@ -14,6 +14,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Configure for Docker deployment
+  output: 'standalone',
   // Explicitly define path mappings for Docker build environment
   experimental: {
     externalDir: true,

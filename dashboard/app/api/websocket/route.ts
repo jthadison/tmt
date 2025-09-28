@@ -5,6 +5,9 @@
 
 import { NextRequest } from 'next/server'
 
+// Force dynamic rendering - prevent static generation during build
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   // Use Server-Sent Events instead of WebSocket for simplicity in Next.js
   const encoder = new TextEncoder()

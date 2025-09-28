@@ -6,6 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOandaClient } from '@/lib/oanda-client'
 
+// Force dynamic rendering - prevent static generation during build
+export const dynamic = 'force-dynamic'
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8089'
 const EXECUTION_ENGINE_URL = process.env.EXECUTION_ENGINE_URL || 'http://localhost:8082'
 
