@@ -25,6 +25,7 @@ services:
       - "8089:8089"
     environment:
       - PORT=8089
+      - HOST=0.0.0.0
       - ENVIRONMENT=staging
       - ENABLE_TRADING=false  # Start with trading disabled for safety
       - OANDA_ENVIRONMENT=practice
@@ -35,7 +36,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8089/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -53,11 +54,12 @@ services:
       - "8082:8082"
     environment:
       - PORT=8082
+      - HOST=0.0.0.0
       - ENVIRONMENT=staging
     env_file:
       - .env.staging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -78,11 +80,12 @@ services:
       - "8084:8084"
     environment:
       - PORT=8084
+      - HOST=0.0.0.0
       - ENVIRONMENT=staging
     env_file:
       - .env.staging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -103,11 +106,12 @@ services:
       - "8001:8001"
     environment:
       - PORT=8001
+      - HOST=0.0.0.0
       - ENVIRONMENT=staging
     env_file:
       - .env.staging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -271,7 +275,7 @@ services:
     depends_on:
       - orchestrator
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
