@@ -25,7 +25,8 @@ WORKDIR /app
 # Copy standalone build output
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Copy public directory if it exists, otherwise create an empty one
+COPY --from=builder /app/public* ./public/
 
 # Set environment
 ENV NODE_ENV=production
