@@ -267,6 +267,7 @@ services:
       - NODE_ENV=production
       - PORT=3003
       - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_MOCK_AUTH=true
     depends_on:
       - orchestrator
     healthcheck:

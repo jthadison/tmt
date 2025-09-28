@@ -60,6 +60,11 @@ echo "  • Local:     http://localhost:3003"
 echo "  • Network:   http://192.168.50.137:3003"
 echo "  • Health:    http://192.168.50.137:3003/api/health"
 echo
+echo "🔑 Demo Login Credentials:"
+echo "  • Email:     demo@trading.com"
+echo "  • Password:  demo123"
+echo "  • Note:      Mock authentication is enabled for staging"
+echo
 echo "🔧 Troubleshooting:"
 echo "  • View logs: docker-compose -f $COMPOSE_FILE logs -f dashboard"
 echo "  • Check status: docker-compose -f $COMPOSE_FILE ps dashboard"

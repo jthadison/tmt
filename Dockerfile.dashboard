@@ -32,6 +32,7 @@ COPY --from=builder /app/public* ./public/
 ENV NODE_ENV=production
 ENV PORT=3003
 ENV HOSTNAME=0.0.0.0
+ENV NEXT_PUBLIC_MOCK_AUTH=true
 
 EXPOSE 3003
 
