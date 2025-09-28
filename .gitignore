@@ -119,6 +119,9 @@ jspm_packages/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.staging
+.env.prod
+.env.production
 
 # Next.js build output
 .next/
