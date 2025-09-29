@@ -217,19 +217,22 @@ const isDocker = process.env.DOCKER_ENV === 'true' || process.env.NODE_ENV === '
 
 // Get service URL based on environment
 const getServiceUrl = (serviceName: string, defaultPort: number): string => {
-  if (typeof window === 'undefined') {
-    // Server-side: use container names in Docker, localhost otherwise
-    return isDocker
-      ? `http://${serviceName}:${defaultPort}/health`
-      : `http://localhost:${defaultPort}/health`
-  } else {
-    // Client-side: use window location for relative URLs
+  // Always use hostname:port for client-side requests in production
+  if (typeof window !== 'undefined') {
+    // Client-side: use window location hostname with service port
     return `http://${window.location.hostname}:${defaultPort}/health`
+  } else if (isDocker) {
+    // Server-side Docker: use container names
+    return `http://${serviceName}:${defaultPort}/health`
+  } else {
+    // Server-side local development: use localhost
+    return `http://localhost:${defaultPort}/health`
   }
 }
 
 // Default configuration for the trading system - Updated for 8-agent ecosystem
-export const defaultHealthCheckConfig: HealthCheckConfig = {
+// Made into a function to ensure dynamic URL generation at runtime
+export const getDefaultHealthCheckConfig = (): HealthCheckConfig => ({
   endpoints: {
     'Market Analysis': {
       url: getServiceUrl('market-analysis', 8001),
@@ -283,7 +286,10 @@ export const defaultHealthCheckConfig: HealthCheckConfig = {
     }
   },
   checkInterval: 15000 // Check every 15 seconds
-}
+})
+
+// For backward compatibility
+export const defaultHealthCheckConfig = getDefaultHealthCheckConfig()
 
 // Singleton instance
 let healthCheckInstance: HealthCheckService | null = null
@@ -292,10 +298,11 @@ let healthCheckInstance: HealthCheckService | null = null
  * Get or create health check service instance
  */
 export function getHealthCheckService(
-  config: HealthCheckConfig = defaultHealthCheckConfig
+  config?: HealthCheckConfig
 ): HealthCheckService {
   if (!healthCheckInstance) {
-    healthCheckInstance = new HealthCheckService(config)
+    // Use dynamic config generation if no config provided
+    healthCheckInstance = new HealthCheckService(config || getDefaultHealthCheckConfig())
   }
   return healthCheckInstance
 }
