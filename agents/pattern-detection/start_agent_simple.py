@@ -14,9 +14,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-# Add shared config to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
-from config import ACTIVE_MONITORING_INSTRUMENTS
+# Configure logging FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("pattern_detection_full")
+
+# Import config from local directory
+try:
+    from config import ACTIVE_MONITORING_INSTRUMENTS
+except ImportError:
+    # Fallback if config not available
+    ACTIVE_MONITORING_INSTRUMENTS = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CHF"]
+    logger.warning("Using default instrument list - config not found")
 
 # Import real pattern detection engine
 try:
@@ -30,13 +41,6 @@ try:
 except ImportError as e:
     logger.warning(f"Could not load Pattern Detection Engine: {e}")
     pattern_engine = None
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("pattern_detection_full")
 
 # Global state for pattern tracking
 patterns_detected_today = 0
