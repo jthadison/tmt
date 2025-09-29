@@ -26,5 +26,8 @@ ENV HOST=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8082/health').read()" || exit 1
 
+# Install missing dependencies
+RUN pip install aiohttp
+
 # Run the execution engine
-CMD ["python", "-m", "execution-engine.simple_main"]
+CMD ["sh", "-c", "cd /app/execution-engine && python simple_main.py"]
