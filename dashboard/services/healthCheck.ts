@@ -212,56 +212,72 @@ class HealthCheckService {
   }
 }
 
+// Helper to determine if running in Docker
+const isDocker = process.env.DOCKER_ENV === 'true' || process.env.NODE_ENV === 'production'
+
+// Get service URL based on environment
+const getServiceUrl = (serviceName: string, defaultPort: number): string => {
+  if (typeof window === 'undefined') {
+    // Server-side: use container names in Docker, localhost otherwise
+    return isDocker
+      ? `http://${serviceName}:${defaultPort}/health`
+      : `http://localhost:${defaultPort}/health`
+  } else {
+    // Client-side: use window location for relative URLs
+    return `http://${window.location.hostname}:${defaultPort}/health`
+  }
+}
+
 // Default configuration for the trading system - Updated for 8-agent ecosystem
 export const defaultHealthCheckConfig: HealthCheckConfig = {
   endpoints: {
     'Market Analysis': {
-      url: 'http://localhost:8001/health',
+      url: getServiceUrl('market-analysis', 8001),
       timeout: 3000,
       critical: true
     },
     'Strategy Analysis': {
-      url: 'http://localhost:8002/health',
+      url: getServiceUrl('strategy-analysis', 8002),
       timeout: 3000,
       critical: true
     },
     'Parameter Optimization': {
-      url: 'http://localhost:8003/health',
+      url: getServiceUrl('parameter-optimization', 8003),
       timeout: 3000,
       critical: true
     },
     'Learning Safety': {
-      url: 'http://localhost:8004/health',
+      url: getServiceUrl('learning-safety', 8004),
       timeout: 3000,
       critical: true
     },
     'Disagreement Engine': {
-      url: 'http://localhost:8005/health',
+      url: getServiceUrl('disagreement-engine', 8005),
       timeout: 3000,
       critical: true
     },
     'Data Collection': {
-      url: 'http://localhost:8006/health',
+      url: getServiceUrl('data-collection', 8006),
       timeout: 3000,
       critical: true
     },
     'Continuous Improvement': {
-      url: 'http://localhost:8007/health',
+      url: getServiceUrl('continuous-improvement', 8007),
       timeout: 3000,
       critical: false
     },
     'Pattern Detection': {
-      url: 'http://localhost:8008/health',
+      url: getServiceUrl('pattern-detection', 8008),
       timeout: 3000,
       critical: false
     },
     'Execution Engine': {
-      url: 'http://localhost:8082/health',
+      url: getServiceUrl('execution-engine', 8082),
       timeout: 3000,
       critical: true
     },
     'Orchestrator': {
-      url: 'http://localhost:8089/health',
+      url: getServiceUrl('orchestrator', 8089),
       timeout: 3000,
       critical: true
     }

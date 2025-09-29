@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile.orchestrator
     container_name: tmt-orchestrator
     ports:
-      - "8089:8000"
+      - "8089:8089"
     environment:
       - PORT=8089
       - HOST=0.0.0.0
@@ -36,7 +36,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8089/health').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -271,7 +271,10 @@ services:
       - NODE_ENV=production
       - PORT=3003
       - HOSTNAME=0.0.0.0
+      - DOCKER_ENV=true
       - NEXT_PUBLIC_MOCK_AUTH=true
+      - ORCHESTRATOR_URL=http://orchestrator:8089
+      - EXECUTION_ENGINE_URL=http://execution-engine:8082
     depends_on:
       - orchestrator
     healthcheck:
