@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { WebSocketMessage, ConnectionStatus, MessageType } from '@/types/websocket'
+import { intervalConfig } from '@/config/intervals'
 
 interface UseWebSocketOptions {
   url: string
@@ -34,8 +35,8 @@ export function useWebSocket({
   url,
   protocols,
   reconnectAttempts = 5,
-  reconnectInterval = 5000,
-  heartbeatInterval = 30000,
+  reconnectInterval = intervalConfig.websocketReconnect,
+  heartbeatInterval = intervalConfig.websocketHeartbeat,
   onError,
   onReconnectFailed,
   enableHeartbeat = true

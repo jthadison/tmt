@@ -235,3 +235,7 @@ orchestrator/htmlcov/
 
 # Playwright MCP screenshots
 .playwright-mcp/
+
+# Story management (working documents, not for version control)
+docs/stories/
+docs/epics/

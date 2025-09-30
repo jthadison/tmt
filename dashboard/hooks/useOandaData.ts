@@ -17,6 +17,7 @@ import {
   AccountFilter
 } from '@/types/oanda'
 import { OandaService } from '@/services/oandaService'
+import { intervalConfig } from '@/config/intervals'
 
 /**
  * Hook state interface
