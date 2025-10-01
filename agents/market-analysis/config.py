@@ -58,40 +58,40 @@ ORIGINAL_SESSION_PARAMETERS_DEPRECATED = {
 # Overfitting Score: 0.287 (Target: <0.3) ✅ ACHIEVED - 69.5% reduction from 0.941
 SESSION_PARAMETERS = {
     TradingSession.TOKYO: {
-        "confidence_threshold": 62.0,  # Reduced from 85.0 (-23.0) - ULTRA-AGGRESSIVE
-        "min_risk_reward": 2.4,        # Reduced from 4.0 (-1.6) - MAJOR CUT
+        "confidence_threshold": 68.0,  # Increased from 62.0 (+6.0) - More opportunities
+        "min_risk_reward": 2.6,        # Increased from 2.4 (+0.2) - Reasonable quality
         "max_risk_reward": 3.4,        # Added upper bound
         "source": "refined_overfitting_reduction_v3_final",
         "overfitting_reduction": "ULTRA-AGGRESSIVE: Final target achievement",
         "changes_from_original": "confidence: -23.0, risk_reward: -1.6"
     },
     TradingSession.LONDON: {
-        "confidence_threshold": 61.0,  # Reduced from 72.0 (-11.0) - STRONG
-        "min_risk_reward": 2.3,        # Reduced from 3.2 (-0.9) - SIGNIFICANT
+        "confidence_threshold": 66.0,  # Increased from 61.0 (+5.0) - More opportunities
+        "min_risk_reward": 2.5,        # Increased from 2.3 (+0.2) - Reasonable quality
         "max_risk_reward": 3.2,        # Added upper bound
         "source": "refined_overfitting_reduction_v2",
         "overfitting_reduction": "STRONG: Closer to universal baseline",
         "changes_from_original": "confidence: -11.0, risk_reward: -0.9"
     },
     TradingSession.NEW_YORK: {
-        "confidence_threshold": 59.0,  # Reduced from 70.0 (-11.0) - STRONG
-        "min_risk_reward": 2.2,        # Reduced from 2.8 (-0.6) - MODERATE
+        "confidence_threshold": 64.0,  # Increased from 59.0 (+5.0) - More opportunities
+        "min_risk_reward": 2.4,        # Increased from 2.2 (+0.2) - Reasonable quality
         "max_risk_reward": 3.1,        # Added upper bound
         "source": "refined_overfitting_reduction_v2",
         "overfitting_reduction": "STRONG: Major confidence reduction",
         "changes_from_original": "confidence: -11.0, risk_reward: -0.6"
     },
     TradingSession.SYDNEY: {
-        "confidence_threshold": 63.0,  # Reduced from 78.0 (-15.0) - VERY STRONG
-        "min_risk_reward": 2.5,        # Reduced from 3.5 (-1.0) - MAJOR CUT
+        "confidence_threshold": 68.0,  # Increased from 63.0 (+5.0) - More opportunities
+        "min_risk_reward": 2.7,        # Increased from 2.5 (+0.2) - Reasonable quality
         "max_risk_reward": 3.5,        # Added upper bound
         "source": "refined_overfitting_reduction_v2",
         "overfitting_reduction": "VERY STRONG: Largest adjustments",
         "changes_from_original": "confidence: -15.0, risk_reward: -1.0"
     },
     TradingSession.OVERLAP: {
-        "confidence_threshold": 59.0,  # Reduced from 70.0 (-11.0) - STRONG
-        "min_risk_reward": 2.2,        # Reduced from 2.8 (-0.6) - MODERATE
+        "confidence_threshold": 64.0,  # Increased from 59.0 (+5.0) - More opportunities
+        "min_risk_reward": 2.4,        # Increased from 2.2 (+0.2) - Reasonable quality
         "max_risk_reward": 3.1,        # Added upper bound
         "source": "refined_overfitting_reduction_v2",
         "overfitting_reduction": "STRONG: Matched with NY session",
