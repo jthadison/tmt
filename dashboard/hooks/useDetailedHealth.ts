@@ -224,7 +224,8 @@ export function useDetailedHealth({
       // Fetch initial data via REST
       fetchHealthData()
     }
-  }, [enableWebSocket, isConnected, connectionStatus, startPolling, stopPolling, fetchHealthData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableWebSocket, isConnected, connectionStatus])
 
   /**
    * Cleanup on unmount
