@@ -26,7 +26,12 @@
       "Bash(pip install:*)",
       "Bash(python:*)",
       "Bash(curl:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git restore:*)",
+      "Bash(gh pr create:*)",
+      "Bash(findstr:*)",
+      "Bash(node:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": [],
     "ask": [],
