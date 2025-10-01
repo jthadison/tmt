@@ -304,12 +304,178 @@ async def emergency_stop(request: EmergencyStopRequest):
     """Emergency stop - immediately halt all trading"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
-    
+
     try:
         await orchestrator.emergency_stop(request.reason)
         return {"status": "Emergency stop executed", "reason": request.reason}
     except OrchestratorException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# Emergency Control API endpoints for dashboard
+@app.post("/api/trading/disable")
+async def disable_trading(
+    close_positions: bool = False,
+    reason: str = "Emergency stop"
+):
+    """Emergency stop trading - disable ENABLE_TRADING flag"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    try:
+        # Set ENABLE_TRADING flag to false
+        orchestrator.trading_enabled = False
+
+        positions_closed = 0
+        if close_positions and oanda_client:
+            # Close all positions across all accounts
+            settings = get_settings()
+            for account_id in settings.account_ids_list:
+                try:
+                    positions = await oanda_client.get_positions(account_id)
+                    for position in positions:
+                        await oanda_client.close_position(
+                            account_id,
+                            position.instrument
+                        )
+                        positions_closed += 1
+                except Exception as e:
+                    logger.error(f"Error closing positions for account {account_id}: {e}")
+
+        # Log audit trail
+        from .event_bus import Event
+        import uuid
+        audit_event = Event(
+            event_id=str(uuid.uuid4()),
+            event_type="trading.disabled",
+            timestamp=datetime.now(timezone.utc),
+            source="dashboard",
+            data={
+                "reason": reason,
+                "close_positions": close_positions,
+                "positions_closed": positions_closed,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        await orchestrator.event_bus.publish(audit_event)
+
+        return {
+            "success": True,
+            "message": "Trading stopped successfully",
+            "positions_closed": positions_closed,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to stop trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/trading/enable")
+async def enable_trading():
+    """Resume trading after emergency stop"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    try:
+        orchestrator.trading_enabled = True
+
+        # Log audit trail
+        from .event_bus import Event
+        import uuid
+        audit_event = Event(
+            event_id=str(uuid.uuid4()),
+            event_type="trading.enabled",
+            timestamp=datetime.now(timezone.utc),
+            source="dashboard",
+            data={
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        await orchestrator.event_bus.publish(audit_event)
+
+        return {
+            "success": True,
+            "message": "Trading resumed successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to resume trading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/system/status")
+async def get_system_status_detailed():
+    """Get current system status for emergency modal"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    try:
+        # Get current positions count
+        positions_count = 0
+        open_trades = []
+
+        if oanda_client:
+            settings = get_settings()
+            for account_id in settings.account_ids_list:
+                try:
+                    positions = await oanda_client.get_positions(account_id)
+                    positions_count += len(positions)
+
+                    for position in positions:
+                        open_trades.append({
+                            "instrument": position.instrument,
+                            "direction": "long" if position.long.units > 0 else "short",
+                            "pnl": float(position.unrealized_pnl)
+                        })
+                except Exception as e:
+                    logger.error(f"Error fetching positions for {account_id}: {e}")
+
+        # Calculate daily P&L (simplified - would need historical data for accurate calculation)
+        daily_pnl = sum(trade["pnl"] for trade in open_trades)
+
+        return {
+            "trading_enabled": orchestrator.trading_enabled,
+            "active_positions": positions_count,
+            "daily_pnl": daily_pnl,
+            "open_trades": open_trades,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get system status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/audit/log")
+async def log_audit_action(audit_data: dict):
+    """Log emergency action to audit trail"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    try:
+        # Publish audit event to event bus
+        from .event_bus import Event
+        import uuid
+
+        audit_event = Event(
+            event_id=str(uuid.uuid4()),
+            event_type="audit.log",
+            timestamp=datetime.now(timezone.utc),
+            source=audit_data.get("source", "dashboard"),
+            data=audit_data
+        )
+        await orchestrator.event_bus.publish(audit_event)
+
+        # TODO: Store in persistent audit log (database/file)
+        logger.info(f"Audit log: {audit_data}")
+
+        return {
+            "success": True,
+            "event_id": audit_event.event_id,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to log audit action: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/circuit-breakers/reset")
