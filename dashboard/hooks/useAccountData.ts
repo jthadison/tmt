@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AccountOverview, AccountStatus } from '@/types/account'
 import { ConnectionStatus } from '@/types/websocket'
+import { intervalConfig } from '@/config/intervals'
 
 /**
  * Custom hook for managing account data with mock implementation
@@ -158,7 +159,7 @@ export function useAccountData() {
       // Randomly update one account
       const randomAccount = accounts[Math.floor(Math.random() * accounts.length)]
       simulateRealTimeUpdate(randomAccount.id)
-    }, 5000) // Update every 5 seconds
+    }, intervalConfig.accountDataUpdate)  // Mock P&L simulation update frequency (configurable)
 
     return () => clearInterval(interval)
   }, [accounts, simulateRealTimeUpdate])

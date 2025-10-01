@@ -14,6 +14,7 @@ import { useAccountData, useAccountWebSocket } from '@/hooks/useAccountData'
 import { useRealTimeStore } from '@/store/realTimeStore'
 import { useOandaData } from '@/hooks/useOandaData'
 import { AccountsGrid } from '@/components/oanda/AccountsGrid'
+import { intervalConfig } from '@/config/intervals'
 
 export default function Home() {
   const router = useRouter()
@@ -22,7 +23,8 @@ export default function Home() {
   const { connectionStatus, connect, lastMessage, lastError, reconnectCount } = useWebSocket({
     url: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080',
     reconnectAttempts: 5,
-    reconnectInterval: 3000,
+    reconnectInterval: intervalConfig.websocketReconnect,  // Auto-reconnection delay (configurable)
+    heartbeatInterval: intervalConfig.websocketHeartbeat,  // Keep-alive heartbeat frequency (configurable)
     onError: (error) => {
       console.error('WebSocket error:', error)
     },
@@ -163,7 +165,7 @@ export default function Home() {
             error={error || undefined}
             onAccountClick={handleAccountClick}
             onRefresh={refreshData}
-            refreshInterval={30}
+            refreshInterval={intervalConfig.dashboardRefresh}  // Auto-refresh interval in seconds (configurable)
           />
 
           {/* OANDA Live Accounts Section */}
