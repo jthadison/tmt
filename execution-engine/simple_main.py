@@ -696,37 +696,37 @@ if FASTAPI_AVAILABLE:
     
     @app.get("/positions")
     async def get_positions():
-        """Get current positions from OANDA"""
+        """Get current positions from OANDA (legacy endpoint)"""
         if app_state.paper_trading_mode:
             return {
                 "positions": [],
                 "mode": "paper_trading",
                 "message": "Paper trading mode - no real positions"
             }
-        
+
         try:
             import httpx
             api_key = os.getenv("OANDA_API_KEY")
             account_id = os.getenv("OANDA_ACCOUNT_ID")
-            
+
             if not api_key or not account_id:
                 return {"error": "OANDA credentials not configured"}
-            
+
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
             }
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades',
                     headers=headers
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     trades = data.get('trades', [])
-                    
+
                     positions = []
                     for trade in trades:
                         positions.append({
@@ -740,7 +740,7 @@ if FASTAPI_AVAILABLE:
                             'take_profit': trade.get('takeProfitOrder', {}).get('price') if trade.get('takeProfitOrder') else None,
                             'monitored': trade.get('id') in app_state.position_monitor.monitoring_positions
                         })
-                    
+
                     return {
                         "positions": positions,
                         "mode": "oanda_practice",
@@ -749,9 +749,61 @@ if FASTAPI_AVAILABLE:
                     }
                 else:
                     return {"error": f"OANDA API error: {response.status_code}"}
-                    
+
         except Exception as e:
             return {"error": f"Failed to get positions: {str(e)}"}
+
+    @app.get("/api/positions")
+    async def get_api_positions():
+        """Get current positions from OANDA (Dashboard API)"""
+        if app_state.paper_trading_mode:
+            return {"positions": []}
+
+        try:
+            import httpx
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+
+            if not api_key or not account_id:
+                raise HTTPException(status_code=503, detail="OANDA credentials not configured")
+
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades',
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    trades = data.get('trades', [])
+
+                    positions = []
+                    for trade in trades:
+                        units = float(trade.get('currentUnits', 0))
+                        positions.append({
+                            'id': trade.get('id'),
+                            'instrument': trade.get('instrument'),
+                            'direction': 'long' if units > 0 else 'short',
+                            'size': abs(units),
+                            'entry_price': float(trade.get('price', 0)),
+                            'current_price': float(trade.get('price', 0)),  # Would need to fetch current price
+                            'pnl': float(trade.get('unrealizedPL', 0)),
+                            'timestamp': trade.get('openTime')
+                        })
+
+                    return {"positions": positions}
+                else:
+                    raise HTTPException(status_code=response.status_code, detail="OANDA API error")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to get positions: {str(e)}")
     
     @app.post("/positions/close/{trade_id}")
     async def close_position(trade_id: str, close_data: dict = {}):
@@ -816,10 +868,110 @@ if FASTAPI_AVAILABLE:
                 "success": False,
                 "message": f"Error closing position: {str(e)}"
             }
-    
+
+    @app.post("/api/positions/close-all")
+    async def close_all_positions(request_data: dict = {}):
+        """Close all open positions immediately (Dashboard API)"""
+        reason = request_data.get("reason", "Emergency close via dashboard")
+        logger.critical(f"Close all positions requested: {reason}")
+
+        if app_state.paper_trading_mode:
+            return {
+                "success": True,
+                "positions_closed": 0,
+                "errors": [],
+                "timestamp": datetime.now().isoformat(),
+                "mode": "paper_trading"
+            }
+
+        try:
+            import httpx
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            # Get all open trades first
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades',
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    trades = data.get('trades', [])
+
+                    closed_count = 0
+                    errors = []
+
+                    # Close each trade
+                    for trade in trades:
+                        trade_id = trade.get('id')
+                        instrument = trade.get('instrument', 'Unknown')
+                        try:
+                            close_response = await client.put(
+                                f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades/{trade_id}/close',
+                                headers=headers,
+                                json={"units": "ALL"}
+                            )
+
+                            if close_response.status_code == 200:
+                                closed_count += 1
+                                # Remove from monitoring
+                                if trade_id in app_state.position_monitor.monitoring_positions:
+                                    del app_state.position_monitor.monitoring_positions[trade_id]
+                                logger.info(f"Closed position {trade_id} ({instrument})")
+                            else:
+                                error_msg = f"Failed to close {instrument}: HTTP {close_response.status_code}"
+                                errors.append(error_msg)
+                                logger.error(error_msg)
+
+                        except Exception as e:
+                            error_msg = f"Failed to close {instrument}: {str(e)}"
+                            errors.append(error_msg)
+                            logger.error(error_msg)
+
+                    # Send notification
+                    try:
+                        await notify_alert("positions_closed_all",
+                                         f"Closed {closed_count} positions ({len(errors)} errors)",
+                                         "warning" if errors else "info")
+                    except Exception as e:
+                        logger.error(f"Error sending notification: {e}")
+
+                    return {
+                        "success": len(errors) == 0,
+                        "positions_closed": closed_count,
+                        "errors": errors,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:
+                    error_msg = f"Failed to get trades list: HTTP {response.status_code}"
+                    logger.error(error_msg)
+                    return {
+                        "success": False,
+                        "positions_closed": 0,
+                        "errors": [error_msg],
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+        except Exception as e:
+            error_msg = f"Close all positions failed: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "success": False,
+                "positions_closed": 0,
+                "errors": [error_msg],
+                "timestamp": datetime.now().isoformat()
+            }
+
     @app.post("/emergency/close_all")
     async def emergency_close_all():
-        """Emergency close all positions"""
+        """Emergency close all positions (legacy endpoint)"""
         logger.critical("EMERGENCY: Close all positions requested")
         
         if app_state.paper_trading_mode:

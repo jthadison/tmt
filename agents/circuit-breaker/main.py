@@ -342,7 +342,88 @@ async def health_check():
     }
 
 
+@app.get("/api/circuit-breakers/status")
+async def get_circuit_breaker_status():
+    """Get current circuit breaker status for dashboard widget"""
+    if not breaker:
+        raise HTTPException(status_code=503, detail="Circuit breaker not initialized")
+
+    # Calculate thresholds and limits
+    current_balance = breaker.metrics.current_balance or 10000  # Default if not set
+    daily_loss_threshold = (breaker.config.max_daily_loss_percent / 100) * current_balance
+    daily_loss_limit = daily_loss_threshold * 2  # Limit is 2x threshold
+
+    drawdown_threshold = breaker.config.max_drawdown_percent
+    drawdown_limit = drawdown_threshold * 2
+
+    consecutive_losses_threshold = breaker.config.max_consecutive_losses
+    consecutive_losses_limit = consecutive_losses_threshold * 2
+
+    # Get last triggered info
+    last_triggered = None
+    if breaker.state_history:
+        # Find last time state changed to OPEN
+        for entry in reversed(breaker.state_history):
+            if entry.get("new_state") == "open":
+                last_triggered = {
+                    "type": entry.get("trigger_type", "unknown"),
+                    "timestamp": entry.get("timestamp", datetime.now().isoformat())
+                }
+                break
+
+    return {
+        "daily_loss": {
+            "current": abs(breaker.metrics.daily_pnl),
+            "threshold": daily_loss_threshold,
+            "limit": daily_loss_limit
+        },
+        "account_drawdown": {
+            "current": breaker.metrics.drawdown_percent,
+            "threshold": drawdown_threshold,
+            "limit": drawdown_limit
+        },
+        "consecutive_losses": {
+            "current": breaker.metrics.consecutive_losses,
+            "threshold": consecutive_losses_threshold,
+            "limit": consecutive_losses_limit
+        },
+        "last_triggered": last_triggered,
+        "state": breaker.state.value
+    }
+
+
+@app.post("/api/circuit-breakers/reset")
+async def reset_circuit_breakers():
+    """Reset all circuit breaker counters and thresholds"""
+    if not breaker:
+        raise HTTPException(status_code=503, detail="Circuit breaker not initialized")
+
+    try:
+        # Reset metrics
+        breaker.metrics.consecutive_losses = 0
+        breaker.metrics.consecutive_wins = 0
+        breaker.metrics.daily_pnl = 0
+        breaker.metrics.daily_trades = 0
+        breaker.metrics.hourly_trades = 0
+
+        # Close circuit breaker if open
+        if breaker.state != BreakerState.CLOSED:
+            breaker.state = BreakerState.CLOSED
+            breaker.last_state_change = datetime.now()
+
+        logger.info("Circuit breakers reset via dashboard")
+
+        return {
+            "success": True,
+            "message": "Circuit breakers reset successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset circuit breakers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8086"))
+    port = int(os.getenv("PORT", "8084"))  # Changed from 8086 to 8084 to match story
     uvicorn.run(app, host="0.0.0.0", port=port)
