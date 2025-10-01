@@ -659,6 +659,203 @@ async def update_rollback_conditions(conditions: List[RollbackConditionUpdate]):
         raise HTTPException(status_code=500, detail=f"Failed to update conditions: {str(e)}")
 
 
+# New Rollback API endpoints for Story 2.3
+@app.post("/api/rollback/execute")
+async def execute_rollback(request: EmergencyRollbackRequest):
+    """Execute emergency rollback to Universal Cycle 4"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        logger.info(f"Emergency rollback requested: {request.reason}")
+
+        # Import audit logger
+        from .audit_logger import get_audit_logger
+        audit_logger = get_audit_logger()
+
+        rollback_event = await emergency_rollback.execute_emergency_rollback(
+            trigger_type=RollbackTrigger.MANUAL,
+            reason=request.reason,
+            notify_contacts=request.notify_contacts
+        )
+
+        # Log to audit trail
+        audit_logger.log({
+            "action_type": "rollback",
+            "user": "anonymous",  # TODO: Add user authentication
+            "timestamp": datetime.now().isoformat(),
+            "action_details": {
+                "from_mode": rollback_event.previous_mode,
+                "to_mode": rollback_event.new_mode,
+                "reason": request.reason,
+                "contacts_notified": request.notify_contacts,
+                "event_id": rollback_event.event_id
+            },
+            "success": rollback_event.rollback_status == RollbackStatus.COMPLETED,
+            "execution_time_ms": 0  # TODO: Track execution time
+        })
+
+        return {
+            "success": rollback_event.rollback_status == RollbackStatus.COMPLETED,
+            "event_id": rollback_event.event_id,
+            "previous_mode": rollback_event.previous_mode,
+            "new_mode": rollback_event.new_mode,
+            "status": rollback_event.rollback_status.value,
+            "timestamp": rollback_event.timestamp.isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Rollback failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/rollback/history")
+async def get_rollback_history_api(limit: int = 20):
+    """Get rollback event history"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        history = emergency_rollback.get_rollback_history(limit)
+
+        return {
+            "events": [
+                {
+                    "event_id": event.event_id,
+                    "timestamp": event.timestamp.isoformat(),
+                    "trigger_type": event.trigger_type.value,
+                    "trigger_reason": event.trigger_reason,
+                    "previous_mode": event.previous_mode,
+                    "new_mode": event.new_mode,
+                    "status": event.rollback_status.value,
+                    "success": event.rollback_status == RollbackStatus.COMPLETED,
+                    "user": "anonymous"  # TODO: Add user tracking
+                }
+                for event in history
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting rollback history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/rollback/conditions")
+async def get_rollback_conditions_api():
+    """Get automated trigger conditions"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        conditions = emergency_rollback.rollback_conditions
+
+        return {
+            "conditions": [
+                {
+                    "trigger_type": cond.trigger_type.value,
+                    "enabled": cond.enabled,
+                    "threshold_value": cond.threshold_value,
+                    "threshold_unit": cond.threshold_unit,
+                    "consecutive_periods": cond.consecutive_periods,
+                    "description": cond.description,
+                    "priority": cond.priority,
+                    "current_value": 0.0  # TODO: Get actual current metric values
+                }
+                for cond in conditions
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting rollback conditions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/rollback/conditions/{trigger_type}")
+async def update_rollback_condition_api(trigger_type: str, enabled: bool):
+    """Enable/disable automated rollback trigger"""
+    if not emergency_rollback:
+        raise HTTPException(status_code=503, detail="Emergency rollback system not initialized")
+
+    try:
+        # Find and update the condition
+        updated = False
+        for condition in emergency_rollback.rollback_conditions:
+            if condition.trigger_type.value == trigger_type:
+                condition.enabled = enabled
+                updated = True
+
+                # Log to audit trail
+                from .audit_logger import get_audit_logger
+                audit_logger = get_audit_logger()
+                audit_logger.log({
+                    "action_type": "update_rollback_condition",
+                    "user": "anonymous",  # TODO: Add user authentication
+                    "timestamp": datetime.now().isoformat(),
+                    "action_details": {
+                        "trigger_type": trigger_type,
+                        "enabled": enabled
+                    },
+                    "success": True
+                })
+                break
+
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Trigger type '{trigger_type}' not found")
+
+        return {
+            "success": True,
+            "trigger_type": trigger_type,
+            "enabled": enabled
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update condition: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/audit/logs")
+async def get_audit_logs_api(
+    action_type: Optional[str] = None,
+    user: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status: Optional[str] = None,  # 'success', 'failed', or None for all
+    limit: int = 100
+):
+    """Query audit trail logs"""
+    try:
+        from .audit_logger import get_audit_logger
+        audit_logger = get_audit_logger()
+
+        # Parse dates
+        start = datetime.fromisoformat(start_date) if start_date else None
+        end = datetime.fromisoformat(end_date) if end_date else None
+
+        # Parse status
+        status_bool = None
+        if status == "success":
+            status_bool = True
+        elif status == "failed":
+            status_bool = False
+
+        logs = audit_logger.query_logs(
+            action_type=action_type,
+            user=user,
+            start_date=start,
+            end_date=end,
+            status=status_bool,
+            limit=limit
+        )
+
+        return {"logs": logs, "count": len(logs)}
+
+    except Exception as e:
+        logger.error(f"Error querying audit logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Rollback Monitoring endpoints
 @app.post("/rollback-monitor/start")
 async def start_rollback_monitoring():
