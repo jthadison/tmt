@@ -5,7 +5,7 @@
 
 'use client'
 
-import React from 'react'
+import React, { memo } from 'react'
 import { MiniAgentCardData } from '@/types/health'
 import SparkLine from './SparkLine'
 
@@ -62,8 +62,9 @@ function getAverageLatency(history: number[]): number {
 
 /**
  * Mini agent card component
+ * Memoized to prevent unnecessary re-renders
  */
-export default function MiniAgentCard({ agent, onClick }: MiniAgentCardProps) {
+const MiniAgentCard = memo(function MiniAgentCard({ agent, onClick }: MiniAgentCardProps) {
   const abbreviatedName = getAgentAbbreviation(agent.name)
   const statusColor = getStatusColor(agent.status)
   const avgLatency = getAverageLatency(agent.latencyHistory)
@@ -107,4 +108,6 @@ export default function MiniAgentCard({ agent, onClick }: MiniAgentCardProps) {
       </div>
     </button>
   )
-}
+})
+
+export default MiniAgentCard

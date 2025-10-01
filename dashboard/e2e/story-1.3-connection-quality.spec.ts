@@ -56,8 +56,8 @@ test.describe('Story 1.3: Connection Quality & Mini Cards', () => {
       // Wait for tooltip to appear
       await page.waitForTimeout(200)
 
-      // Check for tooltip content
-      const tooltip = page.locator('[class*="absolute"][class*="bottom-full"]')
+      // Check for tooltip content using specific data-testid
+      const tooltip = page.getByTestId('connection-quality-tooltip')
       await expect(tooltip).toBeVisible()
 
       // Tooltip should contain metrics
@@ -77,8 +77,8 @@ test.describe('Story 1.3: Connection Quality & Mini Cards', () => {
       await page.mouse.move(0, 0)
       await page.waitForTimeout(200)
 
-      // Tooltip should not be visible
-      const tooltip = page.locator('[class*="absolute"][class*="bottom-full"]')
+      // Tooltip should not be visible using specific data-testid
+      const tooltip = page.getByTestId('connection-quality-tooltip')
       await expect(tooltip).not.toBeVisible()
     })
   })

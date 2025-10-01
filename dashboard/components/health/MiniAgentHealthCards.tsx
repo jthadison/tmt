@@ -42,15 +42,27 @@ export default function MiniAgentHealthCards({
   // Show loading state
   if (loading && miniAgentData.length === 0) {
     return (
-      <div className={`flex items-center justify-center ${className}`}>
+      <div
+        className={`flex items-center justify-center ${className}`}
+        role="region"
+        aria-label="Mini agent health cards"
+      >
         <div className="text-xs text-gray-500">Loading agents...</div>
       </div>
     )
   }
 
-  // Show empty state
+  // Show empty state with region for E2E tests
   if (miniAgentData.length === 0) {
-    return null
+    return (
+      <div
+        className={`flex items-center justify-center ${className}`}
+        role="region"
+        aria-label="Mini agent health cards"
+      >
+        <div className="text-xs text-gray-500">No agent data available</div>
+      </div>
+    )
   }
 
   return (

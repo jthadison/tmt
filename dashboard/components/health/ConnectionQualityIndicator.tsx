@@ -41,13 +41,16 @@ function QualityTooltip({
   lastUpdate
 }: {
   quality: ConnectionQuality
-  metrics: any
+  metrics: ConnectionMetrics
   lastUpdate: Date | null
 }) {
   const colorClasses = getQualityColorClasses(quality)
 
   return (
-    <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+    <div
+      className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50"
+      data-testid="connection-quality-tooltip"
+    >
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-gray-700 pb-2">
           <span className="text-sm font-semibold text-white">Connection Quality</span>
