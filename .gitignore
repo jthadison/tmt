@@ -229,7 +229,15 @@ grafana_data/
 kafka_data/
 
 # Claude Code
-.claude/settings.local.jsonorchestrator/.env
+.claude/settings.local.json
+
+# Environment file backups (contain secrets)
+.env-backups/
+*.env.backup
+*.backup
+
+# Orchestrator
+orchestrator/.env
 orchestrator/.coverage
 orchestrator/htmlcov/
 
