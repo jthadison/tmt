@@ -57,7 +57,7 @@ export function useConnectionQuality(
    * Calculate connection quality every interval
    */
   useEffect(() => {
-    const interval = setInterval(() => {
+    const calculateAndUpdate = () => {
       // Calculate data age
       const dataAge = lastUpdate
         ? (Date.now() - lastUpdate.getTime()) / 1000
@@ -78,10 +78,17 @@ export function useConnectionQuality(
 
       setMetrics(currentMetrics)
       setQuality(currentQuality)
-    }, updateInterval)
+    }
+
+    // Calculate immediately
+    calculateAndUpdate()
+
+    // Then set up interval
+    const interval = setInterval(calculateAndUpdate, updateInterval)
 
     return () => clearInterval(interval)
-  }, [wsStatus, healthData, lastUpdate, updateInterval])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateInterval])
 
   return {
     quality,
