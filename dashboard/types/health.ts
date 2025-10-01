@@ -80,3 +80,26 @@ export interface DetailedHealthData {
   system_metrics: SystemMetrics
   timestamp: string
 }
+
+// Connection Quality Types
+
+export type ConnectionQuality = 'excellent' | 'good' | 'fair' | 'poor' | 'disconnected'
+
+export interface ConnectionMetrics {
+  wsStatus: 'connected' | 'connecting' | 'disconnected' | 'error'
+  avgLatency: number // milliseconds
+  dataAge: number // seconds since last update
+}
+
+export interface ConnectionQualityData {
+  quality: ConnectionQuality
+  metrics: ConnectionMetrics
+  lastUpdate: Date | null
+}
+
+export interface MiniAgentCardData {
+  name: string
+  status: HealthStatus
+  latencyHistory: number[] // Last 5 measurements
+  port: number
+}
