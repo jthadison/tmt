@@ -31,12 +31,13 @@ export interface OpenTrade {
 
 export interface AuditLogEntry {
   timestamp: string;
-  action: 'emergency_stop' | 'resume_trading';
+  action: 'emergency_stop' | 'resume_trading' | 'close_positions' | 'emergency_rollback' | 'reset_breakers';
   user: string | 'anonymous';
   closePositions?: boolean;
   positionsClosed?: number;
   activePositionsCount?: number;
   dailyPnl?: number;
+  details?: Record<string, any>;
   success: boolean;
   error?: string;
   userAgent?: string;

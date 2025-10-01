@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/context/AuthContext'
 import EmergencyStopButton from '@/components/emergency/EmergencyStopButton'
+import EmergencyActionsButton from '@/components/emergency/EmergencyActionsButton'
 
 /**
  * Header component for the trading dashboard
@@ -58,6 +59,7 @@ export default function Header() {
           </div>
           <div className="flex items-center space-x-4">
             <EmergencyStopButton />
+            <EmergencyActionsButton />
             <ThemeToggle />
             <button className="p-2 hover:bg-gray-800 dark:hover:bg-gray-700 rounded transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
