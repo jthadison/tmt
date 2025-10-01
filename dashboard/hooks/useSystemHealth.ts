@@ -92,14 +92,16 @@ export function useSystemHealth({
   const fallbackTimerRef = useRef<NodeJS.Timeout>()
 
   // WebSocket connection for real-time updates
+  // Determine WebSocket protocol based on page protocol (ws:// for HTTP, wss:// for HTTPS)
+  const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
+
   const {
     connectionStatus,
     lastMessage,
     isConnected
   } = useWebSocket({
-    url: typeof window !== 'undefined'
-      ? `ws://${window.location.hostname}:8089/ws/health`
-      : 'ws://localhost:8089/ws/health',
+    url: `${wsProtocol}//${wsHost}:8089/ws/health`,
     enableHeartbeat: true,
     reconnectAttempts: 5,
     reconnectInterval: intervalConfig.websocketReconnect,

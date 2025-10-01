@@ -12,7 +12,12 @@
       "Bash(git checkout:*)",
       "Bash(npm test:*)",
       "Bash(npm run lint)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)"
     ],
     "deny": [],
     "ask": [],
