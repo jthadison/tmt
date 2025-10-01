@@ -4,7 +4,7 @@
 
 import { ServiceHealth, SystemHealth } from '@/services/healthCheck'
 
-export type HealthStatus = 'healthy' | 'degraded' | 'critical'
+export type HealthStatus = 'healthy' | 'degraded' | 'critical' | 'unknown'
 
 export interface AgentHealth {
   name: string
@@ -35,3 +35,48 @@ export interface HealthIndicatorProps {
 
 // Re-export service types for convenience
 export type { ServiceHealth, SystemHealth }
+
+// Detailed Health Panel Types
+
+export interface DetailedAgentHealth {
+  name: string
+  port: number
+  status: HealthStatus
+  latency_ms: number | null
+  last_check: string
+}
+
+export interface DetailedServiceHealth {
+  name: string
+  port?: number
+  status: HealthStatus
+  latency_ms: number | null
+  last_check: string
+}
+
+export interface CircuitBreakerMetric {
+  current: number
+  threshold: number
+  limit: number
+}
+
+export interface CircuitBreakerStatus {
+  max_drawdown: CircuitBreakerMetric
+  daily_loss: CircuitBreakerMetric
+  consecutive_losses: CircuitBreakerMetric
+}
+
+export interface SystemMetrics {
+  avg_latency_ms: number
+  active_positions: number
+  daily_pnl: number
+}
+
+export interface DetailedHealthData {
+  agents: DetailedAgentHealth[]
+  services: DetailedServiceHealth[]
+  external_services: DetailedServiceHealth[]
+  circuit_breaker: CircuitBreakerStatus
+  system_metrics: SystemMetrics
+  timestamp: string
+}
