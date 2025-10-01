@@ -88,6 +88,7 @@ export default function AgentHealthCard({
       className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors"
       role="article"
       aria-label={`${agent.name} health status`}
+      data-agent-port={agent.port}
     >
       {/* Header: Name and Port */}
       <div className="flex items-start justify-between mb-3">
