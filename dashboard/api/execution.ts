@@ -16,9 +16,16 @@ const ORCHESTRATOR_URL = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL || 'http://loc
 
 /**
  * Get all open positions
+ * Note: Using legacy /positions endpoint until service restart picks up /api/positions
  */
 export async function getOpenPositions(): Promise<Position[]> {
-  const response = await fetch(`${EXECUTION_ENGINE_URL}/api/positions`);
+  // Try new endpoint first, fallback to legacy
+  let response = await fetch(`${EXECUTION_ENGINE_URL}/api/positions`);
+
+  // Fallback to legacy endpoint if new one not available
+  if (!response.ok && response.status === 404) {
+    response = await fetch(`${EXECUTION_ENGINE_URL}/positions`);
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
@@ -26,7 +33,28 @@ export async function getOpenPositions(): Promise<Position[]> {
   }
 
   const data = await response.json();
-  return data.positions || [];
+  const rawPositions = data.positions || [];
+
+  // Transform legacy format to new format if needed
+  return rawPositions.map((pos: any) => {
+    // If already in new format, return as-is
+    if (pos.id && pos.direction) {
+      return pos;
+    }
+
+    // Transform legacy format
+    const units = parseFloat(pos.units || pos.currentUnits || '0');
+    return {
+      id: pos.trade_id || pos.id || '',
+      instrument: pos.instrument || '',
+      direction: units > 0 ? 'long' as const : 'short' as const,
+      size: Math.abs(units),
+      entry_price: parseFloat(pos.entry_price || pos.price || '0'),
+      current_price: parseFloat(pos.entry_price || pos.price || '0'),
+      pnl: parseFloat(pos.unrealized_pl || pos.unrealizedPL || '0'),
+      timestamp: pos.open_time || pos.openTime || new Date().toISOString()
+    };
+  });
 }
 
 /**
