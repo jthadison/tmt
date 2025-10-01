@@ -238,8 +238,38 @@ async def health_check():
     """Get system health status"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
-    
+
     return await orchestrator.get_system_status()
+
+
+# Detailed health endpoint
+@app.get("/health/detailed")
+async def detailed_health_check():
+    """Get detailed health status for all services"""
+    from .health.aggregator import HealthAggregator
+
+    aggregator = HealthAggregator(
+        timeout=2.0,
+        cache_ttl=5,
+        localhost="localhost"
+    )
+
+    # Get circuit breaker and OANDA client if available
+    circuit_breaker_agent = orchestrator.circuit_breaker if orchestrator else None
+    oanda = oanda_client if oanda_client else None
+
+    try:
+        detailed_health = await aggregator.get_detailed_health(
+            circuit_breaker_agent=circuit_breaker_agent,
+            oanda_client=oanda
+        )
+        return detailed_health
+    except Exception as e:
+        logger.error(f"Error getting detailed health: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve detailed health: {str(e)}"
+        )
 
 
 # System control endpoints
