@@ -33,7 +33,7 @@ const MAX_LATENCY_HISTORY = 20
  * Custom hook for managing detailed health data
  */
 export function useDetailedHealth({
-  enableWebSocket = true,
+  enableWebSocket = false, // Disabled by default until WebSocket endpoint is implemented
   pollingInterval = 5000,
   orchestratorUrl = DEFAULT_ORCHESTRATOR_URL
 }: UseDetailedHealthOptions = {}): UseDetailedHealthReturn {

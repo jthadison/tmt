@@ -70,7 +70,7 @@ export default function DetailedHealthPanel({
 }: DetailedHealthPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const { healthData, loading, error, lastUpdate, refreshData, latencyHistory } = useDetailedHealth({
-    enableWebSocket: true,
+    enableWebSocket: false, // Use polling until WebSocket endpoint is implemented
     pollingInterval: 5000
   })
 
