@@ -6,6 +6,24 @@
 import { ConnectionQuality, ConnectionMetrics } from '@/types/health'
 
 /**
+ * Connection quality thresholds
+ * Configurable constants for easier tuning
+ */
+export const QUALITY_THRESHOLDS = {
+  latency: {
+    excellent: 100, // ms
+    good: 200,      // ms
+    fair: 500       // ms
+  },
+  dataAge: {
+    excellent: 2,   // seconds
+    good: 5,        // seconds
+    fair: 10,       // seconds
+    disconnected: 30 // seconds
+  }
+} as const
+
+/**
  * Calculate connection quality based on current metrics
  *
  * Quality Levels:
@@ -19,7 +37,7 @@ export function calculateConnectionQuality(metrics: ConnectionMetrics): Connecti
   const { wsStatus, avgLatency, dataAge } = metrics
 
   // Disconnected takes priority
-  if (wsStatus === 'disconnected' && dataAge > 30) {
+  if (wsStatus === 'disconnected' && dataAge > QUALITY_THRESHOLDS.dataAge.disconnected) {
     return 'disconnected'
   }
 
@@ -28,19 +46,19 @@ export function calculateConnectionQuality(metrics: ConnectionMetrics): Connecti
     wsStatus === 'error' ||
     wsStatus === 'connecting' ||
     wsStatus === 'disconnected' || // Disconnected with recent data is still poor
-    avgLatency > 500 ||
-    dataAge > 10
+    avgLatency > QUALITY_THRESHOLDS.latency.fair ||
+    dataAge > QUALITY_THRESHOLDS.dataAge.fair
   ) {
     return 'poor'
   }
 
   // Fair quality conditions
-  if (avgLatency > 200 || dataAge > 5) {
+  if (avgLatency > QUALITY_THRESHOLDS.latency.good || dataAge > QUALITY_THRESHOLDS.dataAge.good) {
     return 'fair'
   }
 
   // Good quality conditions
-  if (avgLatency > 100 || dataAge > 2) {
+  if (avgLatency > QUALITY_THRESHOLDS.latency.excellent || dataAge > QUALITY_THRESHOLDS.dataAge.excellent) {
     return 'good'
   }
 
@@ -93,8 +111,12 @@ export function getQualityColorClasses(quality: ConnectionQuality) {
 
 /**
  * Format data age in human-readable format
+ * Handles negative values (clock skew) gracefully
  */
 export function formatDataAge(seconds: number): string {
+  // Handle negative values (clock skew between client and server)
+  if (seconds < 0) return 'just now'
+
   if (seconds < 1) return 'just now'
   if (seconds < 60) return `${Math.floor(seconds)}s ago`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
