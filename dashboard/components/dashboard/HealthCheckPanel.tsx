@@ -162,24 +162,24 @@ export default function HealthCheckPanel({ className = '', compact = false }: He
         {/* Service List */}
         <div className="space-y-2">
           {health.services.map((service) => (
-            <div 
+            <div
               key={service.name}
               className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-800/50 transition-colors"
             >
-              <div className="flex items-center space-x-3">
-                <span className={`${getStatusColor(service.status)}`}>
+              <div className="flex items-center space-x-3 flex-1 min-w-0">
+                <span className={`${getStatusColor(service.status)} flex-shrink-0`}>
                   {getStatusIcon(service.status)}
                 </span>
-                <span className="text-sm">{service.name}</span>
+                <span className="text-sm truncate">{service.name}</span>
               </div>
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4 flex-shrink-0 ml-4">
                 {service.latency !== undefined && (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-500 tabular-nums">
                     {service.latency}ms
                   </span>
                 )}
                 {service.message && (
-                  <span className="text-xs text-red-400">
+                  <span className="text-xs text-red-400 truncate max-w-[100px]">
                     {service.message}
                   </span>
                 )}
