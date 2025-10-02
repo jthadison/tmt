@@ -52,13 +52,24 @@ export function useWebSocket({
   const reconnectAttemptsRef = useRef(0)
   const isManualDisconnect = useRef(false)
 
+  // Use ref to avoid infinite loop in connect callback
+  const startHeartbeatRef = useRef<() => void>()
+  const onErrorRef = useRef(onError)
+  const onReconnectFailedRef = useRef(onReconnectFailed)
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onErrorRef.current = onError
+    onReconnectFailedRef.current = onReconnectFailed
+  }, [onError, onReconnectFailed])
+
   const startHeartbeat = useCallback(() => {
     if (!enableHeartbeat) return
-    
+
     if (heartbeatTimeoutRef.current) {
       clearTimeout(heartbeatTimeoutRef.current)
     }
-    
+
     heartbeatTimeoutRef.current = setTimeout(() => {
       if (ws.current?.readyState === WebSocket.OPEN) {
         try {
@@ -67,7 +78,8 @@ export function useWebSocket({
             timestamp: new Date().toISOString(),
             correlation_id: crypto.randomUUID()
           }))
-          startHeartbeat()
+          // Use ref to call itself
+          startHeartbeatRef.current?.()
         } catch (error) {
           console.error('Failed to send heartbeat:', error)
           setLastError(error as Error)
@@ -75,6 +87,11 @@ export function useWebSocket({
       }
     }, heartbeatInterval)
   }, [heartbeatInterval, enableHeartbeat])
+
+  // Update ref whenever startHeartbeat changes - use useEffect to avoid infinite loop
+  useEffect(() => {
+    startHeartbeatRef.current = startHeartbeat
+  }, [startHeartbeat])
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return
@@ -128,7 +145,7 @@ export function useWebSocket({
           }, Math.min(backoffDelay, 30000)) // Max 30 second backoff
         } else if (!isManualDisconnect.current && reconnectAttemptsRef.current >= reconnectAttempts) {
           console.error('Maximum reconnection attempts reached')
-          onReconnectFailed?.()
+          onReconnectFailedRef.current?.()
         }
       }
       
@@ -137,16 +154,16 @@ export function useWebSocket({
         const errorObj = new Error('WebSocket connection failed')
         setLastError(errorObj)
         setConnectionStatus(ConnectionStatus.ERROR)
-        onError?.(error)
+        onErrorRef.current?.(error)
       }
       
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error)
       setLastError(error as Error)
       setConnectionStatus(ConnectionStatus.ERROR)
-      onError?.(error as Error)
+      onErrorRef.current?.(error as Error)
     }
-  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat, onError, onReconnectFailed])
+  }, [url, protocols, reconnectAttempts, reconnectInterval, startHeartbeat])
 
   const disconnect = useCallback(() => {
     isManualDisconnect.current = true

@@ -50,14 +50,16 @@ export default function Home() {
   useEffect(() => {
     // Auto-connect on component mount
     connect()
-  }, [connect])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     // Process WebSocket messages through real-time store
     if (lastMessage) {
       store.processMessage(lastMessage)
     }
-  }, [lastMessage, store])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessage])
 
   useEffect(() => {
     // Update connection status in store
@@ -68,7 +70,8 @@ export default function Home() {
     } else {
       store.setConnectionStatus('disconnected')
     }
-  }, [connectionStatus, store])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionStatus])
 
   // Handle account drill-down navigation
   const handleAccountClick = (accountId: string) => {
