@@ -27,25 +27,24 @@ export const QUALITY_THRESHOLDS = {
  * Calculate connection quality based on current metrics
  *
  * Quality Levels:
- * - Excellent: WebSocket connected + avg latency <100ms + data <2s old
- * - Good: WebSocket connected + avg latency <200ms + data <5s old
- * - Fair: WebSocket connected + avg latency <500ms + data <10s old
- * - Poor: WebSocket reconnecting OR avg latency >500ms OR data >10s old
- * - Disconnected: WebSocket disconnected + data >30s old
+ * - Excellent: Data fresh (<2s) + avg latency <100ms
+ * - Good: Data fresh (<5s) + avg latency <200ms
+ * - Fair: Data acceptable (<10s) + avg latency <500ms
+ * - Poor: Data stale (>10s) OR high latency OR connection issues
+ * - Disconnected: Data very stale (>30s) - no updates from any source
  */
 export function calculateConnectionQuality(metrics: ConnectionMetrics): ConnectionQuality {
   const { wsStatus, avgLatency, dataAge } = metrics
 
-  // Disconnected takes priority
-  if (wsStatus === 'disconnected' && dataAge > QUALITY_THRESHOLDS.dataAge.disconnected) {
+  // True disconnection - no data from any source for 30+ seconds
+  if (dataAge > QUALITY_THRESHOLDS.dataAge.disconnected) {
     return 'disconnected'
   }
 
-  // Poor quality conditions
+  // Poor quality conditions - connection errors or stale data
   if (
     wsStatus === 'error' ||
     wsStatus === 'connecting' ||
-    wsStatus === 'disconnected' || // Disconnected with recent data is still poor
     avgLatency > QUALITY_THRESHOLDS.latency.fair ||
     dataAge > QUALITY_THRESHOLDS.dataAge.fair
   ) {

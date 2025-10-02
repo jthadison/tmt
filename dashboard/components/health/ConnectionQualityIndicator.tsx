@@ -61,8 +61,10 @@ function QualityTooltip({
 
         <div className="space-y-1 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-gray-400">WebSocket:</span>
-            <span className="text-white capitalize">{metrics.wsStatus}</span>
+            <span className="text-gray-400">Connection:</span>
+            <span className="text-white">
+              {metrics.wsStatus === 'connected' ? 'Real-time' : 'HTTP Polling'}
+            </span>
           </div>
 
           <div className="flex items-center justify-between">
