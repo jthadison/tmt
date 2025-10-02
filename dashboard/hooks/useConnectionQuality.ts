@@ -25,7 +25,7 @@ export function useConnectionQuality(
   const { updateInterval = 1000 } = options
 
   const { healthData, lastUpdate, connectionStatus } = useDetailedHealth({
-    enableWebSocket: false,
+    enableWebSocket: true,  // Enable WebSocket for real-time updates
     pollingInterval: 5000
   })
 
