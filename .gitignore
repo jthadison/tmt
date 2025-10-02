@@ -247,3 +247,16 @@ orchestrator/htmlcov/
 # Story management (working documents, not for version control)
 docs/stories/
 docs/epics/
+docs/qa/
+
+# Playwright test reports and artifacts
+playwright-report/
+test-results/
+dashboard/playwright-report/
+
+# Test files (temporary)
+test-cors.html
+test-health-check.js
+
+# Windows command artifacts
+nul

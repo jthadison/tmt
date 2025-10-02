@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { executeRollback, getCurrentTradingMode } from '@/api/rollback';
 import RollbackConfirmationModal from './RollbackConfirmationModal';
-import useKeyboardShortcut from '@/hooks/useKeyboardShortcut';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 
 export default function EmergencyRollbackControl() {
   const [currentMode, setCurrentMode] = useState<string>('Loading...');
