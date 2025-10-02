@@ -20,8 +20,15 @@ export default function Home() {
   const router = useRouter()
   const { state: realTimeState, store } = useRealTimeStore()
   
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
+
+  // Debug: Log the WebSocket URL being used
+  useEffect(() => {
+    console.log('WebSocket URL configured:', wsUrl)
+  }, [wsUrl])
+
   const { connectionStatus, connect, lastMessage, lastError, reconnectCount } = useWebSocket({
-    url: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080',
+    url: wsUrl,
     reconnectAttempts: 5,
     reconnectInterval: intervalConfig.websocketReconnect,  // Auto-reconnection delay (configurable)
     heartbeatInterval: intervalConfig.websocketHeartbeat,  // Keep-alive heartbeat frequency (configurable)
@@ -247,6 +254,9 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">WebSocket</span>
                     <ConnectionStatus status={connectionStatus} />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    URL: {wsUrl}
                   </div>
                   {reconnectCount > 0 && (
                     <div className="text-xs text-yellow-400">

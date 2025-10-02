@@ -94,16 +94,21 @@ export function useWebSocket({
   }, [startHeartbeat])
 
   const connect = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) return
-    
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already open, skipping connect')
+      return
+    }
+
+    console.log('Attempting to connect WebSocket to:', url)
     isManualDisconnect.current = false
     setConnectionStatus(ConnectionStatus.CONNECTING)
-    
+
     try {
       ws.current = new WebSocket(url, protocols)
-      
+      console.log('WebSocket instance created, waiting for connection...')
+
       ws.current.onopen = () => {
-        console.log('WebSocket connected to:', url)
+        console.log('✅ WebSocket connected to:', url)
         setConnectionStatus(ConnectionStatus.CONNECTED)
         setLastError(null)
         reconnectAttemptsRef.current = 0
