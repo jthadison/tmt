@@ -66,7 +66,9 @@ Issues = "https://github.com/your-org/adaptive-trading-system/issues"
 
 # Setuptools configuration - package discovery
 [tool.setuptools]
-packages = ["agents", "orchestrator", "shared", "risk_management"]
+# Exclude the monorepo structure since each service is independent
+# This allows the package to install without trying to bundle everything
+packages = []
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
