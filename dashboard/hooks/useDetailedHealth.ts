@@ -67,42 +67,6 @@ export function useDetailedHealth({
   })
 
   /**
-   * Fetch detailed health data from REST API
-   */
-  const fetchHealthData = useCallback(async () => {
-    try {
-      const response = await fetch(`${orchestratorUrl}/health/detailed`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch health data: ${response.statusText}`)
-      }
-
-      const data: DetailedHealthData = await response.json()
-
-      if (isMountedRef.current) {
-        setHealthData(data)
-        setLastUpdate(new Date(data.timestamp))
-        setError(null)
-        setLoading(false)
-
-        // Update latency history
-        updateLatencyHistory(data)
-      }
-    } catch (err) {
-      console.error('Error fetching detailed health data:', err)
-      if (isMountedRef.current) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
-        setLoading(false)
-      }
-    }
-  }, [orchestratorUrl])
-
-  /**
    * Update latency history with new data points
    */
   const updateLatencyHistory = useCallback((data: DetailedHealthData) => {
@@ -133,6 +97,48 @@ export function useDetailedHealth({
       return updated
     })
   }, [])
+
+  /**
+   * Fetch detailed health data from REST API
+   */
+  const fetchHealthData = useCallback(async () => {
+    try {
+      console.log('[useDetailedHealth] Fetching from:', `${orchestratorUrl}/health/detailed`)
+      const response = await fetch(`${orchestratorUrl}/health/detailed`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch health data: ${response.statusText}`)
+      }
+
+      const data: DetailedHealthData = await response.json()
+      console.log('[useDetailedHealth] Received data:', {
+        hasData: !!data,
+        timestamp: data.timestamp,
+        avgLatency: data.system_metrics?.avg_latency_ms
+      })
+
+      if (isMountedRef.current) {
+        setHealthData(data)
+        setLastUpdate(new Date(data.timestamp))
+        setError(null)
+        setLoading(false)
+
+        // Update latency history
+        updateLatencyHistory(data)
+      }
+    } catch (err) {
+      console.error('[useDetailedHealth] Error fetching data:', err)
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+        setLoading(false)
+      }
+    }
+  }, [orchestratorUrl, updateLatencyHistory])
 
   /**
    * Handle WebSocket messages

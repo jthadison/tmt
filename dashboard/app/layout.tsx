@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { AuthProvider } from '@/context/AuthContext'
 import { SettingsProvider } from '@/context/SettingsContext'
+import { HealthDataProvider } from '@/context/HealthDataContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import './globals.css'
 
@@ -25,7 +26,9 @@ export default function RootLayout({
           <AuthProvider>
             <SettingsProvider>
               <ThemeProvider>
-                {children}
+                <HealthDataProvider>
+                  {children}
+                </HealthDataProvider>
               </ThemeProvider>
             </SettingsProvider>
           </AuthProvider>

@@ -7,7 +7,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useDetailedHealth } from './useDetailedHealth'
+import { useHealthData } from '@/context/HealthDataContext'
 import { ConnectionQuality, ConnectionMetrics, ConnectionQualityData } from '@/types/health'
 import { calculateConnectionQuality } from '@/utils/connectionQuality'
 import { ConnectionStatus } from '@/types/websocket'
@@ -24,10 +24,8 @@ export function useConnectionQuality(
 ): ConnectionQualityData {
   const { updateInterval = 1000 } = options
 
-  const { healthData, lastUpdate, connectionStatus } = useDetailedHealth({
-    enableWebSocket: false,  // Use HTTP polling - main page already has WebSocket
-    pollingInterval: 5000
-  })
+  // Use shared health data from context instead of creating new instance
+  const { healthData, lastUpdate, connectionStatus } = useHealthData()
 
   const [quality, setQuality] = useState<ConnectionQuality>('good')
   const [metrics, setMetrics] = useState<ConnectionMetrics>({
@@ -66,6 +64,15 @@ export function useConnectionQuality(
       // Get average latency from health data
       const avgLatency = healthData?.system_metrics?.avg_latency_ms || 0
 
+      // Debug logging
+      console.log('[ConnectionQuality] Calculating:', {
+        hasHealthData: !!healthData,
+        lastUpdate: lastUpdate?.toISOString(),
+        dataAge,
+        avgLatency,
+        wsStatus
+      })
+
       // Build current metrics
       const currentMetrics: ConnectionMetrics = {
         wsStatus,
@@ -87,8 +94,7 @@ export function useConnectionQuality(
     const interval = setInterval(calculateAndUpdate, updateInterval)
 
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [updateInterval])
+  }, [updateInterval, healthData, lastUpdate, wsStatus])
 
   return {
     quality,

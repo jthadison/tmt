@@ -7,7 +7,7 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { X, RefreshCw, AlertCircle } from 'lucide-react'
-import { useDetailedHealth } from '@/hooks/useDetailedHealth'
+import { useHealthData } from '@/context/HealthDataContext'
 import AgentHealthCard from './AgentHealthCard'
 import ServiceHealthCard from './ServiceHealthCard'
 import CircuitBreakerStatus from './CircuitBreakerStatus'
@@ -69,10 +69,8 @@ export default function DetailedHealthPanel({
   onClose
 }: DetailedHealthPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const { healthData, loading, error, lastUpdate, refreshData, latencyHistory } = useDetailedHealth({
-    enableWebSocket: false, // Use polling until WebSocket endpoint is implemented
-    pollingInterval: 5000
-  })
+  // Use shared health data from context
+  const { healthData, loading, error, lastUpdate, refreshData, latencyHistory } = useHealthData()
 
   /**
    * Handle ESC key to close panel

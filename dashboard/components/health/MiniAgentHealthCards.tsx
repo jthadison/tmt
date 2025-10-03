@@ -6,7 +6,7 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import { useDetailedHealth } from '@/hooks/useDetailedHealth'
+import { useHealthData } from '@/context/HealthDataContext'
 import { MiniAgentCardData } from '@/types/health'
 import MiniAgentCard from './MiniAgentCard'
 
@@ -22,10 +22,8 @@ export default function MiniAgentHealthCards({
   onAgentClick,
   className = ''
 }: MiniAgentHealthCardsProps) {
-  const { healthData, loading, latencyHistory } = useDetailedHealth({
-    enableWebSocket: false,
-    pollingInterval: 5000
-  })
+  // Use shared health data from context
+  const { healthData, loading, latencyHistory } = useHealthData()
 
   // Transform agent data for mini cards
   const miniAgentData: MiniAgentCardData[] = useMemo(() => {
