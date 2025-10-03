@@ -245,9 +245,9 @@ export default function Home() {
 
           {/* System Status */}
           <Grid cols={{ default: 1, lg: 2 }}>
-            <HealthCheckPanel className="h-64" />
+            <HealthCheckPanel />
 
-            <Card title="Connection Status" className="h-64">
+            <Card title="Connection Status">
               <div className="space-y-4">
                 {/* WebSocket Status */}
                 <div className="p-3 bg-gray-800 rounded">

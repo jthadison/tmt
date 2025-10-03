@@ -160,30 +160,26 @@ export default function HealthCheckPanel({ className = '', compact = false }: He
         </div>
 
         {/* Service List */}
-        <div className="space-y-2">
+        <div className="space-y-0.5">
           {health.services.map((service) => (
             <div
               key={service.name}
-              className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-800/50 transition-colors"
+              className="grid grid-cols-[auto_1fr_auto] gap-2 items-center py-1 px-2 rounded hover:bg-gray-800/50 transition-colors"
             >
-              <div className="flex items-center space-x-3 flex-1 min-w-0">
-                <span className={`${getStatusColor(service.status)} flex-shrink-0`}>
-                  {getStatusIcon(service.status)}
+              <span className={`${getStatusColor(service.status)} flex-shrink-0 text-xs leading-none`}>
+                {getStatusIcon(service.status)}
+              </span>
+              <span className="text-xs truncate min-w-0">{service.name}</span>
+              {service.latency !== undefined && (
+                <span className="text-xs text-gray-400 tabular-nums text-right whitespace-nowrap">
+                  {service.latency}ms
                 </span>
-                <span className="text-sm truncate">{service.name}</span>
-              </div>
-              <div className="flex items-center space-x-4 flex-shrink-0 ml-4">
-                {service.latency !== undefined && (
-                  <span className="text-xs text-gray-500 tabular-nums">
-                    {service.latency}ms
-                  </span>
-                )}
-                {service.message && (
-                  <span className="text-xs text-red-400 truncate max-w-[100px]">
-                    {service.message}
-                  </span>
-                )}
-              </div>
+              )}
+              {service.message && !service.latency && (
+                <span className="text-xs text-red-400 truncate">
+                  {service.message}
+                </span>
+              )}
             </div>
           ))}
         </div>
