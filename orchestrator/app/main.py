@@ -41,6 +41,7 @@ from .alert_auth import (
     require_trigger_manual, require_enable_disable, require_admin,
     LoginRequest, LoginResponse, UserInfoResponse, AlertUser
 )
+from .performance_routes import router as performance_router
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
@@ -213,6 +214,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(performance_router)
 
 # Exception handlers
 @app.exception_handler(OrchestratorException)

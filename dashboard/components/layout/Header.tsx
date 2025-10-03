@@ -6,6 +6,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/context/AuthContext'
 import EmergencyStopButton from '@/components/emergency/EmergencyStopButton'
 import EmergencyActionsButton from '@/components/emergency/EmergencyActionsButton'
+import { LivePnLTicker } from '@/components/performance/LivePnLTicker'
 
 /**
  * Header component for the trading dashboard
@@ -58,6 +59,7 @@ export default function Header() {
             </nav>
           </div>
           <div className="flex items-center space-x-4">
+            <LivePnLTicker />
             <EmergencyStopButton />
             <EmergencyActionsButton />
             <ThemeToggle />
