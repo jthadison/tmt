@@ -7,7 +7,6 @@ name = "adaptive-trading-system"
 version = "0.1.0"
 description = "AI-powered trading platform with 8 specialized agents"
 authors = [{name = "Trading Team", email = "dev@trading-system.com"}]
-license = "Proprietary"
 readme = "README.md"
 requires-python = ">=3.11.8"
 classifiers = [
