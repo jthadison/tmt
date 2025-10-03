@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-#![allow(clippy::redundant_field_names)] 
+#![allow(clippy::redundant_field_names)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::new_without_default)]
 #![allow(clippy::unwrap_or_default)]

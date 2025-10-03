@@ -7,7 +7,7 @@ name = "adaptive-trading-system"
 version = "0.1.0"
 description = "AI-powered trading platform with 8 specialized agents"
 authors = [{name = "Trading Team", email = "dev@trading-system.com"}]
-license = {text = "Proprietary"}
+license = "Proprietary"
 readme = "README.md"
 requires-python = ">=3.11.8"
 classifiers = [
@@ -64,6 +64,13 @@ Homepage = "https://github.com/your-org/adaptive-trading-system"
 Documentation = "https://docs.trading-system.com"
 Repository = "https://github.com/your-org/adaptive-trading-system"
 Issues = "https://github.com/your-org/adaptive-trading-system/issues"
+
+# Setuptools configuration - package discovery
+[tool.setuptools]
+packages = ["agents", "orchestrator", "shared", "risk_management"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
 
 # Black configuration
 [tool.black]
