@@ -3,11 +3,13 @@ Integration tests for 8-agent orchestration system
 Tests complete end-to-end flow from signal generation to trade execution
 """
 import asyncio
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 
@@ -303,3 +305,46 @@ class TestEightAgentOrchestration:
             "degraded": False,
             "failed_agents": []
         }
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_real_agent_health_checks(self):
+        """Test real agent health endpoints if services are running"""
+        # Only run if services are available (check env variable)
+        if not os.getenv("TESTING_WITH_LIVE_AGENTS"):
+            pytest.skip("Live agent testing not enabled")
+
+        agent_ports = {
+            "market-analysis": 8001,
+            "strategy-analysis": 8002,
+            "parameter-optimization": 8003,
+            "learning-safety": 8004,
+            "disagreement-engine": 8005,
+            "data-collection": 8006,
+            "continuous-improvement": 8007,
+            "pattern-detection": 8008,
+        }
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            results = {}
+
+            for agent_name, port in agent_ports.items():
+                try:
+                    response = await client.get(f"http://localhost:{port}/health")
+                    results[agent_name] = {
+                        "status": response.status_code,
+                        "healthy": response.status_code == 200
+                    }
+                except Exception as e:
+                    results[agent_name] = {
+                        "status": 0,
+                        "healthy": False,
+                        "error": str(e)
+                    }
+
+            # Log results
+            healthy_count = sum(1 for r in results.values() if r["healthy"])
+            print(f"\n Agent Health: {healthy_count}/{len(agent_ports)} healthy")
+
+            # At least majority should be healthy for integration tests
+            assert healthy_count >= len(agent_ports) * 0.75

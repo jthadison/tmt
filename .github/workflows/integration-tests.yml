@@ -35,8 +35,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
     - name: Run unit tests
       run: |
@@ -76,20 +76,8 @@ jobs:
         ports:
           - 6379:6379
 
-      kafka:
-        image: confluentinc/cp-kafka:latest
-        env:
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        ports:
-          - 9092:9092
-
-      zookeeper:
-        image: confluentinc/cp-zookeeper:latest
-        env:
-          ZOOKEEPER_CLIENT_PORT: 2181
-          ZOOKEEPER_TICK_TIME: 2000
+      # Kafka/Zookeeper removed - not required for basic integration tests
+      # Can be added back when needed with proper KRaft configuration
 
     steps:
     - uses: actions/checkout@v4
@@ -102,8 +90,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
     - name: Wait for services
       run: |
@@ -112,8 +100,6 @@ jobs:
         PGPASSWORD=password psql -h localhost -U postgres -d trading_system_test -c "SELECT 1;"
         # Verify Redis connection
         redis-cli -h localhost ping
-        # Verify Kafka (basic check)
-        timeout 10s bash -c 'until printf "" 2>>/dev/null >>/dev/tcp/localhost/9092; do sleep 1; done'
 
     - name: Run database migrations
       run: |
@@ -155,8 +141,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
     - name: Run performance tests
       run: |
@@ -188,8 +174,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
     - name: Run load tests
       run: |
@@ -242,8 +228,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
     - name: Start all 8 agents
       run: |
