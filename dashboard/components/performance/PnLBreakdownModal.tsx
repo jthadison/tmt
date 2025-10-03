@@ -126,6 +126,7 @@ export function PnLBreakdownModal({ isOpen, onClose }: PnLBreakdownModalProps) {
     bestTrade,
     worstTrade,
     isLoading: periodLoading,
+    error: periodError,
   } = usePeriodPerformance(selectedPeriod)
 
   const periods: { value: PeriodType; label: string }[] = [
@@ -180,9 +181,20 @@ export function PnLBreakdownModal({ isOpen, onClose }: PnLBreakdownModalProps) {
           </div>
 
           {/* Period Stats */}
-          {periodLoading ? (
+          {periodError ? (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <div className="text-red-400 font-medium mb-2">Error Loading Data</div>
+              <div className="text-sm text-red-300">{periodError}</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-3 text-sm text-red-400 hover:text-red-300 underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : periodLoading ? (
             <div className="p-4 bg-gray-800 rounded-lg text-center text-gray-400">
-              Loading period data...
+              <div className="animate-pulse">Loading period data...</div>
             </div>
           ) : periodData ? (
             <div className="p-4 bg-gray-800 rounded-lg space-y-3">

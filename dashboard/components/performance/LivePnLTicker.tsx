@@ -26,8 +26,7 @@ export function LivePnLTicker() {
     return '→'
   }, [dailyPnL])
 
-  // Memoize formatted values
-  const formattedPnL = useMemo(() => formatCurrency(dailyPnL), [dailyPnL])
+  // Memoize formatted percentage
   const formattedPercentage = useMemo(
     () => formatPercentage(pnLPercentage),
     [pnLPercentage]

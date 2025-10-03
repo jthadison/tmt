@@ -5,11 +5,12 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useOandaData } from './useOandaData'
+import { useWebSocket } from './useWebSocket'
 import { LivePnLState, PnLUpdateMessage } from '@/types/performance'
 import { debounce } from '@/utils/debounce'
 
 /**
- * Hook for managing P&L data with real-time updates
+ * Hook for managing P&L data with real-time WebSocket updates
  */
 export function usePnLData(): LivePnLState & {
   updatePnL: (update: PnLUpdateMessage) => void
@@ -17,7 +18,31 @@ export function usePnLData(): LivePnLState & {
   const { accounts, accountMetrics, isLoading, error } = useOandaData()
   const [pnlHistory, setPnlHistory] = useState<number[]>([])
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [usePolling, setUsePolling] = useState(false)
   const prevPnL = useRef<number>(0)
+  const pollingInterval = useRef<NodeJS.Timeout>()
+
+  // WebSocket connection for real-time P&L updates
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8089/ws'
+  const { lastMessage, connectionStatus } = useWebSocket({
+    url: wsUrl,
+    reconnectAttempts: 3,
+    reconnectInterval: 5000,
+  })
+
+  // Monitor WebSocket connection and fallback to polling if disconnected
+  useEffect(() => {
+    if (connectionStatus === 'error' || connectionStatus === 'disconnected') {
+      console.warn('WebSocket disconnected, falling back to polling')
+      setUsePolling(true)
+    } else if (connectionStatus === 'connected') {
+      console.log('WebSocket connected, disabling polling')
+      setUsePolling(false)
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current)
+      }
+    }
+  }, [connectionStatus])
 
   /**
    * Calculate total daily P&L from all accounts
@@ -53,6 +78,31 @@ export function usePnLData(): LivePnLState & {
     const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0)
     return totalBalance > 0 ? (dailyPnL / totalBalance) * 100 : 0
   }, [dailyPnL, accounts])
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (lastMessage && lastMessage.type === 'pnl_update') {
+      // WebSocket update received, trigger refresh
+      setLastUpdate(new Date())
+    }
+  }, [lastMessage])
+
+  // Polling fallback when WebSocket is disconnected
+  useEffect(() => {
+    if (usePolling) {
+      // Poll every 5 seconds
+      pollingInterval.current = setInterval(() => {
+        // Trigger refresh by updating timestamp
+        setLastUpdate(new Date())
+      }, 5000)
+
+      return () => {
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current)
+        }
+      }
+    }
+  }, [usePolling])
 
   /**
    * Update P&L history for sparkline (rolling 20 points)

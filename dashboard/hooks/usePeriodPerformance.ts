@@ -19,31 +19,47 @@ export function usePeriodPerformance(period: PeriodType) {
   const [error, setError] = useState<string | null>(null)
 
   /**
-   * Fetch period performance data from API
+   * Fetch period performance data from API with retry logic
    */
-  const fetchPeriodData = useCallback(async () => {
+  const fetchPeriodData = useCallback(async (retryCount = 0) => {
     setIsLoading(true)
     setError(null)
 
     try {
       // Fetch period performance metrics
       const periodResponse = await fetch(
-        `/api/performance/pnl/period?period=${period}`
+        `/api/performance/pnl/period?period=${period}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       )
 
       if (!periodResponse.ok) {
-        throw new Error('Failed to fetch period data')
+        const errorData = await periodResponse.json().catch(() => ({}))
+        throw new Error(
+          errorData.detail || `Failed to fetch period data: ${periodResponse.status}`
+        )
       }
 
       const periodResult = await periodResponse.json()
 
       // Fetch best/worst trades for period
       const tradesResponse = await fetch(
-        `/api/performance/trades/best-worst?period=${period}`
+        `/api/performance/trades/best-worst?period=${period}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       )
 
       if (!tradesResponse.ok) {
-        throw new Error('Failed to fetch trades data')
+        const errorData = await tradesResponse.json().catch(() => ({}))
+        throw new Error(
+          errorData.detail || `Failed to fetch trades data: ${tradesResponse.status}`
+        )
       }
 
       const tradesResult = await tradesResponse.json()
@@ -76,7 +92,17 @@ export function usePeriodPerformance(period: PeriodType) {
           : null,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+
+      // Retry logic: retry up to 2 times with exponential backoff
+      if (retryCount < 2) {
+        const delay = Math.pow(2, retryCount) * 1000 // 1s, 2s
+        console.warn(`Retrying period performance fetch (attempt ${retryCount + 1}/2) in ${delay}ms...`)
+        setTimeout(() => fetchPeriodData(retryCount + 1), delay)
+        return
+      }
+
+      setError(errorMessage)
       console.error('Error fetching period performance:', err)
     } finally {
       setIsLoading(false)
