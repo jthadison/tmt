@@ -207,7 +207,7 @@ jobs:
           node -e "const fs = require('fs'); const data = fs.readFileSync('package-lock.json', 'utf8'); const json = JSON.parse(data); console.log('lockfileVersion:', json.lockfileVersion);"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --prefer-offline --no-audit
 
       - name: Lint with ESLint
         run: npm run lint || true
