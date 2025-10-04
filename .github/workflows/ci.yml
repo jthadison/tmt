@@ -180,6 +180,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
+      - name: Debug - Verify files after checkout
+        run: |
+          echo "Current directory:"
+          pwd
+          echo ""
+          echo "Dashboard directory contents:"
+          ls -la
+          echo ""
+          echo "Package files present:"
+          ls -la package* || echo "No package files found"
+          echo ""
+          echo "File sizes:"
+          du -h package* || echo "Cannot stat package files"
+
       - name: Install dependencies
         run: npm ci
 
