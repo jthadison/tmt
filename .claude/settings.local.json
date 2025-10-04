@@ -53,7 +53,14 @@
       "Bash(gh api:*)",
       "Bash(npm run type-check:*)",
       "Bash(test:*)",
-      "Bash(gh pr close:*)"
+      "Bash(gh pr close:*)",
+      "Bash(mkdir:*)",
+      "Bash(git reset:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(PORT=8090 npm run dev)",
+      "Bash(git branch:*)"
     ],
     "deny": [],
     "ask": [],
