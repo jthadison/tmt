@@ -26,7 +26,6 @@ export function usePositions(): UsePositionsState {
   // WebSocket connection for real-time updates
   const { lastMessage, isConnected } = useWebSocket({
     url: ORCHESTRATOR_WS_URL,
-    reconnect: true,
     reconnectAttempts: 5,
     reconnectInterval: 3000
   })

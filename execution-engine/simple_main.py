@@ -1075,8 +1075,33 @@ if FASTAPI_AVAILABLE:
         """Modify position stop loss and take profit (Dashboard API)"""
         logger.info(f"Modify position requested: {position_id}", extra=request_data)
 
+        # Validate input
+        if not request_data:
+            raise HTTPException(status_code=400, detail="Request body is required")
+
         stop_loss = request_data.get("stop_loss")
         take_profit = request_data.get("take_profit")
+
+        # Validate at least one is provided
+        if stop_loss is None and take_profit is None:
+            raise HTTPException(status_code=400, detail="At least one of stop_loss or take_profit must be provided")
+
+        # Validate types and values
+        if stop_loss is not None:
+            try:
+                stop_loss = float(stop_loss)
+                if stop_loss <= 0:
+                    raise HTTPException(status_code=400, detail="stop_loss must be a positive number")
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="stop_loss must be a valid number")
+
+        if take_profit is not None:
+            try:
+                take_profit = float(take_profit)
+                if take_profit <= 0:
+                    raise HTTPException(status_code=400, detail="take_profit must be a positive number")
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="take_profit must be a valid number")
 
         if app_state.paper_trading_mode:
             return {
@@ -1129,9 +1154,6 @@ if FASTAPI_AVAILABLE:
                 if take_profit is not None:
                     formatted_tp = f"{float(take_profit):.{precision}f}"
                     modification_data['takeProfit'] = {"price": formatted_tp}
-
-                if not modification_data:
-                    raise HTTPException(status_code=400, detail="No stop_loss or take_profit provided")
 
                 # Modify the trade
                 response = await client.put(
