@@ -331,7 +331,7 @@ jobs:
             dockerfile: ./agents/Dockerfile
             context: ./agents
           - service: execution-engine
-            dockerfile: ./execution-engine/Dockerfile
+            dockerfile: ./execution-engine/Dockerfile.dev
             context: ./execution-engine
 
     steps:
