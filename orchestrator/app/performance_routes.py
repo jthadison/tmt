@@ -11,6 +11,7 @@ import logging
 
 from .oanda_client import OandaClient
 from .config import get_settings
+from .models import TradingSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/performance", tags=["performance"])
@@ -53,6 +54,43 @@ class PnLHistoryResponse(BaseModel):
     interval: str
     data: List[Dict[str, Any]]
     timestamp: str
+
+class SessionPerformanceResponse(BaseModel):
+    session: str
+    total_pnl: float
+    trade_count: int
+    win_count: int
+    win_rate: float
+    confidence_threshold: float
+
+class SessionPerformanceListResponse(BaseModel):
+    sessions: List[SessionPerformanceResponse]
+
+class SessionTradeResponse(BaseModel):
+    id: str
+    timestamp: str
+    instrument: str
+    direction: str
+    pnl: float
+    duration: int
+
+class SessionTradesListResponse(BaseModel):
+    trades: List[SessionTradeResponse]
+
+class PerformanceMetricsResponse(BaseModel):
+    win_rate: float
+    profit_factor: float
+    avg_win: float
+    avg_loss: float
+    avg_duration_hours: float
+
+class EquityPointResponse(BaseModel):
+    date: str
+    equity: float
+    daily_pnl: float
+
+class EquityCurveResponse(BaseModel):
+    data: List[EquityPointResponse]
 
 # Helper function to calculate date ranges
 def get_date_range(period: str) -> tuple[datetime, datetime]:
@@ -314,4 +352,227 @@ async def get_pnl_history(
 
     except Exception as e:
         logger.error(f"Error getting P&L history: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Session-specific helpers
+def determine_session(timestamp: datetime) -> str:
+    """Determine trading session based on GMT hour"""
+    gmt_hour = timestamp.hour if timestamp.tzinfo is None else timestamp.astimezone().hour
+
+    # Overlap session (12:00-16:00 GMT)
+    if 12 <= gmt_hour < 16:
+        return TradingSession.OVERLAP.value
+    # Sydney session (18:00-03:00 GMT)
+    elif 18 <= gmt_hour or gmt_hour < 3:
+        return TradingSession.SYDNEY.value
+    # Tokyo session (00:00-09:00 GMT)
+    elif 0 <= gmt_hour < 9:
+        return TradingSession.TOKYO.value
+    # London session (07:00-16:00 GMT)
+    elif 7 <= gmt_hour < 16:
+        return TradingSession.LONDON.value
+    # New York session (12:00-21:00 GMT)
+    elif 12 <= gmt_hour < 21:
+        return TradingSession.NEW_YORK.value
+    else:
+        return TradingSession.SYDNEY.value
+
+def get_session_confidence_threshold(session: TradingSession) -> float:
+    """Get confidence threshold for session"""
+    thresholds = {
+        TradingSession.SYDNEY: 78.0,
+        TradingSession.TOKYO: 85.0,
+        TradingSession.LONDON: 72.0,
+        TradingSession.NEW_YORK: 70.0,
+        TradingSession.OVERLAP: 70.0
+    }
+    return thresholds.get(session, 75.0)
+
+@router.get("/sessions", response_model=SessionPerformanceListResponse)
+async def get_session_performance(
+    start_date: str = Query(...),
+    end_date: str = Query(...)
+):
+    """Get P&L breakdown by trading session"""
+    try:
+        settings = get_settings()
+        oanda_client = OandaClient()
+
+        start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+
+        # Fetch all trades in date range
+        trades = await get_trades_for_period(oanda_client, settings.account_ids_list, start, end)
+
+        # Aggregate by session
+        session_stats = {session.value: {'total_pnl': 0.0, 'trade_count': 0, 'win_count': 0}
+                        for session in TradingSession}
+
+        for trade in trades:
+            # Determine session based on trade timestamp
+            trade_time = datetime.fromisoformat(trade['entry_time'].replace('Z', '+00:00'))
+            session = determine_session(trade_time)
+
+            session_stats[session]['total_pnl'] += trade['pnl']
+            session_stats[session]['trade_count'] += 1
+            if trade['pnl'] > 0:
+                session_stats[session]['win_count'] += 1
+
+        # Format response
+        sessions = []
+        for session in TradingSession:
+            stats = session_stats[session.value]
+            trade_count = stats['trade_count']
+            win_rate = (stats['win_count'] / trade_count * 100) if trade_count > 0 else 0
+
+            sessions.append(SessionPerformanceResponse(
+                session=session.value,
+                total_pnl=stats['total_pnl'],
+                trade_count=trade_count,
+                win_count=stats['win_count'],
+                win_rate=win_rate,
+                confidence_threshold=get_session_confidence_threshold(session)
+            ))
+
+        return SessionPerformanceListResponse(sessions=sessions)
+
+    except Exception as e:
+        logger.error(f"Error getting session performance: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.get("/session-trades", response_model=SessionTradesListResponse)
+async def get_session_trades(
+    session: str = Query(...),
+    start_date: str = Query(...),
+    end_date: str = Query(...)
+):
+    """Get all trades for a specific session"""
+    try:
+        settings = get_settings()
+        oanda_client = OandaClient()
+
+        start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+
+        # Fetch all trades
+        all_trades = await get_trades_for_period(oanda_client, settings.account_ids_list, start, end)
+
+        # Filter by session
+        session_trades = []
+        for trade in all_trades:
+            trade_time = datetime.fromisoformat(trade['entry_time'].replace('Z', '+00:00'))
+            if determine_session(trade_time) == session:
+                session_trades.append(SessionTradeResponse(
+                    id=trade['id'],
+                    timestamp=trade['entry_time'],
+                    instrument=trade['instrument'],
+                    direction=trade['direction'],
+                    pnl=trade['pnl'],
+                    duration=trade['duration']
+                ))
+
+        return SessionTradesListResponse(trades=session_trades)
+
+    except Exception as e:
+        logger.error(f"Error getting session trades: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.get("/metrics", response_model=PerformanceMetricsResponse)
+async def get_performance_metrics(period: str = Query("30d")):
+    """Get performance metrics (win rate, profit factor, etc.)"""
+    try:
+        settings = get_settings()
+        oanda_client = OandaClient()
+
+        # Parse period
+        days = int(period.replace('d', ''))
+        start_date = datetime.now() - timedelta(days=days)
+        end_date = datetime.now()
+
+        # Fetch trades
+        trades = await get_trades_for_period(oanda_client, settings.account_ids_list, start_date, end_date)
+
+        if not trades:
+            return PerformanceMetricsResponse(
+                win_rate=0.0,
+                profit_factor=0.0,
+                avg_win=0.0,
+                avg_loss=0.0,
+                avg_duration_hours=0.0
+            )
+
+        # Calculate metrics
+        winning_trades = [t for t in trades if t['pnl'] > 0]
+        losing_trades = [t for t in trades if t['pnl'] < 0]
+
+        gross_profit = sum(t['pnl'] for t in winning_trades)
+        gross_loss = abs(sum(t['pnl'] for t in losing_trades))
+
+        win_rate = (len(winning_trades) / len(trades)) * 100 if trades else 0
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+        avg_win = gross_profit / len(winning_trades) if winning_trades else 0
+        avg_loss = gross_loss / len(losing_trades) if losing_trades else 0
+        avg_duration = sum(t['duration'] for t in trades) / len(trades) if trades else 0
+        avg_duration_hours = avg_duration / 3600 if avg_duration > 0 else 0
+
+        return PerformanceMetricsResponse(
+            win_rate=win_rate,
+            profit_factor=profit_factor,
+            avg_win=avg_win,
+            avg_loss=avg_loss,
+            avg_duration_hours=avg_duration_hours
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.get("/equity-curve", response_model=EquityCurveResponse)
+async def get_equity_curve(days: int = Query(30)):
+    """Get daily equity curve data"""
+    try:
+        settings = get_settings()
+        oanda_client = OandaClient()
+
+        # Get current account equity
+        total_equity = 0.0
+        for account_id in settings.account_ids_list:
+            try:
+                account_info = await oanda_client.get_account_info(account_id)
+                total_equity += float(account_info.balance)
+            except Exception as e:
+                logger.warning(f"Could not fetch balance for {account_id}: {e}")
+                continue
+
+        # Generate equity points (simplified version using current equity as baseline)
+        # In production, this would query historical account snapshots
+        equity_points = []
+
+        for i in range(days):
+            date = datetime.now() - timedelta(days=days - i - 1)
+
+            # Get trades for this day to calculate daily P&L
+            day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+
+            day_trades = await get_trades_for_period(oanda_client, settings.account_ids_list, day_start, day_end)
+            daily_pnl = sum(t['pnl'] for t in day_trades)
+
+            # Calculate equity at this point (simplified)
+            equity = total_equity - sum(
+                sum(t['pnl'] for t in await get_trades_for_period(
+                    oanda_client, settings.account_ids_list, date, datetime.now()
+                ))
+            )
+
+            equity_points.append(EquityPointResponse(
+                date=date.isoformat(),
+                equity=equity if equity > 0 else total_equity,
+                daily_pnl=daily_pnl
+            ))
+
+        return EquityCurveResponse(data=equity_points)
+
+    except Exception as e:
+        logger.error(f"Error getting equity curve: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
