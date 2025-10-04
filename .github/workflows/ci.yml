@@ -419,7 +419,7 @@ jobs:
 
       - name: Set up Docker Compose
         run: |
-          docker-compose -f docker-compose.yml up -d
+          docker compose -f docker-compose.yml up -d
           sleep 60  # Wait for all services to be ready
 
       - name: Run integration tests
@@ -432,7 +432,7 @@ jobs:
 
       - name: Cleanup Docker Compose
         if: always()
-        run: docker-compose -f docker-compose.yml down
+        run: docker compose -f docker-compose.yml down
 
   # Performance tests
   performance-tests:
