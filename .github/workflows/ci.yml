@@ -172,6 +172,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Upgrade npm to latest version
+        run: npm install -g npm@latest
+
       - name: Cache npm dependencies
         uses: actions/cache@v4
         with:
