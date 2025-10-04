@@ -20,7 +20,7 @@ pylint==3.3.2
 psycopg2-binary==2.9.10
 
 # HTTP Testing
-httpx==0.26.0
+httpx==0.28.0
 pytest-httpx==0.35.0
 
 # Load Testing
