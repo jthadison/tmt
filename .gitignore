@@ -3,7 +3,6 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 
 # Development and testing artifacts
 test_*.js
@@ -15,6 +14,10 @@ test-results/
 # Trading system runtime data
 *.csv
 *.json
+!**/package.json
+!**/package-lock.json
+!**/tsconfig.json
+!**/.vscode/*.json
 trade_journal.json
 notification_test_trades.csv
 test_export.csv
