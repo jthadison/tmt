@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import MainLayout from '@/components/layout/MainLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import PerformanceAnalyticsDashboard from '@/components/analytics/PerformanceAnalyticsDashboard'
+import SessionPerformanceWidget from '@/components/performance/SessionPerformanceWidget'
+import PerformanceMetricsDashboard from '@/components/performance/PerformanceMetricsDashboard'
 import { performanceAnalyticsService } from '@/services/performanceAnalyticsService'
 import { TradeBreakdown, ComplianceReport } from '@/types/performanceAnalytics'
 
@@ -71,12 +73,21 @@ export default function PerformanceAnalyticsPage() {
   return (
     <ProtectedRoute>
       <MainLayout>
-        <PerformanceAnalyticsDashboard
-          accountIds={accountIds}
-          initialView="overview"
-          onTradeSelect={handleTradeSelect}
-          onReportGenerated={handleReportGenerated}
-        />
+        <div className="space-y-8">
+          {/* Story 3.3: Session Performance Widget */}
+          <SessionPerformanceWidget />
+
+          {/* Story 3.3: Performance Metrics Dashboard */}
+          <PerformanceMetricsDashboard period="30d" equityDays={30} />
+
+          {/* Existing Performance Analytics Dashboard */}
+          <PerformanceAnalyticsDashboard
+            accountIds={accountIds}
+            initialView="overview"
+            onTradeSelect={handleTradeSelect}
+            onReportGenerated={handleReportGenerated}
+          />
+        </div>
       </MainLayout>
     </ProtectedRoute>
   )
