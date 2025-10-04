@@ -193,6 +193,15 @@ jobs:
           echo ""
           echo "File sizes:"
           du -h package* || echo "Cannot stat package files"
+          echo ""
+          echo "Check package-lock.json content (first 20 lines):"
+          head -20 package-lock.json || echo "Cannot read package-lock.json"
+          echo ""
+          echo "npm version:"
+          npm --version
+          echo ""
+          echo "Check if npm can read the lockfile:"
+          node -e "const fs = require('fs'); const data = fs.readFileSync('package-lock.json', 'utf8'); const json = JSON.parse(data); console.log('lockfileVersion:', json.lockfileVersion);"
 
       - name: Install dependencies
         run: npm ci
