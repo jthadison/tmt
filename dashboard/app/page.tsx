@@ -15,11 +15,26 @@ import { useRealTimeStore } from '@/store/realTimeStore'
 import { useOandaData } from '@/hooks/useOandaData'
 import { AccountsGrid } from '@/components/oanda/AccountsGrid'
 import { intervalConfig } from '@/config/intervals'
+import { PositionCardsGrid } from '@/components/positions/PositionCardsGrid'
+import { ClosePositionConfirm } from '@/components/positions/ClosePositionConfirm'
+import { ModifyPositionModal } from '@/components/positions/ModifyPositionModal'
+import { PositionDetailModal } from '@/components/positions/PositionDetailModal'
+import { usePositions } from '@/hooks/usePositions'
+import { Position } from '@/types/positions'
+import { useState } from 'react'
 
 export default function Home() {
   const router = useRouter()
   const { state: realTimeState, store } = useRealTimeStore()
-  
+
+  // Position modal states
+  const [selectedPositionForClose, setSelectedPositionForClose] = useState<Position | null>(null)
+  const [selectedPositionForModify, setSelectedPositionForModify] = useState<Position | null>(null)
+  const [selectedPositionForDetail, setSelectedPositionForDetail] = useState<Position | null>(null)
+
+  // Get positions hook
+  const { positions, closePosition, modifyPosition } = usePositions()
+
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
 
   // Debug: Log the WebSocket URL being used
@@ -120,6 +135,35 @@ export default function Home() {
     }).format(amount)
   }
 
+  // Position action handlers
+  const handlePositionClick = (position: Position) => {
+    setSelectedPositionForDetail(position)
+  }
+
+  const handlePositionClose = (positionId: string) => {
+    const position = positions.find(p => p.id === positionId)
+    if (position) {
+      setSelectedPositionForClose(position)
+    }
+  }
+
+  const handlePositionModify = (positionId: string) => {
+    const position = positions.find(p => p.id === positionId)
+    if (position) {
+      setSelectedPositionForModify(position)
+    }
+  }
+
+  const handleConfirmClose = async (positionId: string) => {
+    await closePosition(positionId)
+    setSelectedPositionForClose(null)
+  }
+
+  const handleConfirmModify = async (positionId: string, stopLoss?: number, takeProfit?: number) => {
+    await modifyPosition(positionId, stopLoss, takeProfit)
+    setSelectedPositionForModify(null)
+  }
+
   return (
     <ProtectedRoute>
       <MainLayout>
@@ -167,6 +211,15 @@ export default function Home() {
               )}
             </Card>
           </Grid>
+
+          {/* Open Positions Grid */}
+          {positions.length > 0 && (
+            <PositionCardsGrid
+              onPositionClick={handlePositionClick}
+              onPositionClose={handlePositionClose}
+              onPositionModify={handlePositionModify}
+            />
+          )}
 
           {/* Account Overview Grid */}
           <AccountOverviewGrid
@@ -320,6 +373,29 @@ export default function Home() {
             </Card>
           </Grid>
         </div>
+
+        {/* Position Modals */}
+        <ClosePositionConfirm
+          position={selectedPositionForClose}
+          isOpen={selectedPositionForClose !== null}
+          onClose={() => setSelectedPositionForClose(null)}
+          onConfirm={handleConfirmClose}
+        />
+
+        <ModifyPositionModal
+          position={selectedPositionForModify}
+          isOpen={selectedPositionForModify !== null}
+          onClose={() => setSelectedPositionForModify(null)}
+          onConfirm={handleConfirmModify}
+        />
+
+        <PositionDetailModal
+          position={selectedPositionForDetail}
+          isOpen={selectedPositionForDetail !== null}
+          onClose={() => setSelectedPositionForDetail(null)}
+          onClosePosition={handlePositionClose}
+          onModifyPosition={handlePositionModify}
+        />
       </MainLayout>
     </ProtectedRoute>
   )

@@ -755,7 +755,7 @@ if FASTAPI_AVAILABLE:
 
     @app.get("/api/positions")
     async def get_api_positions():
-        """Get current positions from OANDA (Dashboard API)"""
+        """Get current positions from OANDA with enriched data (Dashboard API)"""
         if app_state.paper_trading_mode:
             return {"positions": []}
 
@@ -773,32 +773,74 @@ if FASTAPI_AVAILABLE:
             }
 
             async with httpx.AsyncClient() as client:
-                response = await client.get(
+                # Get trades
+                trades_response = await client.get(
                     f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades',
                     headers=headers
                 )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    trades = data.get('trades', [])
+                if trades_response.status_code != 200:
+                    raise HTTPException(status_code=trades_response.status_code, detail="OANDA API error")
 
-                    positions = []
-                    for trade in trades:
-                        units = float(trade.get('currentUnits', 0))
-                        positions.append({
-                            'id': trade.get('id'),
-                            'instrument': trade.get('instrument'),
-                            'direction': 'long' if units > 0 else 'short',
-                            'size': abs(units),
-                            'entry_price': float(trade.get('price', 0)),
-                            'current_price': float(trade.get('price', 0)),  # Would need to fetch current price
-                            'pnl': float(trade.get('unrealizedPL', 0)),
-                            'timestamp': trade.get('openTime')
-                        })
+                trades_data = trades_response.json()
+                trades = trades_data.get('trades', [])
 
-                    return {"positions": positions}
-                else:
-                    raise HTTPException(status_code=response.status_code, detail="OANDA API error")
+                if not trades:
+                    return {"positions": []}
+
+                # Get current prices for all instruments
+                instruments = ','.join(set(trade.get('instrument') for trade in trades))
+                pricing_response = await client.get(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/pricing?instruments={instruments}',
+                    headers=headers
+                )
+
+                # Build price map
+                price_map = {}
+                if pricing_response.status_code == 200:
+                    pricing_data = pricing_response.json()
+                    for price_info in pricing_data.get('prices', []):
+                        instrument = price_info.get('instrument')
+                        # Use mid price
+                        bids = price_info.get('bids', [])
+                        asks = price_info.get('asks', [])
+                        if bids and asks:
+                            mid_price = (float(bids[0]['price']) + float(asks[0]['price'])) / 2
+                            price_map[instrument] = mid_price
+
+                # Build enriched positions
+                positions = []
+                for trade in trades:
+                    units = float(trade.get('currentUnits', 0))
+                    instrument = trade.get('instrument')
+                    entry_price = float(trade.get('price', 0))
+                    current_price = price_map.get(instrument, entry_price)
+                    unrealized_pl = float(trade.get('unrealizedPL', 0))
+
+                    # Extract SL and TP
+                    stop_loss = trade.get('stopLossOrder', {}).get('price')
+                    take_profit = trade.get('takeProfitOrder', {}).get('price')
+
+                    # Get client extensions for agent source
+                    client_ext = trade.get('clientExtensions', {})
+                    agent_source = client_ext.get('comment', 'Unknown')
+
+                    positions.append({
+                        'id': trade.get('id'),
+                        'account_id': account_id,
+                        'instrument': instrument,
+                        'units': abs(units),
+                        'direction': 'long' if units > 0 else 'short',
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'stop_loss': float(stop_loss) if stop_loss else None,
+                        'take_profit': float(take_profit) if take_profit else None,
+                        'unrealized_pl': unrealized_pl,
+                        'open_time': trade.get('openTime'),
+                        'agent_source': agent_source
+                    })
+
+                return {"positions": positions}
 
         except HTTPException:
             raise
@@ -968,6 +1010,155 @@ if FASTAPI_AVAILABLE:
                 "errors": [error_msg],
                 "timestamp": datetime.now().isoformat()
             }
+
+    @app.post("/api/positions/{position_id}/close")
+    async def close_single_position(position_id: str):
+        """Close a single position by ID (Dashboard API)"""
+        logger.info(f"Close position requested: {position_id}")
+
+        if app_state.paper_trading_mode:
+            return {
+                "success": True,
+                "message": f"Paper position {position_id} closed (simulated)",
+                "realized_pl": 0.0
+            }
+
+        try:
+            import httpx
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+
+            if not api_key or not account_id:
+                raise HTTPException(status_code=503, detail="OANDA credentials not configured")
+
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.put(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades/{position_id}/close',
+                    headers=headers,
+                    json={"units": "ALL"}
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    realized_pl = float(result.get('orderFillTransaction', {}).get('pl', 0))
+
+                    # Remove from monitoring if exists
+                    if position_id in app_state.position_monitor.monitoring_positions:
+                        del app_state.position_monitor.monitoring_positions[position_id]
+
+                    # Send notification
+                    try:
+                        await notify_alert("position_closed", f"Position {position_id} closed, P&L: {realized_pl}", "info")
+                    except Exception as e:
+                        logger.error(f"Error sending notification: {e}")
+
+                    return {
+                        "success": True,
+                        "message": f"Position {position_id} closed successfully",
+                        "realized_pl": realized_pl
+                    }
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"OANDA API error: {response.text}")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to close position: {str(e)}")
+
+    @app.patch("/api/positions/{position_id}")
+    async def modify_position(position_id: str, request_data: dict):
+        """Modify position stop loss and take profit (Dashboard API)"""
+        logger.info(f"Modify position requested: {position_id}", extra=request_data)
+
+        stop_loss = request_data.get("stop_loss")
+        take_profit = request_data.get("take_profit")
+
+        if app_state.paper_trading_mode:
+            return {
+                "success": True,
+                "message": f"Paper position {position_id} modified (simulated)",
+                "position": {
+                    "id": position_id,
+                    "stop_loss": stop_loss,
+                    "take_profit": take_profit
+                }
+            }
+
+        try:
+            import httpx
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+
+            if not api_key or not account_id:
+                raise HTTPException(status_code=503, detail="OANDA credentials not configured")
+
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            # Get current trade details first
+            async with httpx.AsyncClient() as client:
+                trade_response = await client.get(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades/{position_id}',
+                    headers=headers
+                )
+
+                if trade_response.status_code != 200:
+                    raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+
+                trade_data = trade_response.json()
+                trade = trade_data.get('trade', {})
+                instrument = trade.get('instrument', '')
+
+                # Determine precision for the instrument
+                precision = 3 if 'JPY' in instrument else 5
+
+                # Format SL and TP with proper precision
+                modification_data = {}
+
+                if stop_loss is not None:
+                    formatted_sl = f"{float(stop_loss):.{precision}f}"
+                    modification_data['stopLoss'] = {"price": formatted_sl}
+
+                if take_profit is not None:
+                    formatted_tp = f"{float(take_profit):.{precision}f}"
+                    modification_data['takeProfit'] = {"price": formatted_tp}
+
+                if not modification_data:
+                    raise HTTPException(status_code=400, detail="No stop_loss or take_profit provided")
+
+                # Modify the trade
+                response = await client.put(
+                    f'https://api-fxpractice.oanda.com/v3/accounts/{account_id}/trades/{position_id}/orders',
+                    headers=headers,
+                    json=modification_data
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+
+                    return {
+                        "success": True,
+                        "message": f"Position {position_id} modified successfully",
+                        "position": {
+                            "id": position_id,
+                            "stop_loss": stop_loss,
+                            "take_profit": take_profit
+                        }
+                    }
+                else:
+                    raise HTTPException(status_code=response.status_code, detail=f"OANDA API error: {response.text}")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to modify position: {str(e)}")
 
     @app.post("/emergency/close_all")
     async def emergency_close_all():
