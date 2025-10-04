@@ -24,6 +24,7 @@
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.21",
     "chart.js": "^4.5.0",
+    "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "framer-motion": "^12.23.12",
     "js-cookie": "^3.0.5",
@@ -37,6 +38,7 @@
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^18.3.1",
     "speakeasy": "^2.0.0",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.17",
     "ws": "^8.18.3"
   },
