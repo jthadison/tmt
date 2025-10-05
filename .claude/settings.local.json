@@ -19,7 +19,9 @@
       "Bash(curl:*)",
       "Bash(tasklist)",
       "Bash(git push:*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr create:*)",
+      "Bash(git branch:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": [],
