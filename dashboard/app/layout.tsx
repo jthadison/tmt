@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/context/ThemeContext'
 import { AuthProvider } from '@/context/AuthContext'
 import { SettingsProvider } from '@/context/SettingsContext'
 import { HealthDataProvider } from '@/context/HealthDataContext'
+import { NotificationProvider } from '@/context/NotificationContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import './globals.css'
 
@@ -27,7 +28,9 @@ export default function RootLayout({
             <SettingsProvider>
               <ThemeProvider>
                 <HealthDataProvider>
-                  {children}
+                  <NotificationProvider>
+                    {children}
+                  </NotificationProvider>
                 </HealthDataProvider>
               </ThemeProvider>
             </SettingsProvider>
