@@ -68,7 +68,11 @@ const EVENT_CONFIG: Record<string, {
     title: (data) => `Trade Closed: ${data.instrument}`,
     icon: (data) => data.pnl > 0 ? '✓' : '⚠️',
     groupKey: 'trade_closed',
-    formatMessage: (data) => `P&L: ${data.pnl > 0 ? '+' : ''}$${data.pnl.toFixed(2)} (${data.pnl_percent > 0 ? '+' : ''}${data.pnl_percent.toFixed(2)}%)`,
+    formatMessage: (data) => {
+      const pnl = data.pnl as number
+      const pnlPercent = data.pnl_percent as number
+      return `P&L: ${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`
+    },
     actions: (data) => [{
       label: 'View Trade',
       action: () => window.location.href = `/trades/${data.trade_id}`,

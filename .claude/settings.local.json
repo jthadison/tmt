@@ -17,7 +17,9 @@
       "Bash(npm run lint)",
       "Bash(npx eslint:*)",
       "Bash(curl:*)",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": [],
