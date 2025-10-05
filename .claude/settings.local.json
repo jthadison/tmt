@@ -6,7 +6,14 @@
       "Bash(npm run type-check:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Implement Story 4.1 - Notification Center with Priority Levels & Smart Grouping\n\nComplete implementation of intelligent notification system for trading dashboard.\n\nFeatures:\n- ✅ Bell icon with unread badge (shows \"9+\" if >9 unread)\n- ✅ Slide-out notification panel from right side\n- ✅ Four priority levels with color-coding (Critical/Warning/Success/Info)\n- ✅ Smart grouping (similar events within 30 minutes, never groups Critical)\n- ✅ Date grouping (Today, Yesterday, This Week, Older)\n- ✅ Mark All Read / Clear All functionality\n- ✅ Individual notification actions (Mark Read, Dismiss, custom actions)\n- ✅ localStorage persistence with 30-day retention\n- ✅ FIFO limit of 500 notifications\n- ✅ Accessibility support (ARIA labels, keyboard navigation)\n- ✅ Empty state with friendly message\n\nTechnical Details:\n- Created NotificationContext for app-wide state management\n- Implemented smart grouping algorithm with 30-minute window\n- Date-based grouping using date-fns utilities\n- localStorage with automatic cleanup of old notifications\n- Fully typed with TypeScript\n- Responsive design with Tailwind CSS\n\nTest Coverage:\n- 49 tests passing (0 failing)\n- notificationGrouping.test.ts: 11 tests\n- notificationStorage.test.ts: 9 tests\n- useNotifications.test.ts: 13 tests\n- NotificationCenter.test.tsx: 16 tests\n\nFiles Created:\n- types/notifications.ts\n- utils/notificationStorage.ts\n- utils/notificationGrouping.ts\n- hooks/useNotifications.ts\n- context/NotificationContext.tsx\n- components/notifications/* (5 components)\n- __tests__/* (4 test files)\n\nFiles Modified:\n- app/layout.tsx - Added NotificationProvider\n- components/layout/Header.tsx - Integrated NotificationCenter\n\nStory: dashboard-enhancements/epic-4-intelligent-notifications/4.1\nStatus: Ready for Review\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(taskkill:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": [],

@@ -6,7 +6,9 @@
 'use client'
 
 import { Notification, PRIORITY_CONFIG } from '@/types/notifications'
-import { formatDistanceToNow } from 'date-fns'
+import * as dateFns from 'date-fns'
+
+const { formatDistanceToNow } = dateFns
 import { useRouter } from 'next/navigation'
 
 interface NotificationCardProps {

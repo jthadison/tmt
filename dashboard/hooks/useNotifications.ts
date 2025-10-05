@@ -9,13 +9,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Notification, NotificationGroup, DateGroupedNotifications } from '@/types/notifications'
 import { loadNotifications, saveNotifications } from '@/utils/notificationStorage'
 import { groupNotifications } from '@/utils/notificationGrouping'
-import {
-  startOfDay,
-  subDays,
-  isAfter,
-  isBefore,
-  isWithinInterval
-} from 'date-fns'
+import * as dateFns from 'date-fns'
+
+const { startOfDay, subDays, isAfter, isBefore, isWithinInterval } = dateFns
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
