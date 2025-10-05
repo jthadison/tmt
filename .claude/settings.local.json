@@ -13,7 +13,11 @@
       "Bash(findstr:*)",
       "Bash(npx playwright test:*)",
       "Bash(taskkill:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run lint)",
+      "Bash(npx eslint:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist)"
     ],
     "deny": [],
     "ask": [],

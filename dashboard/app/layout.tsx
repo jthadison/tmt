@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { SettingsProvider } from '@/context/SettingsContext'
 import { HealthDataProvider } from '@/context/HealthDataContext'
 import { NotificationProvider } from '@/context/NotificationContext'
+import { ToastProvider } from '@/context/ToastContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import './globals.css'
 
@@ -29,7 +30,9 @@ export default function RootLayout({
               <ThemeProvider>
                 <HealthDataProvider>
                   <NotificationProvider>
-                    {children}
+                    <ToastProvider>
+                      {children}
+                    </ToastProvider>
                   </NotificationProvider>
                 </HealthDataProvider>
               </ThemeProvider>
