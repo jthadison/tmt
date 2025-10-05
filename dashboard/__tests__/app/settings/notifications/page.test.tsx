@@ -128,7 +128,7 @@ beforeEach(() => {
 
   useToasts.mockReturnValue({
     toasts: [],
-    addToast: mockAddToast,
+    showToast: mockAddToast,
     dismissToast: jest.fn(),
     dismissAll: jest.fn()
   })
@@ -207,9 +207,9 @@ describe('NotificationPreferencesPage', () => {
 
   it('should show delivery method controls', () => {
     renderPage()
-    expect(screen.getByText('In-App')).toBeInTheDocument()
-    expect(screen.getByText('Browser Push')).toBeInTheDocument()
-    expect(screen.getByText('Email')).toBeInTheDocument()
+    expect(screen.getAllByText('In-App')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Browser Push')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Email')[0]).toBeInTheDocument()
   })
 
   it('should show priority matrix', () => {

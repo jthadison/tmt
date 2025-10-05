@@ -46,6 +46,12 @@ function validatePreferences(prefs: Partial<NotificationPreferences>): boolean {
   try {
     if (!prefs || typeof prefs !== 'object') return false
 
+    // Check that at least one valid preference key exists
+    const validKeys = ['deliveryMethods', 'deliveryMethodConfig', 'priorityMatrix',
+                       'quietHours', 'grouping', 'eventToggles', 'sounds', 'digest']
+    const hasValidKey = Object.keys(prefs).some(key => validKeys.includes(key))
+    if (!hasValidKey) return false
+
     if (prefs.deliveryMethodConfig) {
       const { email, phone, slackWebhook } = prefs.deliveryMethodConfig
       if (email && !isValidEmail(email)) return false
@@ -55,22 +61,22 @@ function validatePreferences(prefs: Partial<NotificationPreferences>): boolean {
 
     if (prefs.quietHours) {
       const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/
-      if (!timeRegex.test(prefs.quietHours.startTime)) return false
-      if (!timeRegex.test(prefs.quietHours.endTime)) return false
+      if (prefs.quietHours.startTime && !timeRegex.test(prefs.quietHours.startTime)) return false
+      if (prefs.quietHours.endTime && !timeRegex.test(prefs.quietHours.endTime)) return false
     }
 
     if (prefs.grouping) {
       const validWindows = [15, 30, 60]
-      if (!validWindows.includes(prefs.grouping.windowMinutes)) return false
+      if (prefs.grouping.windowMinutes && !validWindows.includes(prefs.grouping.windowMinutes)) return false
     }
 
     if (prefs.digest) {
       const validFrequencies = [15, 30, 60]
-      if (!validFrequencies.includes(prefs.digest.frequencyMinutes)) return false
+      if (prefs.digest.frequencyMinutes && !validFrequencies.includes(prefs.digest.frequencyMinutes)) return false
     }
 
     if (prefs.sounds) {
-      if (prefs.sounds.volume < 0 || prefs.sounds.volume > 100) return false
+      if (prefs.sounds.volume !== undefined && (prefs.sounds.volume < 0 || prefs.sounds.volume > 100)) return false
     }
 
     return true

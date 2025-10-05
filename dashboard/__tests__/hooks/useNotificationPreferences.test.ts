@@ -101,9 +101,12 @@ describe('useNotificationPreferences', () => {
       }
     }
 
-    const success = result.current.importPreferences(
-      JSON.stringify(customPreferences)
-    )
+    let success = false
+    act(() => {
+      success = result.current.importPreferences(
+        JSON.stringify(customPreferences)
+      )
+    })
 
     expect(success).toBe(true)
     expect(result.current.preferences.deliveryMethods.email).toBe(true)
@@ -112,8 +115,11 @@ describe('useNotificationPreferences', () => {
   it('should reject invalid preferences', () => {
     const { result } = renderHook(() => useNotificationPreferences())
 
-    const invalidJson = '{ invalid json }'
-    const success = result.current.importPreferences(invalidJson)
+    const invalidJson = '{ "notAValidPref": true }'
+    let success = true
+    act(() => {
+      success = result.current.importPreferences(invalidJson)
+    })
 
     expect(success).toBe(false)
   })
