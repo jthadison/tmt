@@ -2303,6 +2303,76 @@ async def websocket_endpoint(websocket: WebSocket):
     await orchestrator.handle_websocket(websocket)
 
 
+# WebSocket endpoint for event streaming (Story 4.2)
+@app.websocket("/ws/events")
+async def event_stream_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for streaming system events to dashboard"""
+    await websocket.accept()
+    logger.info("Dashboard client connected to event stream")
+
+    # Track connected client
+    if not hasattr(app.state, 'event_stream_clients'):
+        app.state.event_stream_clients = []
+
+    app.state.event_stream_clients.append(websocket)
+
+    try:
+        # Keep connection alive and listen for pings
+        while True:
+            try:
+                # Wait for ping/pong to keep connection alive
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+
+                # Respond to ping
+                if data == "ping":
+                    await websocket.send_text("pong")
+
+            except asyncio.TimeoutError:
+                # Send keepalive ping
+                try:
+                    await websocket.send_json({
+                        "type": "keepalive",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                except Exception:
+                    break
+
+    except Exception as e:
+        logger.error(f"Event stream error: {e}")
+    finally:
+        # Remove client on disconnect
+        if websocket in app.state.event_stream_clients:
+            app.state.event_stream_clients.remove(websocket)
+        logger.info("Dashboard client disconnected from event stream")
+
+
+async def broadcast_event(event_type: str, priority: str, data: Dict[str, Any]):
+    """Broadcast event to all connected dashboard clients"""
+    if not hasattr(app.state, 'event_stream_clients'):
+        return
+
+    event = {
+        "type": event_type,
+        "priority": priority,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": data
+    }
+
+    # Send to all connected clients
+    disconnected = []
+    for client in app.state.event_stream_clients:
+        try:
+            await client.send_json(event)
+        except Exception as e:
+            logger.error(f"Failed to send event to client: {e}")
+            disconnected.append(client)
+
+    # Clean up disconnected clients
+    for client in disconnected:
+        if client in app.state.event_stream_clients:
+            app.state.event_stream_clients.remove(client)
+
+
 # Signal handlers for graceful shutdown
 def signal_handler(signum, frame):
     """Handle shutdown signals"""
