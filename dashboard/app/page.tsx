@@ -296,6 +296,37 @@ export default function Home() {
             </Card>
           )}
 
+          {/* Developer Test Pages */}
+          <Card title="🧪 Developer Test Pages" className="border-purple-500/20 bg-purple-500/5">
+            <div className="space-y-3">
+              <p className="text-sm text-gray-400 mb-4">
+                Test pages for Story 7.1 - Agent Intelligence Insights
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => router.push('/test/agent-disagreement')}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition-colors flex items-center gap-2"
+                >
+                  <span>🤖</span>
+                  <span>Agent Disagreement Panel</span>
+                </button>
+                <div className="text-xs text-gray-500 flex items-center">
+                  <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded">Story 7.1 Complete</span>
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-gray-800/50 rounded text-xs text-gray-400">
+                <p className="font-semibold mb-1">Features:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>8 AI Agent Positions with reasoning</li>
+                  <li>Consensus Meter (circular progress)</li>
+                  <li>5-Level Confidence Meters (color-coded)</li>
+                  <li>Decision Badge with threshold logic</li>
+                  <li>Dark mode support</li>
+                </ul>
+              </div>
+            </div>
+          </Card>
+
           {/* System Status */}
           <Grid cols={{ default: 1, lg: 2 }}>
             <HealthCheckPanel />
