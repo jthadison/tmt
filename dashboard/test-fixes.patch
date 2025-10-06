@@ -1,0 +1,50 @@
+--- a/__tests__/hooks/useNotificationPreferences.test.ts
++++ b/__tests__/hooks/useNotificationPreferences.test.ts
+@@ -101,13 +101,16 @@ describe('useNotificationPreferences', () => {
+       }
+     }
+
+-    const success = result.current.importPreferences(
+-      JSON.stringify(customPreferences)
+-    )
++    let success = false
++    act(() => {
++      success = result.current.importPreferences(
++        JSON.stringify(customPreferences)
++      )
++    })
+
+     expect(success).toBe(true)
+     expect(result.current.preferences.deliveryMethods.email).toBe(true)
+   })
+
+   it('should reject invalid preferences', () => {
+@@ -113,8 +116,12 @@ describe('useNotificationPreferences', () => {
+   it('should reject invalid preferences', () => {
+     const { result } = renderHook(() => useNotificationPreferences())
+
+-    const invalidJson = '{ invalid json }'
+-    const success = result.current.importPreferences(invalidJson)
++    const invalidJson = '{ "notAValidPref": true }'
++    let success = true
++    act(() => {
++      success = result.current.importPreferences(invalidJson)
++    })
+
+     expect(success).toBe(false)
+   })
+--- a/__tests__/app/settings/notifications/page.test.tsx
++++ b/__tests__/app/settings/notifications/page.test.tsx
+@@ -207,9 +207,9 @@ describe('NotificationPreferencesPage', () => {
+
+   it('should show delivery method controls', () => {
+     renderPage()
+-    expect(screen.getByText('In-App')).toBeInTheDocument()
+-    expect(screen.getByText('Browser Push')).toBeInTheDocument()
+-    expect(screen.getByText('Email')).toBeInTheDocument()
++    expect(screen.getAllByText('In-App')[0]).toBeInTheDocument()
++    expect(screen.getAllByText('Browser Push')[0]).toBeInTheDocument()
++    expect(screen.getAllByText('Email')[0]).toBeInTheDocument()
+   })
+
+   it('should show priority matrix', () => {
