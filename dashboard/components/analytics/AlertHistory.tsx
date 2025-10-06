@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
-import { PerformanceAlert, AlertFilters, AlertSeverity, AlertType } from '@/types/analytics'
+import { PerformanceAlert, AlertFilters, AlertSeverity } from '@/types/analytics'
 
 function convertToCSV(alerts: PerformanceAlert[]): string {
   const headers = [
@@ -63,10 +63,6 @@ export function AlertHistory() {
     type: 'all'
   })
 
-  useEffect(() => {
-    fetchHistory()
-  }, [filters])
-
   const fetchHistory = async () => {
     setLoading(true)
     try {
@@ -87,6 +83,11 @@ export function AlertHistory() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters])
 
   const handleExport = () => {
     const csv = convertToCSV(history)

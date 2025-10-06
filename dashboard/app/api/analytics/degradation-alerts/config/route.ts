@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DegradationThresholds, DEFAULT_THRESHOLDS } from '@/types/analytics'
 
-// In-memory storage (in production, use database)
+// TODO: Replace in-memory storage with database (PostgreSQL/TimescaleDB)
 let storedThresholds: DegradationThresholds = { ...DEFAULT_THRESHOLDS }
 
 /**
  * GET /api/analytics/degradation-alerts/config
  * Get current alert thresholds
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     return NextResponse.json(storedThresholds)
   } catch (error) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Minus, ArrowUp, ArrowDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { RiskMetrics } from '@/types/analytics'
 import { DrawdownDistributionChart } from './DrawdownDistributionChart'
 

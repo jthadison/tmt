@@ -136,7 +136,7 @@ function generateRiskMetrics(): RiskMetrics {
  * GET /api/analytics/risk-metrics
  * Returns comprehensive risk-adjusted metrics
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const metrics = generateRiskMetrics()
     return NextResponse.json(metrics)

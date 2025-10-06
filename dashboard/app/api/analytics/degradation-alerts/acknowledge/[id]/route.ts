@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Shared alert store (imported from parent - in production use database)
-// For now, we'll use a simple module-level store
-const alertsStore = new Map<string, any>()
+// TODO: Replace in-memory storage with database (PostgreSQL/TimescaleDB)
 
 /**
  * POST /api/analytics/degradation-alerts/acknowledge/:id
  * Acknowledge a specific alert
  */
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {

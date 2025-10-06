@@ -7,9 +7,9 @@ import {
   DEFAULT_THRESHOLDS
 } from '@/types/analytics'
 
-// In-memory storage for alerts (in production, use database)
-let alertsStore: PerformanceAlert[] = []
-let thresholdsStore: DegradationThresholds = { ...DEFAULT_THRESHOLDS }
+// TODO: Replace in-memory storage with database (PostgreSQL/TimescaleDB)
+const alertsStore: PerformanceAlert[] = []
+const thresholdsStore: DegradationThresholds = { ...DEFAULT_THRESHOLDS }
 
 // Mock data for recent metrics (in production, fetch from database)
 interface MetricsSnapshot {
@@ -314,7 +314,7 @@ export async function GET(request: NextRequest) {
  * POST /api/analytics/degradation-alerts
  * Manually trigger degradation check
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     const newAlerts = await checkDegradation()
 
