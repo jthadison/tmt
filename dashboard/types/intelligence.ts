@@ -149,3 +149,139 @@ export const AI_AGENTS: AgentMetadata[] = [
     description: 'Wyckoff patterns and VPA analysis'
   }
 ];
+
+/**
+ * Story 7.2: Agent Decision History & Pattern Detection Overlays
+ */
+
+/**
+ * Agent attribution for a trade decision
+ */
+export interface AgentAttribution {
+  primaryAgent: {
+    agentId: string;
+    agentName: string;
+    confidence: number;
+    reasoning: string[];
+  };
+  confirmingAgents: Array<{
+    agentId: string;
+    agentName: string;
+    confidence: number;
+    reasoning: string[];
+  }>;
+  consensusPercentage: number;
+  finalDecision: string;
+  sessionContext?: string;
+}
+
+/**
+ * Pattern detection data for a trade
+ */
+export interface PatternDetected {
+  patternType: string;
+  confidence: number;
+  keyLevels: {
+    entry: number;
+    target: number;
+    stopLoss: number;
+  };
+}
+
+/**
+ * Enhanced trade record with agent attribution and pattern detection
+ */
+export interface EnhancedTradeRecord {
+  // Existing fields
+  id: string;
+  symbol: string;
+  action: 'BUY' | 'SELL';
+  price: number;
+  quantity: number;
+  timestamp: number;
+  outcome?: 'WIN' | 'LOSS' | 'BREAKEVEN';
+  profitLoss?: number;
+
+  // NEW: Agent attribution (optional for backward compatibility)
+  agentAttribution?: AgentAttribution;
+
+  // NEW: Pattern detection (optional)
+  patternDetected?: PatternDetected;
+}
+
+/**
+ * Chart coordinate for pattern overlay
+ */
+export interface ChartCoordinate {
+  price: number;
+  timestamp: number;
+  label?: string;
+}
+
+/**
+ * Chart zone for support/resistance areas
+ */
+export interface ChartZone {
+  priceHigh: number;
+  priceLow: number;
+  timestampStart: number;
+  timestampEnd: number;
+  label?: string;
+}
+
+/**
+ * Pattern data with chart coordinates
+ */
+export interface PatternData {
+  id: string;
+  symbol: string;
+  patternType: 'wyckoff-accumulation' | 'wyckoff-distribution' | 'spring' | 'upthrust' | 'sos' | 'lps';
+  phase?: string;
+  confidence: number;
+  status: 'forming' | 'confirmed' | 'invalidated';
+  detectedAt: number;
+
+  // Coordinates for chart overlay
+  coordinates: {
+    entryPoint?: ChartCoordinate;
+    targetLevels?: ChartCoordinate[];
+    stopLoss?: ChartCoordinate;
+    supportZones?: ChartZone[];
+    resistanceZones?: ChartZone[];
+    confirmationPoints?: ChartCoordinate[];
+    warningAreas?: ChartZone[];
+  };
+
+  // Additional pattern details
+  description: string;
+  keyCharacteristics: string[];
+  riskRewardRatio?: number;
+}
+
+/**
+ * Pattern statistics for similar patterns modal
+ */
+export interface PatternStats {
+  winRate: number;
+  avgProfit: number;
+  avgLoss: number;
+  totalTrades: number;
+  profitFactor: number;
+}
+
+/**
+ * Helper function to get agent metadata by ID
+ */
+export function getAgentById(agentId: string): AgentMetadata | undefined {
+  return AI_AGENTS.find(agent => agent.id === agentId);
+}
+
+/**
+ * Format pattern type for display
+ */
+export function formatPatternType(type: string): string {
+  return type
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
