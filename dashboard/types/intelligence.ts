@@ -285,3 +285,121 @@ export function formatPatternType(type: string): string {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+/**
+ * Story 7.3: Agent Performance Comparison & Real-Time Activity Feed
+ */
+
+/**
+ * Agent performance metrics
+ */
+export interface AgentPerformanceMetrics {
+  winRate: number; // 0-100
+  avgProfit: number; // $
+  avgLoss: number; // $
+  totalSignals: number;
+  totalTrades: number;
+  profitFactor: number;
+  sharpeRatio?: number;
+  maxDrawdown?: number;
+}
+
+/**
+ * Best performing symbol pair for an agent
+ */
+export interface BestPairPerformance {
+  symbol: string;
+  winRate: number;
+  totalTrades: number;
+  avgProfit: number;
+}
+
+/**
+ * Session-specific performance data
+ */
+export interface SessionPerformance {
+  session: string;
+  winRate: number;
+  totalTrades: number;
+}
+
+/**
+ * Recent activity summary
+ */
+export interface RecentActivity {
+  last7Days: number; // trades
+  last30Days: number; // trades
+}
+
+/**
+ * Complete agent performance data
+ */
+export interface AgentPerformanceData {
+  agentId: string;
+  agentName: string;
+  metrics: AgentPerformanceMetrics;
+  bestPairs: BestPairPerformance[];
+  sessionPerformance?: SessionPerformance[];
+  recentActivity: RecentActivity;
+}
+
+/**
+ * System-wide performance metrics
+ */
+export interface SystemMetrics {
+  winRate: number;
+  totalSignals: number;
+  avgProfit: number;
+  profitFactor: number;
+  winRateTrend?: number;
+}
+
+/**
+ * Agent activity event types
+ */
+export type AgentActivityEventType =
+  | 'signal_generated'
+  | 'trade_executed'
+  | 'pattern_detected'
+  | 'disagreement_resolved'
+  | 'threshold_not_met';
+
+/**
+ * Agent activity event metadata
+ */
+export interface AgentActivityMetadata {
+  consensusPercentage?: number;
+  patternType?: string;
+  sessionContext?: string;
+  tradeId?: string;
+  pnl?: number;
+}
+
+/**
+ * Real-time agent activity event
+ */
+export interface AgentActivityEvent {
+  eventId: string;
+  eventType: AgentActivityEventType;
+  timestamp: number;
+  agentId: string;
+  agentName: string;
+  symbol: string;
+  action: 'BUY' | 'SELL' | 'NEUTRAL';
+  confidence: number;
+  reasoning: string[]; // 1-2 bullets
+  metadata?: AgentActivityMetadata;
+}
+
+/**
+ * Time period for performance queries
+ */
+export type PerformancePeriod = '7d' | '30d' | '90d' | 'all';
+
+/**
+ * Event icon configuration
+ */
+export interface EventIconConfig {
+  color: string;
+  bg: string;
+}
