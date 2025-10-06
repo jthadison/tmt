@@ -116,7 +116,7 @@ async function fetchAgentActivity(): Promise<AgentActivityEvent[]> {
       const data = await response.json();
       return data.events || [];
     }
-  } catch (error) {
+  } catch {
     // Orchestrator endpoint not available, will use mock data
     console.log('Agent activity endpoint not available, using mock data');
   }

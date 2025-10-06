@@ -6,17 +6,22 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import PerformanceAnalyticsDashboard from '@/components/analytics/PerformanceAnalyticsDashboard'
 import SessionPerformanceWidget from '@/components/performance/SessionPerformanceWidget'
 import PerformanceMetricsDashboard from '@/components/performance/PerformanceMetricsDashboard'
+import { SharpeRatioDashboard } from '@/components/analytics/SharpeRatioDashboard'
+import { MonteCarloProjectionOverlay } from '@/components/analytics/MonteCarloProjectionOverlay'
+import { StabilityScores } from '@/components/analytics/StabilityScores'
 import { performanceAnalyticsService } from '@/services/performanceAnalyticsService'
 import { TradeBreakdown, ComplianceReport } from '@/types/performanceAnalytics'
+import { StabilityMetrics } from '@/types/analytics'
 
 export default function PerformanceAnalyticsPage() {
   const [accountIds, setAccountIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [stabilityMetrics, setStabilityMetrics] = useState<StabilityMetrics | null>(null)
 
   useEffect(() => {
-    // Fetch available account IDs
-    const fetchAccountIds = async () => {
+    // Fetch available account IDs and stability metrics
+    const fetchData = async () => {
       try {
         setLoading(true)
         // Use real OANDA account ID
@@ -25,6 +30,20 @@ export default function PerformanceAnalyticsPage() {
           // Additional accounts can be added here
         ]
         setAccountIds(accountIds)
+
+        // Fetch stability metrics
+        try {
+          const response = await fetch('/api/analytics/monte-carlo?days=180&simulations=1000&stability=true')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.stability) {
+              setStabilityMetrics(data.stability)
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch stability metrics:', err)
+          // Non-critical, continue without stability metrics
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load accounts')
       } finally {
@@ -32,7 +51,7 @@ export default function PerformanceAnalyticsPage() {
       }
     }
 
-    fetchAccountIds()
+    fetchData()
   }, [])
 
   const handleTradeSelect = (trade: TradeBreakdown) => {
@@ -74,6 +93,24 @@ export default function PerformanceAnalyticsPage() {
     <ProtectedRoute>
       <MainLayout>
         <div className="space-y-8">
+          {/* Story 8.1: Sharpe Ratio Dashboard */}
+          <div>
+            <SharpeRatioDashboard />
+          </div>
+
+          {/* Story 8.1: Monte Carlo Projection Overlay */}
+          <div>
+            <MonteCarloProjectionOverlay />
+          </div>
+
+          {/* Story 8.1: Stability Scores */}
+          {stabilityMetrics && (
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Strategy Stability Analysis</h2>
+              <StabilityScores metrics={stabilityMetrics} />
+            </div>
+          )}
+
           {/* Story 3.3: Session Performance Widget */}
           <SessionPerformanceWidget />
 
