@@ -417,3 +417,90 @@ export interface AnalyticsDashboardState {
   /** Last refresh timestamp */
   lastRefresh: Date
 }
+
+/**
+ * Sharpe Ratio Data - Story 8.1
+ */
+export interface SharpeRatioData {
+  /** Current 30-day Sharpe ratio (default) */
+  currentSharpe: number
+  /** Rolling window analysis */
+  rollingWindows: {
+    '7d': RollingWindowMetric
+    '14d': RollingWindowMetric
+    '30d': RollingWindowMetric
+    '90d': RollingWindowMetric
+  }
+  /** Historical 90-day data points */
+  historicalData: Array<{
+    date: string
+    sharpeRatio: number
+  }>
+  /** Human-readable interpretation */
+  interpretation: string
+  /** Threshold level classification */
+  thresholdLevel: 'outstanding' | 'excellent' | 'good' | 'acceptable' | 'poor'
+  /** Calculation timestamp */
+  calculatedAt: number
+  /** Risk-free rate used (annual) */
+  riskFreeRate: number
+  /** Total trades in calculation */
+  totalTrades: number
+}
+
+/**
+ * Rolling window metric for Sharpe ratio
+ */
+export interface RollingWindowMetric {
+  /** Sharpe ratio value for this window */
+  value: number
+  /** Trend compared to previous window */
+  trend: 'up' | 'down' | 'stable'
+  /** Percentage change from previous */
+  changePercent: number
+}
+
+/**
+ * Monte Carlo Simulation Data - Story 8.1
+ */
+export interface MonteCarloData {
+  /** Expected P&L trajectory (180 days) */
+  expectedTrajectory: number[]
+  /** Confidence intervals */
+  confidenceIntervals: {
+    '95': {
+      lower: number[]
+      upper: number[]
+    }
+    '99': {
+      lower: number[]
+      upper: number[]
+    }
+  }
+  /** Number of simulations run */
+  simulationsRun: number
+  /** Simulation parameters used */
+  parameters: {
+    winRate: number
+    avgProfit: number
+    avgLoss: number
+    stdDev: number
+    tradesPerDay: number
+  }
+  /** Calculation timestamp */
+  calculatedAt: number
+  /** Cache expiration timestamp */
+  cachedUntil: number
+}
+
+/**
+ * Walk-forward and overfitting analysis - Story 8.1
+ */
+export interface StabilityMetrics {
+  /** Walk-forward stability score (0-100) */
+  walkForwardScore: number
+  /** Overfitting score (0-1, lower is better) */
+  overfittingScore: number
+  /** Out-of-sample validation percentage */
+  outOfSampleValidation: number
+}
