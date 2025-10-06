@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { readFileSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
+import { PERFORMANCE } from '../constants'
 
 export interface BacktestResults {
   strategyName: string
@@ -39,7 +40,7 @@ function parseBacktestJSON(filePath: string, fileName: string): BacktestResults 
 
     if (data.optimization_results && data.optimization_results.length > 0) {
       // Find best performing optimization result
-      bestResult = data.optimization_results.reduce((best: any, current: any) => {
+      bestResult = data.optimization_results.reduce((best: typeof data.optimization_results[0], current: typeof data.optimization_results[0]) => {
         if (current.total_pnl > best.total_pnl) return current
         return best
       }, data.optimization_results[0])
@@ -55,10 +56,9 @@ function parseBacktestJSON(filePath: string, fileName: string): BacktestResults 
     const endDate = new Date(bestResult.end_date)
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
-    // Calculate max drawdown percentage (assuming starting capital of $10,000)
-    const startingCapital = 10000
+    // Calculate max drawdown percentage
     const maxDrawdownPercent = bestResult.max_drawdown ?
-      (Math.abs(bestResult.max_drawdown) / startingCapital) * 100 : 0
+      (Math.abs(bestResult.max_drawdown) / PERFORMANCE.STARTING_CAPITAL) * 100 : 0
 
     return {
       strategyName: bestResult.configuration || 'Unknown Strategy',
@@ -87,7 +87,7 @@ function parseBacktestJSON(filePath: string, fileName: string): BacktestResults 
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const backtestDir = join(process.cwd(), '..', 'backtest_results')
 

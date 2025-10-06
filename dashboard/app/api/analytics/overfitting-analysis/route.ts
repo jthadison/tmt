@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { BacktestResults } from '../backtest-results/route'
 import { ForwardTestResults } from '../forward-test-performance/route'
+import { OVERFITTING, STABILITY } from '../constants'
 
 export interface OverfittingAnalysis {
   overfittingScore: number // 0-1
@@ -31,7 +32,7 @@ function calculateOverfittingAnalysis(
   ]
 
   const degradations: number[] = []
-  const metricDegradation: any = {}
+  const metricDegradation: Record<string, { backtest: number; forward: number; degradation: number }> = {}
 
   metrics.forEach(metric => {
     let backtestValue: number
@@ -72,13 +73,13 @@ function calculateOverfittingAnalysis(
     ? degradations.reduce((sum, d) => sum + d, 0) / degradations.length
     : 0
 
-  // Normalize to 0-1 scale (30% degradation = 1.0)
-  const overfittingScore = Math.min(avgDegradation / 30, 1)
+  // Normalize to 0-1 scale
+  const overfittingScore = Math.min(avgDegradation / OVERFITTING.DEGRADATION_NORMALIZATION, 1)
 
   // Determine risk level
   let riskLevel: 'low' | 'moderate' | 'high'
-  if (avgDegradation < 15) riskLevel = 'low'
-  else if (avgDegradation < 30) riskLevel = 'moderate'
+  if (avgDegradation < OVERFITTING.LOW_RISK_THRESHOLD) riskLevel = 'low'
+  else if (avgDegradation < OVERFITTING.MODERATE_RISK_THRESHOLD) riskLevel = 'moderate'
   else riskLevel = 'high'
 
   // Calculate stability score
@@ -100,10 +101,10 @@ function calculateOverfittingAnalysis(
 }
 
 function calculateStabilityScore(forwardTest: ForwardTestResults): number {
-  if (forwardTest.dailyReturns.length < 7) return 100 // Not enough data
+  if (forwardTest.dailyReturns.length < STABILITY.MIN_DATA_POINTS) return 100 // Not enough data
 
   // Split into weekly windows
-  const windowSize = 7
+  const windowSize = STABILITY.WINDOW_SIZE_DAYS
   const windows: number[][] = []
 
   for (let i = 0; i < forwardTest.dailyReturns.length; i += windowSize) {
@@ -149,7 +150,7 @@ function generateInterpretation(score: number, degradation: number, stability: n
 
 function generateRecommendations(
   riskLevel: string,
-  metricDegradation: any,
+  metricDegradation: Record<string, { backtest: number; forward: number; degradation: number }>,
   stability: number
 ): string[] {
   const recommendations: string[] = []
@@ -222,7 +223,7 @@ async function fetchForwardTestResults(): Promise<ForwardTestResults | null> {
   return null
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const backtest = await fetchBacktestResults()
     const forward = await fetchForwardTestResults()
