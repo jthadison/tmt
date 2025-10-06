@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { AgentDisagreementPanel } from '@/components/intelligence/AgentDisagreementPanel';
-import { AgentDecisionHistoryCard } from '@/components/intelligence/AgentDecisionHistoryCard';
+import { DecisionHistorySection } from '@/components/intelligence/DecisionHistorySection';
 import { AgentPerformanceDashboard } from '@/components/intelligence/AgentPerformanceDashboard';
 import { AgentActivityFeed } from '@/components/intelligence/AgentActivityFeed';
 
@@ -142,7 +142,7 @@ export default function IntelligencePage() {
                 Review past agent decisions with pattern detection overlays. Analyze Wyckoff patterns,
                 entry/exit points, and trade outcomes to understand agent performance over time.
               </p>
-              <AgentDecisionHistoryCard symbol="EUR/USD" />
+              <DecisionHistorySection symbol="EUR/USD" />
             </div>
 
             <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
