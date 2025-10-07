@@ -32,7 +32,8 @@
       "Bash(test:*)",
       "Bash(npm run test:*)",
       "Bash(awk:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git diff:*)"
     ],
     "deny": [],
     "ask": [],

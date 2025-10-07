@@ -9,6 +9,10 @@ import PerformanceMetricsDashboard from '@/components/performance/PerformanceMet
 import { SharpeRatioDashboard } from '@/components/analytics/SharpeRatioDashboard'
 import { MonteCarloProjectionOverlay } from '@/components/analytics/MonteCarloProjectionOverlay'
 import { StabilityScores } from '@/components/analytics/StabilityScores'
+import { ActiveAlertPanel } from '@/components/analytics/ActiveAlertPanel'
+import { AlertConfigurationPanel } from '@/components/analytics/AlertConfigurationPanel'
+import { RiskAdjustedMetricsDashboard } from '@/components/analytics/RiskAdjustedMetricsDashboard'
+import { AlertHistory } from '@/components/analytics/AlertHistory'
 import { performanceAnalyticsService } from '@/services/performanceAnalyticsService'
 import { TradeBreakdown, ComplianceReport } from '@/types/performanceAnalytics'
 import { StabilityMetrics } from '@/types/analytics'
@@ -93,6 +97,18 @@ export default function PerformanceAnalyticsPage() {
     <ProtectedRoute>
       <MainLayout>
         <div className="space-y-8">
+          {/* Story 8.3: Active Performance Alerts */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Performance Degradation Monitoring</h2>
+            <ActiveAlertPanel />
+          </div>
+
+          {/* Story 8.3: Risk-Adjusted Metrics Dashboard */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Risk-Adjusted Performance Metrics</h2>
+            <RiskAdjustedMetricsDashboard />
+          </div>
+
           {/* Story 8.1: Sharpe Ratio Dashboard */}
           <div>
             <SharpeRatioDashboard />
@@ -106,10 +122,22 @@ export default function PerformanceAnalyticsPage() {
           {/* Story 8.1: Stability Scores */}
           {stabilityMetrics && (
             <div>
-              <h2 className="text-2xl font-bold mb-4">Strategy Stability Analysis</h2>
+              <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Strategy Stability Analysis</h2>
               <StabilityScores metrics={stabilityMetrics} />
             </div>
           )}
+
+          {/* Story 8.3: Alert Configuration */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Alert Configuration</h2>
+            <AlertConfigurationPanel />
+          </div>
+
+          {/* Story 8.3: Alert History */}
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Alert History</h2>
+            <AlertHistory />
+          </div>
 
           {/* Story 3.3: Session Performance Widget */}
           <SessionPerformanceWidget />

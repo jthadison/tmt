@@ -504,3 +504,104 @@ export interface StabilityMetrics {
   /** Out-of-sample validation percentage */
   outOfSampleValidation: number
 }
+
+/**
+ * Performance Degradation Alert Types - Story 8.3
+ */
+export interface DegradationThresholds {
+  profitFactorDecline: number // % drop threshold (default: 10)
+  sharpeThreshold: number // Minimum Sharpe (default: 0.5)
+  sharpeDaysBelow: number // Days below threshold (default: 2)
+  overfittingThreshold: number // Max overfitting score (default: 0.8)
+  walkForwardThreshold: number // Min walk-forward score (default: 30)
+  sharpeDropPercent: number // % drop threshold (default: 20)
+  winRateDecline: number // % drop threshold (default: 15)
+}
+
+export const DEFAULT_THRESHOLDS: DegradationThresholds = {
+  profitFactorDecline: 10,
+  sharpeThreshold: 0.5,
+  sharpeDaysBelow: 2,
+  overfittingThreshold: 0.8,
+  walkForwardThreshold: 30,
+  sharpeDropPercent: 20,
+  winRateDecline: 15
+}
+
+export type AlertType =
+  | 'profit_decline'
+  | 'confidence_breach'
+  | 'overfitting'
+  | 'stability_loss'
+  | 'sharpe_drop'
+  | 'win_rate_decline'
+
+export type AlertSeverity = 'critical' | 'high' | 'medium' | 'low'
+
+export interface PerformanceAlert {
+  id: string
+  type: AlertType
+  severity: AlertSeverity
+  timestamp: number
+  metric: string
+  currentValue: number
+  thresholdValue: number
+  message: string
+  recommendation: string
+  autoRollback: boolean
+  acknowledged?: boolean
+  acknowledgedAt?: number
+  resolvedAt?: number
+}
+
+/**
+ * Risk-Adjusted Metrics Types - Story 8.3
+ */
+export interface RiskMetrics {
+  sharpeRatio: number
+  sortinoRatio: number
+  calmarRatio: number
+  drawdown: DrawdownMetrics
+  volatility: VolatilityMetrics
+  riskReward: RiskRewardProfile
+}
+
+export interface DrawdownMetrics {
+  max: number // $ amount
+  maxPercent: number
+  avg: number // $ amount
+  avgPercent: number
+  current: number // $ amount
+  currentPercent: number
+  avgRecoveryDays: number
+  maxRecoveryDays: number
+  distribution: DrawdownBucket[]
+}
+
+export interface DrawdownBucket {
+  bucket: string // e.g., "0-5%"
+  count: number
+  percentage: number
+}
+
+export interface VolatilityMetrics {
+  daily: number // as decimal (e.g., 0.02 = 2%)
+  monthly: number // annualized
+  trend: 'increasing' | 'stable' | 'decreasing'
+}
+
+export interface RiskRewardProfile {
+  avgRRRatio: number
+  winRate: number // as percentage
+  expectancy: number // $ per trade
+  profitFactor: number
+}
+
+/**
+ * Alert History Filters - Story 8.3
+ */
+export interface AlertFilters {
+  dateRange: '7d' | '30d' | '90d' | 'all'
+  severity: AlertSeverity | 'all'
+  type: AlertType | 'all'
+}
