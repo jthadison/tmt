@@ -63,9 +63,9 @@ describe('ActiveAlertPanel', () => {
     await waitFor(() => {
       const alertCards = screen.getAllByTestId('alert-card')
       expect(alertCards).toHaveLength(2)
-      // Critical alert should be present
+      // Critical alert should be present (text is lowercase 'critical' with uppercase CSS)
       const hasCritical = Array.from(alertCards).some(card =>
-        card.textContent?.includes('CRITICAL')
+        card.textContent?.toLowerCase().includes('critical')
       )
       expect(hasCritical).toBe(true)
     })
