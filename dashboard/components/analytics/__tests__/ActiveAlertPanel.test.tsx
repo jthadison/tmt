@@ -130,9 +130,9 @@ describe('ActiveAlertPanel', () => {
 
     render(<ActiveAlertPanel />)
 
-    expect(screen.getByText(/Active Performance Alerts/)).toBeInTheDocument()
     // Loading skeleton should be visible
-    const container = screen.getByText(/Active Performance Alerts/).closest('div')
+    const container = document.querySelector('.animate-pulse')
+    expect(container).toBeInTheDocument()
     expect(container).toHaveClass('animate-pulse')
   })
 

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
  * Acknowledge a specific alert
  */
 export async function POST(
-  _request: NextRequest,
+  _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {

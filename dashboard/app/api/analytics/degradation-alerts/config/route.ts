@@ -8,7 +8,7 @@ let storedThresholds: DegradationThresholds = { ...DEFAULT_THRESHOLDS }
  * GET /api/analytics/degradation-alerts/config
  * Get current alert thresholds
  */
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     return NextResponse.json(storedThresholds)
   } catch (error) {

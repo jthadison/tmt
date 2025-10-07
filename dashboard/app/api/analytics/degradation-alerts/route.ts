@@ -314,7 +314,7 @@ export async function GET(request: NextRequest) {
  * POST /api/analytics/degradation-alerts
  * Manually trigger degradation check
  */
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
     const newAlerts = await checkDegradation()
 
