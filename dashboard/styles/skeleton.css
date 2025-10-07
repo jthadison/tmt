@@ -1,0 +1,72 @@
+/* Skeleton Loading Styles */
+/* Story 9.1: Shimmer animation for skeleton screens */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0%,
+    #f8f8f8 50%,
+    #f0f0f0 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite ease-in-out;
+  border-radius: 0.25rem;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Dark mode skeleton */
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    #2a2a2a 0%,
+    #3a3a3a 50%,
+    #2a2a2a 100%
+  );
+}
+
+/* Skeleton variants for different elements */
+.skeleton-text {
+  height: 1rem; /* 16px */
+}
+
+.skeleton-title {
+  height: 1.5rem; /* 24px */
+}
+
+.skeleton-heading {
+  height: 2rem; /* 32px */
+}
+
+.skeleton-avatar {
+  border-radius: 50%;
+}
+
+.skeleton-button {
+  height: 2.5rem; /* 40px */
+  width: 6rem; /* 96px */
+}
+
+.skeleton-circle {
+  border-radius: 50%;
+}
+
+.skeleton-rounded {
+  border-radius: 0.5rem;
+}
+
+.skeleton-rounded-lg {
+  border-radius: 0.75rem;
+}
+
+/* Performance optimization for large skeleton lists */
+.skeleton-container {
+  content-visibility: auto;
+}
