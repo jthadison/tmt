@@ -1,3 +1,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Story 9.1: Skeleton loading styles */
+@import '../styles/skeleton.css';
