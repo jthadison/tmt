@@ -34,7 +34,10 @@
       "Bash(awk:*)",
       "Bash(git log:*)",
       "Bash(git diff:*)",
-      "Bash(gh pr diff:*)"
+      "Bash(gh pr diff:*)",
+      "Bash(timeout 30 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 1; done')",
+      "Bash(npm install:*)",
+      "Bash(timeout 60 npx playwright test:*)"
     ],
     "deny": [],
     "ask": [],

@@ -1,10 +1,13 @@
 'use client'
 
 import { Component, ErrorInfo, ReactNode } from 'react'
+import { AlertOctagon, RefreshCw } from 'lucide-react'
+import { logError } from '@/lib/api/errors'
 
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  onError?: (error: Error, errorInfo: ErrorInfo) => void
 }
 
 interface State {
@@ -14,6 +17,11 @@ interface State {
 
 /**
  * Error boundary component to catch and handle React errors
+ * Implements 4-part error message design:
+ * 1. What Happened (clear description)
+ * 2. Why It Matters (impact)
+ * 3. Next Steps (user guidance)
+ * 4. Recovery Options (actionable buttons)
  */
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -29,10 +37,15 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
-    
-    // TODO: Send error to monitoring service
-    // reportError(error, errorInfo)
+    // Log error to error tracking service
+    logError(error, { errorInfo, componentStack: errorInfo.componentStack })
+
+    // Call optional error handler
+    this.props.onError?.(error, errorInfo)
+  }
+
+  resetError = () => {
+    this.setState({ hasError: false, error: undefined })
   }
 
   render() {
@@ -42,35 +55,61 @@ class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-          <div className="text-center max-w-md mx-auto bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6">
-            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-6">
+          <div className="text-center max-w-2xl mx-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl p-8">
+            {/* Error Icon */}
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+              <AlertOctagon className="h-10 w-10 text-red-600 dark:text-red-400" />
+            </div>
+
+            {/* 1. What Happened */}
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Something went wrong
+              Something Went Wrong
             </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.
+
+            {/* Description */}
+            <p className="text-gray-700 dark:text-gray-300 mb-4">
+              An unexpected error occurred while loading this section of the dashboard.
             </p>
-            <div className="space-y-2">
+
+            {/* 2. Why It Matters (Impact) */}
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4 mb-6">
+              <p className="text-sm text-yellow-900 dark:text-yellow-100">
+                <strong>⚠️ Impact:</strong> This error affects only this section. Other dashboard features remain available.
+              </p>
+            </div>
+
+            {/* 3. Next Steps */}
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Try refreshing the page or click &quot;Try Again&quot; to reload this section. If the problem persists, contact support.
+            </p>
+
+            {/* 4. Recovery Options */}
+            <div className="flex items-center justify-center gap-4">
               <button
-                onClick={() => window.location.reload()}
-                className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                onClick={this.resetError}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
               >
-                Refresh Page
-              </button>
-              <button
-                onClick={() => this.setState({ hasError: false, error: undefined })}
-                className="w-full py-2 px-4 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
+                <RefreshCw className="h-5 w-5" />
                 Try Again
               </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+              >
+                Reload Page
+              </button>
             </div>
+
+            {/* Technical Details (Development Only) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <details className="mt-4 text-left">
-                <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400">
-                  Error Details (Development Only)
+              <details className="mt-6 text-left">
+                <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+                  Technical Details (Development Only)
                 </summary>
-                <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto">
+                <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-4 rounded overflow-auto max-h-64">
+                  {this.state.error.message}
+                  {'\n\n'}
                   {this.state.error.stack}
                 </pre>
               </details>
