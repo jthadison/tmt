@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 interface UseSkeletonTimeoutOptions {
   timeout?: number; // milliseconds, default 30000 (30s)
@@ -17,15 +17,21 @@ export function useSkeletonTimeout({
   onTimeout,
 }: UseSkeletonTimeoutOptions = {}) {
   const [timedOut, setTimedOut] = useState(false);
+  const onTimeoutRef = useRef(onTimeout);
+
+  // Update ref when callback changes to avoid stale closure
+  useEffect(() => {
+    onTimeoutRef.current = onTimeout;
+  }, [onTimeout]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setTimedOut(true);
-      onTimeout?.();
+      onTimeoutRef.current?.();
     }, timeout);
 
     return () => clearTimeout(timer);
-  }, [timeout, onTimeout]);
+  }, [timeout]);
 
   const reset = () => setTimedOut(false);
 

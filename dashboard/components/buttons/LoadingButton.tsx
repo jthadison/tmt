@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface LoadingButtonProps {
   onClick: () => Promise<void>;
@@ -13,6 +13,7 @@ interface LoadingButtonProps {
   variant?: 'primary' | 'secondary' | 'danger';
   successMessage?: string;
   successDuration?: number; // milliseconds
+  errorDuration?: number; // milliseconds
   className?: string;
   disabled?: boolean;
 }
@@ -25,10 +26,21 @@ export function LoadingButton({
   variant = 'primary',
   successMessage,
   successDuration = 1000,
+  errorDuration = 2000,
   className = '',
   disabled = false,
 }: LoadingButtonProps) {
   const [state, setState] = useState<ButtonState>('idle');
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleClick = async () => {
     if (state === 'loading' || disabled) return;
@@ -39,16 +51,29 @@ export function LoadingButton({
       await onClick();
       setState('success');
 
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
       // Reset to idle after success duration
-      setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         setState('idle');
+        timeoutRef.current = null;
       }, successDuration);
     } catch (error) {
       setState('error');
+
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
       // Reset to idle after showing error
-      setTimeout(() => {
+      timeoutRef.current = setTimeout(() => {
         setState('idle');
-      }, 2000);
+        timeoutRef.current = null;
+      }, errorDuration);
     }
   };
 

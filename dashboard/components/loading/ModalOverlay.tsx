@@ -10,13 +10,18 @@ import { useEffect } from 'react';
 interface ModalOverlayProps {
   message: string;
   isOpen: boolean;
-  preventClose?: boolean;
+  /**
+   * Prevent modal from being closed via ESC key.
+   * Default: true (for critical operations like payment processing)
+   * Set to false for non-critical loading operations that users should be able to cancel.
+   */
+  preventEscapeClose?: boolean;
 }
 
 export function ModalOverlay({
   message,
   isOpen,
-  preventClose = true,
+  preventEscapeClose = true,
 }: ModalOverlayProps) {
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -31,9 +36,9 @@ export function ModalOverlay({
     };
   }, [isOpen]);
 
-  // Trap focus within modal
+  // Prevent ESC key from closing modal during critical operations
   useEffect(() => {
-    if (isOpen && preventClose) {
+    if (isOpen && preventEscapeClose) {
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -43,7 +48,7 @@ export function ModalOverlay({
       document.addEventListener('keydown', handleKeyDown);
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, preventClose]);
+  }, [isOpen, preventEscapeClose]);
 
   if (!isOpen) return null;
 
