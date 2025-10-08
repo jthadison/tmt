@@ -44,7 +44,8 @@
       "Bash(head:*)",
       "Bash(done)",
       "Bash(rm:*)",
-      "Bash(rmdir:*)"
+      "Bash(rmdir:*)",
+      "Bash(gh pr comment:*)"
     ],
     "deny": [],
     "ask": [],
