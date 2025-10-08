@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ErrorBoundary } from '@/components/errors/ErrorBoundary'
+import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import { ComponentErrorState } from '@/components/errors/ComponentErrorState'
 import { CriticalErrorState } from '@/components/errors/CriticalErrorState'
 import { EmptyState } from '@/components/empty/EmptyState'
