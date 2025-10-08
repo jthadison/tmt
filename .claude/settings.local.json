@@ -45,7 +45,8 @@
       "Bash(done)",
       "Bash(rm:*)",
       "Bash(rmdir:*)",
-      "Bash(gh pr comment:*)"
+      "Bash(gh pr comment:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": [],

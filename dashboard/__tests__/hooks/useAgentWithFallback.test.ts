@@ -90,13 +90,13 @@ describe('useAgentWithFallback', () => {
     expect(fetchCount).toBe(1)
 
     // Wait 30 seconds - first retry
-    jest.advanceTimersByTime(30000)
+    await jest.advanceTimersByTimeAsync(30000)
     await waitFor(() => {
       expect(fetchCount).toBe(2)
     })
 
     // Wait 30 seconds - second retry (succeeds)
-    jest.advanceTimersByTime(30000)
+    await jest.advanceTimersByTimeAsync(30000)
     await waitFor(() => {
       expect(result.current.status.online).toBe(true)
     })
@@ -243,7 +243,7 @@ describe('useAgentWithFallback', () => {
     })
 
     // Wait 10 seconds
-    jest.advanceTimersByTime(10000)
+    await jest.advanceTimersByTimeAsync(10000)
 
     await waitFor(() => {
       expect(fetchCount).toBe(2)
