@@ -95,6 +95,14 @@ repos:
   # Custom hooks for critical trading system tests
   - repo: local
     hooks:
+      - id: validate-trading-config
+        name: Validate Trading Configuration
+        entry: python -m agents.config_manager.validator
+        language: system
+        files: ^config/parameters/.*\.yaml$
+        exclude: config/parameters/active\.yaml$
+        description: "Validates trading parameter configurations against schema and constraints"
+
       - id: test-execution-engine
         name: Test Execution Engine Critical Functions
         entry: python test-execution-engine.py

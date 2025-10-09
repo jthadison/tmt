@@ -1,0 +1,219 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://trading-system.example.com/schemas/parameters-config.json",
+  "title": "Trading System Parameters Configuration",
+  "description": "Configuration schema for session-targeted trading parameters with validation rules",
+  "type": "object",
+  "required": ["version", "effective_date", "author", "reason", "baseline", "session_parameters", "constraints"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., 1.0.0, 2.1.3)"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when configuration becomes effective (YYYY-MM-DD)"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Author of the configuration change (person or automated system)"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Justification for the configuration change"
+    },
+    "validation": {
+      "type": "object",
+      "description": "Validation metrics from backtesting",
+      "properties": {
+        "backtest_sharpe": {
+          "type": "number",
+          "minimum": 0,
+          "description": "In-sample Sharpe ratio from backtesting"
+        },
+        "out_of_sample_sharpe": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Out-of-sample Sharpe ratio"
+        },
+        "overfitting_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overfitting score (0-1, lower is better)"
+        },
+        "max_drawdown": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum drawdown (0-1)"
+        },
+        "approved_by": {
+          "type": "string",
+          "description": "Person who approved the configuration"
+        },
+        "approved_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of approval"
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["confidence_threshold", "min_risk_reward"],
+      "additionalProperties": true,
+      "description": "Baseline parameters for universal trading",
+      "properties": {
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Confidence threshold percentage (0-100)"
+        },
+        "min_risk_reward": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Minimum risk-reward ratio (must be > 0)"
+        },
+        "max_risk_reward": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum risk-reward ratio"
+        },
+        "source": {
+          "type": "string",
+          "description": "Source of baseline parameters"
+        }
+      }
+    },
+    "session_parameters": {
+      "type": "object",
+      "description": "Session-specific parameter overrides",
+      "additionalProperties": false,
+      "properties": {
+        "tokyo": {
+          "$ref": "#/definitions/session_config"
+        },
+        "london": {
+          "$ref": "#/definitions/session_config"
+        },
+        "new_york": {
+          "$ref": "#/definitions/session_config"
+        },
+        "sydney": {
+          "$ref": "#/definitions/session_config"
+        },
+        "overlap": {
+          "$ref": "#/definitions/session_config"
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["max_confidence_deviation", "max_risk_reward_deviation", "max_overfitting_score"],
+      "description": "System-wide constraints and thresholds",
+      "properties": {
+        "max_confidence_deviation": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum allowed deviation from baseline confidence (%)"
+        },
+        "max_risk_reward_deviation": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum allowed deviation from baseline risk-reward"
+        },
+        "max_overfitting_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum acceptable overfitting score"
+        },
+        "min_backtest_sharpe": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum required Sharpe ratio for backtest"
+        },
+        "min_out_of_sample_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum ratio of out-of-sample to in-sample Sharpe"
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "description": "Alert thresholds for monitoring",
+      "properties": {
+        "overfitting_warning": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overfitting score threshold for warning alert"
+        },
+        "overfitting_critical": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overfitting score threshold for critical alert"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "session_config": {
+      "type": "object",
+      "required": ["confidence_threshold", "min_risk_reward"],
+      "description": "Configuration for a specific trading session",
+      "properties": {
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Session-specific confidence threshold"
+        },
+        "min_risk_reward": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "description": "Session-specific minimum risk-reward ratio"
+        },
+        "max_risk_reward": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Session-specific maximum risk-reward ratio"
+        },
+        "volatility_adjustment": {
+          "type": "number",
+          "description": "Volatility adjustment factor"
+        },
+        "justification": {
+          "type": "string",
+          "description": "Justification for session-specific parameters"
+        },
+        "deviation_from_baseline": {
+          "type": "object",
+          "description": "Calculated deviations from baseline",
+          "properties": {
+            "confidence": {
+              "type": "number",
+              "description": "Deviation in confidence threshold"
+            },
+            "risk_reward": {
+              "type": "number",
+              "description": "Deviation in risk-reward ratio"
+            }
+          }
+        }
+      }
+    }
+  }
+}
