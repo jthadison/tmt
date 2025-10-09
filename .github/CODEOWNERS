@@ -1,0 +1,31 @@
+# Code Owners for Trading System
+#
+# These owners will be requested for review when someone opens a pull request.
+#
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @trading-system-team
+
+# Configuration changes require two-person approval
+config/parameters/*.yaml @trading-system-lead @qa-architect
+
+# Critical trading components require lead approval
+agents/circuit-breaker/** @trading-system-lead
+agents/risk-management/** @trading-system-lead
+execution-engine/** @trading-system-lead
+
+# Configuration manager requires QA approval
+agents/config-manager/** @qa-architect @trading-system-lead
+
+# Database migrations require DBA approval
+**/migrations/** @database-admin @trading-system-lead
+
+# Infrastructure changes require DevOps approval
+docker-compose*.yml @devops-team
+.github/workflows/** @devops-team
+kubernetes/** @devops-team
+
+# Documentation can be approved by any team member
+docs/** @trading-system-team
+*.md @trading-system-team

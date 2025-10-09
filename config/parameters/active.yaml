@@ -1,0 +1,83 @@
+# Trading System Parameters Configuration v1.0.0
+# Initial baseline configuration derived from universal Cycle 4 parameters
+
+version: "1.0.0"
+effective_date: "2025-10-09"
+author: "System Bootstrap"
+reason: "Initial configuration based on proven Cycle 4 universal parameters"
+
+validation:
+  backtest_sharpe: 1.45
+  out_of_sample_sharpe: 1.32
+  overfitting_score: 0.091
+  max_drawdown: 0.08
+  approved_by: "System Administrator"
+  approved_date: "2025-10-09"
+
+baseline:
+  confidence_threshold: 55.0
+  min_risk_reward: 1.8
+  max_risk_reward: 5.0
+  source: "universal_cycle_4"
+
+session_parameters:
+  tokyo:
+    confidence_threshold: 85.0
+    min_risk_reward: 4.0
+    max_risk_reward: 6.0
+    volatility_adjustment: 0.20
+    justification: "Tokyo session demonstrates exceptional precision with lower liquidity"
+    deviation_from_baseline:
+      confidence: +30.0  # +54.5%
+      risk_reward: +2.2  # +122.2%
+
+  london:
+    confidence_threshold: 72.0
+    min_risk_reward: 3.2
+    max_risk_reward: 5.0
+    volatility_adjustment: 0.12
+    justification: "London session high liquidity enables tighter spreads"
+    deviation_from_baseline:
+      confidence: +17.0  # +30.9%
+      risk_reward: +1.4  # +77.8%
+
+  new_york:
+    confidence_threshold: 70.0
+    min_risk_reward: 2.8
+    max_risk_reward: 4.5
+    volatility_adjustment: 0.10
+    justification: "New York session balanced volatility and liquidity"
+    deviation_from_baseline:
+      confidence: +15.0  # +27.3%
+      risk_reward: +1.0  # +55.6%
+
+  sydney:
+    confidence_threshold: 78.0
+    min_risk_reward: 3.5
+    max_risk_reward: 5.5
+    volatility_adjustment: 0.15
+    justification: "Sydney session lower volume requires higher confidence"
+    deviation_from_baseline:
+      confidence: +23.0  # +41.8%
+      risk_reward: +1.7  # +94.4%
+
+  overlap:
+    confidence_threshold: 70.0
+    min_risk_reward: 2.8
+    max_risk_reward: 4.8
+    volatility_adjustment: 0.08
+    justification: "Overlap periods combine characteristics of both sessions"
+    deviation_from_baseline:
+      confidence: +15.0  # +27.3%
+      risk_reward: +1.0  # +55.6%
+
+constraints:
+  max_confidence_deviation: 35.0  # Maximum +35% from baseline
+  max_risk_reward_deviation: 2.5  # Maximum +2.5 from baseline
+  max_overfitting_score: 0.3
+  min_backtest_sharpe: 1.2
+  min_out_of_sample_ratio: 0.7
+
+alerts:
+  overfitting_warning: 0.3
+  overfitting_critical: 0.5
