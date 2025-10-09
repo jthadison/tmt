@@ -14,6 +14,7 @@ import logging
 from .config import get_settings
 from .database import db
 from .api import historical_data_router
+from .api.backtest import router as backtest_router
 
 # Configure logging
 logging.basicConfig(
@@ -74,6 +75,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(historical_data_router)
+app.include_router(backtest_router)
 
 
 @app.get("/")
@@ -90,6 +92,9 @@ async def root():
             "statistics": "/api/historical/statistics/{instrument}",
             "validate_quality": "/api/historical/validate-quality",
             "health": "/api/historical/health",
+            "backtest_run": "/api/backtest/run",
+            "backtest_get": "/api/backtest/{backtest_id}",
+            "backtest_compare": "/api/backtest/compare",
         },
     }
 
