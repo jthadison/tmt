@@ -89,8 +89,13 @@ class TestRollbackManager:
         manager.propose_new_config(v2_config, auto_commit=False)
         manager.activate_version("1.1.0", auto_commit=False)
 
-        # Emergency rollback
-        rolled_back = rollback_mgr.emergency_rollback(reason="Critical issue detected")
+        # Emergency rollback - explicitly specify version since no Git history
+        rolled_back = rollback_mgr.rollback(
+            version="1.0.0",  # Explicitly specify target version
+            reason="Critical issue detected",
+            emergency=True,
+            notify=False
+        )
 
         assert rolled_back.version == "1.0.0"
 

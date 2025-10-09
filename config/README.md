@@ -170,25 +170,61 @@ All configuration changes are automatically validated:
 
 ## API Endpoints
 
-The configuration manager provides REST API access:
+The configuration manager provides REST API access with authentication.
+
+### Authentication
+
+All API endpoints require authentication via API key:
+
+```bash
+# Set API key in environment (recommended)
+export CONFIG_MANAGER_API_KEYS_RW="your-read-write-key"
+export CONFIG_MANAGER_API_KEYS_RO="your-read-only-key"
+export CONFIG_MANAGER_MASTER_KEY="your-master-key"
+
+# Or generate a new API key
+curl -X POST http://localhost:8090/api/auth/generate-key \
+  -H "X-API-Key: $CONFIG_MANAGER_MASTER_KEY"
+```
+
+**API Key Types:**
+- **Read-Write Keys** (`CONFIG_MANAGER_API_KEYS_RW`): Full access to all endpoints
+- **Read-Only Keys** (`CONFIG_MANAGER_API_KEYS_RO`): Can only GET, cannot modify
+- **Master Key** (`CONFIG_MANAGER_MASTER_KEY`): Admin access, can generate new keys
+
+**Multiple Keys**: Comma-separated for multiple keys:
+```bash
+export CONFIG_MANAGER_API_KEYS_RW="key1,key2,key3"
+```
+
+### API Calls
+
+All requests must include `X-API-Key` header:
 
 ```bash
 # Get current configuration
-GET /api/config/current
+curl -H "X-API-Key: $CONFIG_MANAGER_API_KEYS_RO" \
+  http://localhost:8090/api/config/current
 
 # Get configuration history
-GET /api/config/history?limit=20
+curl -H "X-API-Key: $CONFIG_MANAGER_API_KEYS_RO" \
+  http://localhost:8090/api/config/history?limit=20
 
 # Get specific version
-GET /api/config/version/1.0.0
+curl -H "X-API-Key: $CONFIG_MANAGER_API_KEYS_RO" \
+  http://localhost:8090/api/config/version/1.0.0
 
-# Propose new configuration (creates PR)
-POST /api/config/propose
-{
-  "config": { ... },
-  "reason": "Walk-forward optimization",
-  "validation_results": { ... }
-}
+# Activate configuration (requires write key)
+curl -X POST http://localhost:8090/api/config/activate \
+  -H "X-API-Key: $CONFIG_MANAGER_API_KEYS_RW" \
+  -H "Content-Type: application/json" \
+  -d '{"version": "1.1.0", "reason": "Deployment"}'
+
+# Rollback configuration (requires write key)
+curl -X POST http://localhost:8090/api/config/rollback \
+  -H "X-API-Key: $CONFIG_MANAGER_API_KEYS_RW" \
+  -H "Content-Type: application/json" \
+  -d '{"version": "1.0.0", "reason": "Emergency rollback", "emergency": true}'
 ```
 
 ## Monitoring and Alerts

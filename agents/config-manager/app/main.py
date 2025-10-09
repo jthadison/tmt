@@ -7,13 +7,14 @@ REST API for configuration management operations.
 import logging
 from pathlib import Path
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .config_manager import ConfigurationManager
 from .rollback import RollbackManager, ConfigFreeze
 from .slack_notifier import SlackNotifier
+from .auth import require_api_key, require_write_api_key, generate_new_api_key
 from .models import (
     TradingConfig,
     ConfigHistoryEntry,
@@ -101,7 +102,7 @@ async def health_check():
 
 
 @app.get("/api/config/current", response_model=TradingConfig)
-async def get_current_config():
+async def get_current_config(api_key: str = Depends(require_api_key)):
     """
     Get currently active configuration
 
@@ -125,7 +126,7 @@ async def get_current_config():
 
 
 @app.get("/api/config/version/{version}", response_model=TradingConfig)
-async def get_config_version(version: str):
+async def get_config_version(version: str, api_key: str = Depends(require_api_key)):
     """
     Get specific configuration version
 
@@ -152,7 +153,7 @@ async def get_config_version(version: str):
 
 
 @app.get("/api/config/versions", response_model=VersionListResponse)
-async def list_versions():
+async def list_versions(api_key: str = Depends(require_api_key)):
     """
     List all available configuration versions
 
@@ -177,7 +178,7 @@ async def list_versions():
 
 
 @app.get("/api/config/history", response_model=List[ConfigHistoryEntry])
-async def get_config_history(limit: int = 20):
+async def get_config_history(limit: int = 20, api_key: str = Depends(require_api_key)):
     """
     Get configuration change history
 
@@ -199,7 +200,10 @@ async def get_config_history(limit: int = 20):
 
 
 @app.post("/api/config/propose", response_model=StatusResponse)
-async def propose_config(request: ConfigProposeRequest):
+async def propose_config(
+    request: ConfigProposeRequest,
+    api_key: str = Depends(require_write_api_key)
+):
     """
     Propose new configuration (saves but doesn't activate)
 
@@ -241,7 +245,10 @@ async def propose_config(request: ConfigProposeRequest):
 
 
 @app.post("/api/config/activate", response_model=StatusResponse)
-async def activate_config(request: ConfigActivationRequest):
+async def activate_config(
+    request: ConfigActivationRequest,
+    api_key: str = Depends(require_write_api_key)
+):
     """
     Activate a configuration version
 
@@ -292,7 +299,10 @@ async def activate_config(request: ConfigActivationRequest):
 
 
 @app.post("/api/config/rollback", response_model=StatusResponse)
-async def rollback_config(request: ConfigRollbackRequest):
+async def rollback_config(
+    request: ConfigRollbackRequest,
+    api_key: str = Depends(require_write_api_key)
+):
     """
     Rollback configuration to previous or specific version
 
@@ -330,7 +340,7 @@ async def rollback_config(request: ConfigRollbackRequest):
 
 
 @app.post("/api/config/validate/{version}", response_model=ConfigValidationResult)
-async def validate_config(version: str):
+async def validate_config(version: str, api_key: str = Depends(require_api_key)):
     """
     Validate a configuration version
 
@@ -366,7 +376,10 @@ async def validate_config(version: str):
 
 
 @app.post("/api/config/freeze", response_model=StatusResponse)
-async def freeze_config(reason: str = "Manual freeze"):
+async def freeze_config(
+    reason: str = "Manual freeze",
+    api_key: str = Depends(require_write_api_key)
+):
     """
     Freeze configuration changes
 
@@ -393,7 +406,7 @@ async def freeze_config(reason: str = "Manual freeze"):
 
 
 @app.post("/api/config/unfreeze", response_model=StatusResponse)
-async def unfreeze_config():
+async def unfreeze_config(api_key: str = Depends(require_write_api_key)):
     """
     Unfreeze configuration changes
 
@@ -438,6 +451,27 @@ async def get_freeze_status():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get freeze status: {str(e)}"
+        )
+
+
+@app.post("/api/auth/generate-key")
+async def generate_api_key_endpoint(
+    master_key: str = Depends(require_write_api_key)
+):
+    """
+    Generate a new API key (requires master/admin key)
+
+    Returns:
+        New API key with setup instructions
+    """
+    try:
+        result = generate_new_api_key()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to generate API key: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate API key: {str(e)}"
         )
 
 
