@@ -24,7 +24,8 @@ def event_loop():
 async def test_db() -> AsyncGenerator[Database, None]:
     """Create test database instance with SQLite"""
     db = Database()
-    db.settings.database_url = "sqlite+aiosqlite:///:memory:"
+    # Use file::memory:?cache=shared to allow multiple connections to share the same in-memory database
+    db.settings.database_url = "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true"
 
     await db.connect()
     await db.create_tables()

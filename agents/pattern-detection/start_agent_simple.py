@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import asyncio
+import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -29,18 +30,27 @@ except ImportError:
     ACTIVE_MONITORING_INSTRUMENTS = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CHF"]
     logger.warning("Using default instrument list - config not found")
 
-# Import real pattern detection engine
+# Import market pattern analyzer for VPA and Wyckoff analysis
+try:
+    from MarketPatternAnalyzer import MarketPatternAnalyzer
+    pattern_engine = MarketPatternAnalyzer()
+    logger.info("✅ Loaded Market Pattern Analyzer (VPA + Wyckoff)")
+except ImportError as e:
+    logger.warning(f"Could not load Market Pattern Analyzer: {e}")
+    pattern_engine = None
+
+# Import anti-detection pattern detection engine (optional)
 try:
     from PatternDetectionEngine import PatternDetectionEngine
     from ClusteringDetector import ClusteringDetector
     from PrecisionMonitor import PrecisionMonitor
     from CorrelationTracker import CorrelationTracker
     from ConsistencyChecker import ConsistencyChecker
-    pattern_engine = PatternDetectionEngine()
-    logger.info("✅ Loaded real Pattern Detection Engine")
+    anti_detection_engine = PatternDetectionEngine()
+    logger.info("✅ Loaded Anti-Detection Pattern Engine")
 except ImportError as e:
-    logger.warning(f"Could not load Pattern Detection Engine: {e}")
-    pattern_engine = None
+    logger.warning(f"Could not load Anti-Detection Engine: {e}")
+    anti_detection_engine = None
 
 # Global state for pattern tracking
 patterns_detected_today = 0

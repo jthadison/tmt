@@ -32,7 +32,8 @@ class MarketCandle(Base):
     __tablename__ = "market_candles"
 
     # Primary key and partitioning
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # Use Integer for SQLite compatibility with autoincrement (maps to BigInteger in Postgres)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     instrument = Column(String(20), nullable=False, index=True)
     timeframe = Column(String(10), nullable=False, default="H1")
@@ -66,7 +67,7 @@ class TradeExecution(Base):
     __tablename__ = "trade_executions"
 
     # Primary key
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     trade_id = Column(String(50), nullable=False, unique=True, index=True)
 
     # Trade details
@@ -117,7 +118,7 @@ class TradingSignal(Base):
     __tablename__ = "trading_signals"
 
     # Primary key
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     signal_id = Column(String(50), nullable=False, unique=True, index=True)
 
     # Signal details

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 import structlog
 
 from .config import get_settings
@@ -42,7 +42,10 @@ class Database:
             engine_options["pool_size"] = self.settings.database_pool_size
             engine_options["max_overflow"] = self.settings.database_max_overflow
         else:
-            engine_options["poolclass"] = NullPool
+            # Use StaticPool for SQLite to maintain single connection (important for in-memory DBs)
+            engine_options["poolclass"] = StaticPool
+            # For SQLite, we need connect_args to handle threading
+            engine_options["connect_args"] = {"check_same_thread": False}
 
         self.engine = create_async_engine(
             self.settings.database_url,
@@ -77,38 +80,40 @@ class Database:
         """Enable TimescaleDB extension and create hypertables"""
         logger.info("Enabling TimescaleDB extension")
 
+        from sqlalchemy import text
+
         async with self.engine.begin() as conn:
             # Enable TimescaleDB extension
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
 
             # Convert market_candles to hypertable (time-series optimized)
             # Only create if not already a hypertable
-            await conn.execute("""
+            await conn.execute(text("""
                 SELECT create_hypertable(
                     'market_candles',
                     'timestamp',
                     if_not_exists => TRUE,
                     chunk_time_interval => INTERVAL '7 days'
                 )
-            """)
+            """))
 
             # Create compression policy (compress data older than 30 days)
-            await conn.execute("""
+            await conn.execute(text("""
                 SELECT add_compression_policy(
                     'market_candles',
                     INTERVAL '30 days',
                     if_not_exists => TRUE
                 )
-            """)
+            """))
 
             # Create retention policy (keep data for 7 years to match audit requirements)
-            await conn.execute("""
+            await conn.execute(text("""
                 SELECT add_retention_policy(
                     'market_candles',
                     INTERVAL '7 years',
                     if_not_exists => TRUE
                 )
-            """)
+            """))
 
         logger.info("TimescaleDB extension enabled and hypertables created")
 
@@ -121,10 +126,11 @@ class Database:
         async with self.async_session_maker() as session:
             try:
                 yield session
-                await session.commit()
             except Exception:
                 await session.rollback()
                 raise
+            else:
+                await session.commit()
             finally:
                 await session.close()
 

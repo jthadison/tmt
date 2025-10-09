@@ -97,7 +97,9 @@ class TestOandaHistoricalClient:
 
     @pytest.mark.asyncio
     async def test_fetch_candles_http_error(self):
-        """Test handling HTTP errors"""
+        """Test handling HTTP errors with retry"""
+        from tenacity import RetryError
+
         client = OandaHistoricalClient()
 
         with patch.object(
@@ -115,7 +117,8 @@ class TestOandaHistoricalClient:
             start = datetime(2024, 1, 1)
             end = datetime(2024, 1, 1, 2, 0, 0)
 
-            with pytest.raises(httpx.HTTPStatusError):
+            # The retry decorator will wrap the HTTPStatusError in RetryError after 3 attempts
+            with pytest.raises((httpx.HTTPStatusError, RetryError)):
                 await client.fetch_candles("EUR_USD", start, end, "H1")
 
         await client.close()

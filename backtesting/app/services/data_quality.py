@@ -207,13 +207,18 @@ class DataQualityValidator:
         df["rolling_std"] = df["close"].rolling(window=window_size, min_periods=10).std()
 
         # Detect outliers (> N standard deviations from mean)
-        for idx, row in df.iterrows():
+        for idx in range(len(df)):
+            row = df.iloc[idx]
             if pd.notna(row["rolling_mean"]) and pd.notna(row["rolling_std"]):
-                deviation = abs(row["close"] - row["rolling_mean"]) / (
-                    row["rolling_std"] + 1e-10
-                )
-                if deviation > self.outlier_threshold:
-                    outliers.append((idx, candles[idx]))
+                # Avoid division by zero - if std is very small, use absolute difference
+                if row["rolling_std"] < 1e-10:
+                    # If all prices are identical, any significant difference is an outlier
+                    if abs(row["close"] - row["rolling_mean"]) > 0.01:
+                        outliers.append((idx, candles[idx]))
+                else:
+                    deviation = abs(row["close"] - row["rolling_mean"]) / row["rolling_std"]
+                    if deviation > self.outlier_threshold:
+                        outliers.append((idx, candles[idx]))
 
         return outliers
 
