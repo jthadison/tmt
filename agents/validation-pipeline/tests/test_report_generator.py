@@ -175,7 +175,7 @@ class TestReportGenerator:
         assert output_file.exists()
 
         # Should contain Markdown content
-        with open(output_file, 'r') as f:
+        with open(output_file, 'r', encoding='utf-8') as f:
             content = f.read()
             assert "## ✅ Parameter Validation Results" in content
 
