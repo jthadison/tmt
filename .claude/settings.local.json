@@ -55,7 +55,8 @@
       "Bash(for i in {1..20})",
       "Bash(grep:*)",
       "Bash(mkdir:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": [],
