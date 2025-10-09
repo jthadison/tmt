@@ -7,3 +7,6 @@
 - **Epic 5: Dashboard & Monitoring Interface:** Create web-based command center for account monitoring and manual controls
 - **Epic 6: Personality Engine & Anti-Detection:** Implement unique trading personalities and anti-correlation systems to avoid detection
 - **Epic 7: Adaptive Learning & Performance Optimization:** Deploy learning systems with safeguards and performance tracking
+- **Epic 8: Broker Integration:** Implement OANDA V20 API integration for live trading execution and account management
+- **Epic 9: Production Readiness & Performance:** Deploy skeleton screens, error handling, graceful degradation, and performance optimization
+- **Epic 11: Algorithmic Validation & Overfitting Prevention:** Deploy comprehensive backtesting, validation, and monitoring systems to prevent overfitting and ensure parameter robustness

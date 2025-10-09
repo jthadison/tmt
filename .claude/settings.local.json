@@ -45,7 +45,17 @@
       "Bash(done)",
       "Bash(rm:*)",
       "Bash(rmdir:*)",
-      "Bash(gh pr comment:*)"
+      "Bash(gh pr comment:*)",
+      "Bash(find:*)",
+      "Bash(sqlite3:*)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(for i in {1..16})",
+      "Bash(do sleep:*)",
+      "Bash(for i in {1..20})",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": [],

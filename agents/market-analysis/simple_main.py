@@ -300,7 +300,17 @@ async def background_market_monitoring():
                         signals_generated_today += 1
                         last_signal_time = datetime.now()
 
+                        # Map field names: instrument->symbol, direction->signal_type, id->signal_id
+                        if "instrument" in signal_data and "symbol" not in signal_data:
+                            signal_data["symbol"] = signal_data["instrument"]
+                        if "direction" in signal_data and "signal_type" not in signal_data:
+                            signal_data["signal_type"] = signal_data["direction"]
+                        if "id" in signal_data and "signal_id" not in signal_data:
+                            signal_data["signal_id"] = signal_data["id"]
+
                         # Add session information to signal
+                        if "market_context" not in signal_data:
+                            signal_data["market_context"] = {}
                         signal_data["market_context"]["trading_session"] = current_session
                         signal_data["market_context"]["session_parameters"] = current_params
                         signal_data["session_targeted"] = SESSION_TARGETING_ENABLED
@@ -310,13 +320,13 @@ async def background_market_monitoring():
                             try:
                                 success = await store_signal_in_db(signal_data)
                                 if success:
-                                    logger.info(f"💾 Signal {signal_data['signal_id']} stored in database")
+                                    logger.info(f"💾 Signal {signal_data.get('signal_id', 'unknown')} stored in database")
                                 else:
-                                    logger.warning(f"⚠️ Failed to store signal {signal_data['signal_id']} in database")
+                                    logger.warning(f"⚠️ Failed to store signal {signal_data.get('signal_id', 'unknown')} in database")
                             except Exception as e:
                                 logger.error(f"❌ Error storing signal in database: {e}")
 
-                        logger.info(f"📈 INTELLIGENT SIGNAL GENERATED: {signal_data['signal_type'].upper()} {signal_data['symbol']} - Confidence: {signal_data['confidence']}%")
+                        logger.info(f"📈 INTELLIGENT SIGNAL GENERATED: {signal_data.get('signal_type', 'unknown').upper()} {signal_data.get('symbol', 'unknown')} - Confidence: {signal_data.get('confidence', 0)}%")
 
                         # Send signal to orchestrator for execution
                         signal_sent = await send_signal_to_orchestrator(signal_data)
@@ -1561,7 +1571,7 @@ async def root():
     }
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8001))
+    port = 8001
     logger.info(f"Starting Market Analysis Agent on port {port}")
     
     uvicorn.run(
