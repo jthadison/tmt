@@ -1,0 +1,35 @@
+# Overfitting Monitor Agent Dependencies - Story 11.4
+
+# FastAPI and web framework
+fastapi==0.109.1
+uvicorn[standard]==0.27.0
+pydantic==2.6.0
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# HTTP client for alerts
+httpx==0.26.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# Data processing
+numpy==1.26.3
+
+# Logging
+structlog==24.1.0
+
+# Testing
+pytest==8.0.1
+pytest-asyncio==0.23.4
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Code quality
+black==24.2.0
+flake8==7.0.0
+mypy==1.8.0
