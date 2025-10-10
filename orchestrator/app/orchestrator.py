@@ -6,6 +6,7 @@ Manages the lifecycle and coordination of 8 specialized AI trading agents.
 
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
@@ -14,7 +15,7 @@ import json
 from fastapi import WebSocket
 
 from .models import (
-    SystemStatus, AgentStatus, AccountStatus, TradeSignal, 
+    SystemStatus, AgentStatus, AccountStatus, TradeSignal,
     SystemMetrics, AgentInfo, AccountInfo, TradeResult
 )
 from .config import get_settings
@@ -26,6 +27,7 @@ from .safety_monitor import SafetyMonitor
 from .exceptions import OrchestratorException
 from .trade_executor import TradeExecutor
 from .async_alert_scheduler import get_async_alert_scheduler
+from .database import initialize_database, TradeRepository, SignalRepository
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,7 @@ class TradingOrchestrator:
         self.trading_enabled = False
         self.oanda_connected = False
         self.start_time = None
-        
+
         # Core components
         self.event_bus = EventBus()
         self.oanda_client = OandaClient()
@@ -54,16 +56,22 @@ class TradingOrchestrator:
 
         # Performance monitoring components
         self.alert_scheduler = get_async_alert_scheduler()
-        
+
         # Execution engine integration
         self.execution_engine_url = "http://localhost:8082"
-        
+
         # WebSocket connections for real-time updates
         self.websocket_connections: List[WebSocket] = []
-        
+
+        # Database persistence (initialized in start())
+        self.db_engine = None
+        self.trade_repo: Optional[TradeRepository] = None
+        self.signal_repo: Optional[SignalRepository] = None
+        self.database_enabled = os.getenv("ENABLE_DATABASE_PERSISTENCE", "true").lower() == "true"
+
         # System state
         self.system_events: List[Dict[str, Any]] = []
-        self.trade_history: List[Dict[str, Any]] = []
+        self.trade_history: List[Dict[str, Any]] = []  # Keep for backward compatibility
         self.performance_metrics = {
             "signals_processed": 0,
             "trades_executed": 0,
@@ -71,7 +79,7 @@ class TradingOrchestrator:
             "win_rate": 0.0,
             "average_latency": 0.0
         }
-        
+
         # Background tasks
         self.background_tasks: List[asyncio.Task] = []
     
@@ -80,7 +88,10 @@ class TradingOrchestrator:
         try:
             logger.info("Starting Trading System Orchestrator...")
             self.start_time = datetime.now(timezone.utc)
-            
+
+            # Initialize database persistence
+            await self._initialize_database()
+
             # Start core components
             await self.event_bus.start()
             await self.agent_manager.start()
@@ -90,7 +101,7 @@ class TradingOrchestrator:
             self.background_tasks.append(
                 asyncio.create_task(self.alert_scheduler.start())
             )
-            
+
             # Test OANDA connection
             await self._test_oanda_connection()
             
@@ -143,7 +154,12 @@ class TradingOrchestrator:
             await self.agent_manager.stop()
             await self.oanda_client.close()
             await self.event_bus.stop()
-            
+
+            # Close database connections
+            if self.db_engine:
+                await self.db_engine.close()
+                logger.info("Database connections closed")
+
             self.running = False
             await self._emit_event("system.stopped", {"timestamp": datetime.now(timezone.utc).isoformat()})
             
@@ -657,7 +673,45 @@ class TradingOrchestrator:
                 "error": str(e),
                 "environment": self.settings.oanda_environment
             })
-    
+
+    async def _initialize_database(self):
+        """Initialize database persistence with fallback to memory-only mode"""
+        if not self.database_enabled:
+            logger.info("📊 Database persistence disabled (ENABLE_DATABASE_PERSISTENCE=false)")
+            return
+
+        try:
+            logger.info("📊 Initializing database persistence...")
+
+            # Initialize database engine
+            self.db_engine = await initialize_database()
+
+            # Create repository instances
+            self.trade_repo = TradeRepository(self.db_engine.session_factory)
+            self.signal_repo = SignalRepository(self.db_engine.session_factory)
+
+            logger.info("✅ Database persistence initialized successfully")
+
+            await self._emit_event("database.initialized", {
+                "database_url": self.db_engine.database_url,
+                "enabled": True
+            })
+
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize database: {e}")
+            logger.warning("⚠️  Falling back to memory-only mode")
+
+            # Disable database and continue with memory-only mode
+            self.database_enabled = False
+            self.db_engine = None
+            self.trade_repo = None
+            self.signal_repo = None
+
+            await self._emit_event("database.initialization_failed", {
+                "error": str(e),
+                "fallback_mode": "memory_only"
+            })
+
     async def _health_check_loop(self):
         """Background task for health monitoring"""
         while self.running:
@@ -770,15 +824,24 @@ class TradingOrchestrator:
         """Process signal from agents and execute trades"""
         try:
             logger.info(f"🔄 Processing signal from {signal_data.get('agent_id', 'unknown')}")
-            
+
+            # Persist signal to database
+            await self._persist_signal(signal_data)
+
             # Check if trading is enabled
             if not self.trading_enabled:
+                # Update signal execution status
+                await self._update_signal_status(
+                    signal_data.get("signal_id"),
+                    False,
+                    "rejected_trading_disabled"
+                )
                 return {
                     "status": "rejected",
                     "reason": "Trading not enabled",
                     "signal_id": signal_data.get("signal_id")
                 }
-            
+
             # Check circuit breakers - temporarily bypass for testing
             try:
                 breaker_status = await self.circuit_breaker.get_status()
@@ -787,23 +850,46 @@ class TradingOrchestrator:
             except Exception as e:
                 logger.warning(f"Circuit breaker check failed, allowing trade: {e}")
                 can_trade = True
-            
+
             if not can_trade:
+                # Update signal execution status
+                await self._update_signal_status(
+                    signal_data.get("signal_id"),
+                    False,
+                    "rejected_circuit_breaker"
+                )
                 return {
-                    "status": "rejected", 
+                    "status": "rejected",
                     "reason": "Circuit breakers active",
                     "signal_id": signal_data.get("signal_id")
                 }
-            
+
             # Send signal directly to execution engine
             execution_result = await self._execute_signal_on_engine(signal_data)
-            
+
             # Track the signal processing
             self.performance_metrics["signals_processed"] += 1
             if execution_result.get("status") == "success":
                 self.performance_metrics["trades_executed"] += 1
-            
-            # Log the trade attempt
+
+                # Update signal execution status
+                await self._update_signal_status(
+                    signal_data.get("signal_id"),
+                    True,
+                    "executed_successfully"
+                )
+
+                # Persist trade to database
+                await self._persist_trade(signal_data, execution_result)
+            else:
+                # Update signal execution status with failure
+                await self._update_signal_status(
+                    signal_data.get("signal_id"),
+                    False,
+                    f"execution_failed_{execution_result.get('status', 'unknown')}"
+                )
+
+            # Log the trade attempt (keep for backward compatibility)
             self.trade_history.append({
                 "signal_id": signal_data.get("signal_id"),
                 "symbol": signal_data.get("symbol"),
@@ -812,14 +898,14 @@ class TradingOrchestrator:
                 "result": execution_result,
                 "agent_id": signal_data.get("agent_id")
             })
-            
+
             return {
                 "status": "processed",
                 "execution_result": execution_result,
                 "signal_id": signal_data.get("signal_id"),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Error processing agent signal: {e}")
             return {
@@ -882,3 +968,98 @@ class TradingOrchestrator:
                 "status": "error",
                 "error_message": str(e)
             }
+
+    async def _persist_signal(self, signal_data: dict) -> None:
+        """
+        Persist trading signal to database.
+
+        Args:
+            signal_data: Signal data dictionary from agent
+        """
+        if not self.database_enabled or not self.signal_repo:
+            return
+
+        try:
+            # Prepare signal data for database
+            db_signal_data = {
+                "signal_id": signal_data.get("signal_id"),
+                "symbol": signal_data.get("symbol"),
+                "timeframe": signal_data.get("timeframe"),
+                "signal_type": signal_data.get("signal_type", "BUY"),
+                "confidence": signal_data.get("confidence", 0.0),
+                "entry_price": signal_data.get("entry_price"),
+                "stop_loss": signal_data.get("stop_loss"),
+                "take_profit": signal_data.get("take_profit"),
+                "session": signal_data.get("session"),
+                "pattern_type": signal_data.get("pattern_type"),
+                "generated_at": datetime.now(timezone.utc),
+            }
+
+            await self.signal_repo.save_signal(db_signal_data)
+
+        except Exception as e:
+            logger.error(f"❌ Failed to persist signal to database: {e}")
+            # Don't raise - database failures shouldn't block trading
+
+    async def _update_signal_status(
+        self, signal_id: str, executed: bool, execution_status: str
+    ) -> None:
+        """
+        Update signal execution status in database.
+
+        Args:
+            signal_id: Signal ID to update
+            executed: Whether signal was executed
+            execution_status: Execution status message
+        """
+        if not self.database_enabled or not self.signal_repo:
+            return
+
+        try:
+            await self.signal_repo.update_signal_execution(
+                signal_id, executed, execution_status
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to update signal status: {e}")
+            # Don't raise - database failures shouldn't block trading
+
+    async def _persist_trade(
+        self, signal_data: dict, execution_result: dict
+    ) -> None:
+        """
+        Persist executed trade to database.
+
+        Args:
+            signal_data: Original signal data
+            execution_result: Result from execution engine
+        """
+        if not self.database_enabled or not self.trade_repo:
+            return
+
+        try:
+            # Extract trade data from execution result
+            details = execution_result.get("details", {})
+
+            # Prepare trade data for database
+            db_trade_data = {
+                "trade_id": execution_result.get("trade_id", f"trade_{signal_data.get('signal_id')}"),
+                "signal_id": signal_data.get("signal_id"),
+                "account_id": signal_data.get("account_id", "101-001-21040028-001"),
+                "symbol": signal_data.get("symbol"),
+                "direction": signal_data.get("signal_type", "BUY").upper(),
+                "entry_time": datetime.now(timezone.utc),
+                "entry_price": execution_result.get("execution_price") or signal_data.get("entry_price"),
+                "stop_loss": signal_data.get("stop_loss"),
+                "take_profit": signal_data.get("take_profit"),
+                "position_size": signal_data.get("position_size", 1000),
+                "session": signal_data.get("session"),
+                "pattern_type": signal_data.get("pattern_type"),
+                "confidence_score": signal_data.get("confidence"),
+                "risk_reward_ratio": signal_data.get("risk_reward_ratio"),
+            }
+
+            await self.trade_repo.save_trade(db_trade_data)
+
+        except Exception as e:
+            logger.error(f"❌ Failed to persist trade to database: {e}")
+            # Don't raise - database failures shouldn't block trading
