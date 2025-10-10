@@ -43,6 +43,7 @@ from .alert_auth import (
 )
 from .performance_routes import router as performance_router
 from .history_routes import router as history_router
+from .analytics_routes import router as analytics_router
 # Analytics request models
 class RealtimePnLRequest(BaseModel):
     accountId: str
@@ -218,6 +219,7 @@ app.add_middleware(
 # Include routers
 app.include_router(performance_router)
 app.include_router(history_router)
+app.include_router(analytics_router)
 
 # Exception handlers
 @app.exception_handler(OrchestratorException)

@@ -211,3 +211,19 @@ async def initialize_database(
     _session_factory = _engine.session_factory
 
     return _engine
+
+
+def get_session_factory() -> async_sessionmaker:
+    """
+    Get the global async session factory.
+
+    Returns:
+        async_sessionmaker: Global session factory for creating database sessions
+
+    Raises:
+        RuntimeError: If database not initialized
+    """
+    global _session_factory
+    if _session_factory is None:
+        raise RuntimeError("Database not initialized. Call initialize_database() first.")
+    return _session_factory
