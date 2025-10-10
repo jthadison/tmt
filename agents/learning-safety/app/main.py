@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
 Learning Safety Agent - Main FastAPI Application
-Integrates circuit breakers, anomaly detection, and rollback systems
+Integrates circuit breakers, anomaly detection, rollback systems,
+and autonomous learning loop.
 """
 
 import os
+import sys
 import logging
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+# Add orchestrator to path for database imports
+orchestrator_path = Path(__file__).parent.parent.parent.parent / "orchestrator"
+sys.path.insert(0, str(orchestrator_path))
 
 # Import core components
 try:
@@ -28,13 +36,13 @@ try:
 except ImportError as e:
     # Fallback to simplified mock implementations
     logging.warning(f"Import error for core components: {e}. Using mock implementations.")
-    
+
     class LearningDecision:
         ALLOW = "allow"
         DENY = "deny"
         MONITOR = "monitor"
         QUARANTINE = "quarantine"
-    
+
     class MockLearningTriggers:
         def should_allow_learning(self, market_data=None):
             return {
@@ -46,8 +54,25 @@ except ImportError as e:
                 "lockout_duration_minutes": 0,
                 "manual_review_required": False
             }
-    
+
     LearningTriggers = MockLearningTriggers
+
+# Import autonomous learning components
+try:
+    from .autonomous_learning_loop import AutonomousLearningAgent
+    from .performance_analyzer import PerformanceAnalyzer
+    from .audit_logger import AuditLogger
+    from app.database import get_database_engine, initialize_database, TradeRepository
+    AUTONOMOUS_LEARNING_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Autonomous learning components not available: {e}")
+    AUTONOMOUS_LEARNING_AVAILABLE = False
+    AutonomousLearningAgent = None
+    PerformanceAnalyzer = None
+    AuditLogger = None
+    get_database_engine = None
+    initialize_database = None
+    TradeRepository = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -107,11 +132,91 @@ ab_framework = None
 quarantine_system = None
 news_monitor = None
 
+# Autonomous learning components
+learning_agent: Optional[AutonomousLearningAgent] = None
+db_engine = None
+
 try:
     market_detector = MarketConditionDetector()
     # Initialize other components as needed
 except Exception as e:
     logger.warning(f"Failed to initialize some components: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize autonomous learning agent on startup."""
+    global learning_agent, db_engine
+
+    # Check feature flag
+    enable_autonomous_learning = os.getenv("ENABLE_AUTONOMOUS_LEARNING", "true").lower() == "true"
+
+    if not enable_autonomous_learning:
+        logger.info("ℹ️  Autonomous learning disabled (ENABLE_AUTONOMOUS_LEARNING=false)")
+        return
+
+    if not AUTONOMOUS_LEARNING_AVAILABLE:
+        logger.warning("⚠️  Autonomous learning components not available")
+        return
+
+    try:
+        logger.info("🚀 Initializing autonomous learning agent...")
+
+        # Initialize database connection
+        db_path = os.getenv(
+            "TRADING_DB_PATH",
+            str(Path(__file__).parent.parent.parent.parent / "orchestrator" / "data" / "trading_system.db")
+        )
+        logger.info(f"📊 Database path: {db_path}")
+
+        # Initialize database (creates tables if they don't exist)
+        await initialize_database(db_path)
+        db_engine = get_database_engine(db_path)
+
+        # Create TradeRepository
+        trade_repository = TradeRepository(db_engine.get_session)
+
+        # Create PerformanceAnalyzer
+        performance_analyzer = PerformanceAnalyzer()
+
+        # Create AuditLogger
+        audit_logger = AuditLogger()
+
+        # Create and start AutonomousLearningAgent
+        learning_agent = AutonomousLearningAgent(
+            trade_repository=trade_repository,
+            performance_analyzer=performance_analyzer,
+            audit_logger=audit_logger
+        )
+
+        # Start learning loop
+        await learning_agent.start()
+        logger.info("✅ Autonomous learning loop started")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to start autonomous learning agent: {e}", exc_info=True)
+        learning_agent = None
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully shutdown autonomous learning agent."""
+    global learning_agent, db_engine
+
+    if learning_agent:
+        logger.info("🛑 Stopping autonomous learning agent...")
+        try:
+            await learning_agent.stop()
+            logger.info("✅ Autonomous learning agent stopped")
+        except Exception as e:
+            logger.error(f"❌ Error stopping learning agent: {e}")
+
+    if db_engine:
+        try:
+            await db_engine.close()
+            logger.info("✅ Database connections closed")
+        except Exception as e:
+            logger.error(f"❌ Error closing database: {e}")
+
 
 @app.get("/health")
 async def health_check():
@@ -123,13 +228,18 @@ async def health_check():
         "version": "1.0.0",
         "capabilities": [
             "circuit_breakers",
-            "anomaly_detection", 
+            "anomaly_detection",
             "rollback_system",
             "manual_override",
             "ab_testing",
             "data_quarantine",
-            "news_monitoring"
+            "news_monitoring",
+            "autonomous_learning"
         ],
+        "autonomous_learning": {
+            "enabled": learning_agent is not None,
+            "available": AUTONOMOUS_LEARNING_AVAILABLE
+        },
         "mode": "full_implementation"
     }
 
@@ -348,7 +458,7 @@ def _get_safety_recommendations(decision_data: dict) -> List[str]:
 def _get_performance_recommendations(anomalies: List[str], risk_score: float) -> List[str]:
     """Generate performance recommendations"""
     recommendations = []
-    
+
     if risk_score > 0.7:
         recommendations.append("Immediate intervention required")
         recommendations.append("Consider emergency stop")
@@ -360,8 +470,75 @@ def _get_performance_recommendations(anomalies: List[str], risk_score: float) ->
         recommendations.append("Consider parameter adjustment")
     else:
         recommendations.append("Continue monitoring")
-    
+
     return recommendations
+
+@app.get("/api/v1/learning/status")
+async def get_learning_status():
+    """
+    Get autonomous learning cycle status.
+
+    Returns current learning cycle state, timestamps, and performance metrics.
+    Implements AC#7: API endpoint returns cycle state and metrics.
+
+    Returns:
+        dict: Standardized response with learning cycle status data
+
+    Response Format:
+        {
+            "data": {
+                "cycle_state": str,  // IDLE, RUNNING, COMPLETED, FAILED
+                "last_run_timestamp": str,  // ISO 8601 timestamp
+                "next_run_timestamp": str,  // ISO 8601 timestamp
+                "suggestions_generated_count": int,
+                "active_tests_count": int,
+                "cycle_interval_seconds": int,
+                "running": bool
+            },
+            "error": null,
+            "correlation_id": str
+        }
+    """
+    import uuid
+
+    correlation_id = str(uuid.uuid4())
+
+    try:
+        if learning_agent is None:
+            return {
+                "data": {
+                    "enabled": False,
+                    "reason": "Autonomous learning not initialized or disabled"
+                },
+                "error": None,
+                "correlation_id": correlation_id
+            }
+
+        # Get cycle status with 5 second timeout
+        status = await asyncio.wait_for(
+            asyncio.to_thread(learning_agent.get_cycle_status),
+            timeout=5.0
+        )
+
+        return {
+            "data": status,
+            "error": None,
+            "correlation_id": correlation_id
+        }
+
+    except asyncio.TimeoutError:
+        logger.error("Learning status query timed out")
+        raise HTTPException(
+            status_code=504,
+            detail="Learning status query timed out after 5 seconds"
+        )
+    except Exception as e:
+        logger.error(f"Error getting learning status: {e}", exc_info=True)
+        return {
+            "data": None,
+            "error": str(e),
+            "correlation_id": correlation_id
+        }
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8004"))
