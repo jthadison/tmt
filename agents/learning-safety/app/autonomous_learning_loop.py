@@ -33,6 +33,8 @@ class AutonomousLearningAgent:
         trade_repository,
         performance_analyzer: Optional[PerformanceAnalyzer] = None,
         audit_logger: Optional[AuditLogger] = None,
+        parameter_suggestion_engine = None,
+        shadow_tester = None,
         cycle_interval: Optional[int] = None
     ):
         """
@@ -42,11 +44,15 @@ class AutonomousLearningAgent:
             trade_repository: Repository for accessing trade history
             performance_analyzer: Performance analyzer instance (creates new if None)
             audit_logger: Audit logger instance (creates new if None)
+            parameter_suggestion_engine: Parameter suggestion engine instance (optional)
+            shadow_tester: Shadow testing framework instance (optional)
             cycle_interval: Learning cycle interval in seconds (default: 86400 = 24 hours)
         """
         self.trade_repository = trade_repository
         self.performance_analyzer = performance_analyzer or PerformanceAnalyzer()
         self.audit_logger = audit_logger or AuditLogger()
+        self.parameter_suggestion_engine = parameter_suggestion_engine
+        self.shadow_tester = shadow_tester
 
         # Learning cycle interval (default: 24 hours)
         if cycle_interval is None:
@@ -64,7 +70,9 @@ class AutonomousLearningAgent:
 
         logger.info(
             f"✅ AutonomousLearningAgent initialized "
-            f"(cycle interval: {cycle_interval}s)"
+            f"(cycle interval: {cycle_interval}s, "
+            f"suggestion_engine: {parameter_suggestion_engine is not None}, "
+            f"shadow_tester: {shadow_tester is not None})"
         )
 
     async def continuous_learning_loop(self) -> None:
@@ -127,6 +135,59 @@ class AutonomousLearningAgent:
 
                 # Step 3: Log analysis results
                 self.audit_logger.log_cycle_complete(cycle_id, analysis)
+
+                # Step 4: Generate parameter suggestions (if engine available)
+                if self.parameter_suggestion_engine:
+                    logger.info("🔍 Generating parameter suggestions...")
+                    suggestions = self.parameter_suggestion_engine.generate_suggestions(
+                        analysis,
+                        max_suggestions=3
+                    )
+                    self.suggestions_generated_count = len(suggestions)
+                    logger.info(f"✅ Generated {len(suggestions)} suggestions")
+
+                    # Step 5: Start shadow tests for top suggestions (if shadow tester available)
+                    if self.shadow_tester and suggestions:
+                        logger.info("🧪 Starting shadow tests for top suggestions...")
+                        for suggestion in suggestions:
+                            try:
+                                test_id = await self.shadow_tester.start_test(
+                                    suggestion,
+                                    allocation=0.10,
+                                    duration_days=7
+                                )
+                                self.active_tests_count += 1
+                                logger.info(
+                                    f"   Started test {test_id} for {suggestion.parameter} "
+                                    f"on {suggestion.session}"
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"   ❌ Failed to start test for suggestion "
+                                    f"{suggestion.suggestion_id}: {e}"
+                                )
+
+                # Step 6: Evaluate completed shadow tests (if shadow tester available)
+                if self.shadow_tester:
+                    logger.info("📊 Checking for completed shadow tests...")
+                    try:
+                        completed_tests = await self.shadow_tester.get_completed_tests()
+                        logger.info(f"   Found {len(completed_tests)} completed tests")
+
+                        for test in completed_tests:
+                            try:
+                                evaluation = await self.shadow_tester.evaluate_test(test.test_id)
+                                logger.info(
+                                    f"   Evaluated test {test.test_id}: "
+                                    f"{'DEPLOY' if evaluation.should_deploy else 'NO DEPLOY'}"
+                                )
+                                # Store evaluation for auto-deployment (Story 13.3)
+                            except Exception as e:
+                                logger.error(
+                                    f"   ❌ Failed to evaluate test {test.test_id}: {e}"
+                                )
+                    except Exception as e:
+                        logger.error(f"❌ Failed to get completed tests: {e}")
 
                 # Set cycle state to completed
                 self.cycle_state = "COMPLETED"
