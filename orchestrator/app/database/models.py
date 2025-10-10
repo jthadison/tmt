@@ -252,3 +252,85 @@ class ParameterHistory(Base):
 
     def __repr__(self) -> str:
         return f"<ParameterHistory(change_time={self.change_time}, parameter_mode={self.parameter_mode}, changed_by={self.changed_by})>"
+
+
+class ShadowTest(Base):
+    """
+    Shadow test records for parameter optimization experiments.
+
+    Stores metadata and performance metrics for A/B testing of parameter
+    changes with 10% signal allocation to test group.
+    """
+
+    __tablename__ = "shadow_tests"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Test identification
+    test_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    suggestion_id: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Parameter being tested
+    parameter_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    session: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        CheckConstraint("session IN ('TOKYO', 'LONDON', 'NY', 'SYDNEY', 'OVERLAP', 'ALL') OR session IS NULL"),
+        nullable=True
+    )
+
+    # Parameter values
+    current_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    test_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+
+    # Test timing
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    min_duration_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+
+    # Signal allocation
+    allocation_pct: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False, default=Decimal("10.0"))
+
+    # Trade counters
+    control_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    test_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Performance metrics
+    control_win_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    test_win_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    control_avg_rr: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 2), nullable=True)
+    test_avg_rr: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 2), nullable=True)
+
+    # Evaluation results
+    improvement_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    p_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 4), nullable=True)
+
+    # Status tracking
+    status: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("status IN ('ACTIVE', 'COMPLETED', 'TERMINATED', 'DEPLOYED')"),
+        nullable=False
+    )
+    termination_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_shadow_tests_status", "status"),
+        Index("idx_shadow_tests_start_date", "start_date"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ShadowTest(test_id={self.test_id}, parameter={self.parameter_name}, status={self.status})>"
