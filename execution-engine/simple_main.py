@@ -539,8 +539,20 @@ if FASTAPI_AVAILABLE:
                 fifo_check = await check_fifo_violations(instrument, side, units, account_id)
 
                 if fifo_check.get("fifo_violation"):
-                    logger.warning(f"FIFO violation detected for {instrument}: {fifo_check}")
-                    # Continue with order but log the warning - OANDA will handle the violation
+                    logger.error(f"FIFO violation detected for {instrument}: {fifo_check}")
+                    return JSONResponse({
+                        "success": False,
+                        "error": "FIFO_VIOLATION",
+                        "message": f"Cannot place {side} order for {instrument}: {fifo_check.get('suggestion')}",
+                        "details": {
+                            "instrument": instrument,
+                            "requested_side": side,
+                            "requested_units": units,
+                            "current_long_units": fifo_check.get("current_long"),
+                            "current_short_units": fifo_check.get("current_short"),
+                            "suggestion": fifo_check.get("suggestion")
+                        }
+                    }, status_code=409)  # 409 Conflict
 
                 # Add stop loss order if provided (with proper price formatting)
                 if stop_loss_price:
@@ -570,11 +582,7 @@ if FASTAPI_AVAILABLE:
                     "Content-Type": "application/json"
                 }
 
-                # Check for FIFO violations before placing order
-                fifo_violations = await check_fifo_violations(instrument, side, units, account_id)
-                if fifo_violations:
-                    logger.warning(f"FIFO violations detected for {instrument}: {fifo_violations}")
-                    logger.info(f"Proceeding with order placement despite FIFO warnings (may be rejected by OANDA)")
+                # FIFO check already performed above at line 539-555, no need to duplicate
 
                 # Place order with OANDA
                 async with httpx.AsyncClient() as client:
