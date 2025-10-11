@@ -22,6 +22,7 @@ import { PositionDetailModal } from '@/components/positions/PositionDetailModal'
 import { usePositions } from '@/hooks/usePositions'
 import { Position } from '@/types/positions'
 import { useState } from 'react'
+import LearningStatusCard from '@/components/learning/LearningStatusCard'
 
 export default function Home() {
   const router = useRouter()
@@ -169,26 +170,26 @@ export default function Home() {
       <MainLayout>
         <div className="space-y-8">
           {/* Summary Cards */}
-          <Grid cols={{ default: 1, md: 2, xl: 4 }}>
+          <Grid cols={{ default: 1, md: 2, xl: 5 }}>
             <Card title="Total Balance">
               <p className="text-2xl font-bold text-green-400">{formatCurrency(totalBalance)}</p>
               <p className="text-sm text-gray-500 mt-1">
                 {totalAccounts} accounts ({accounts.length} demo, {oandaAccounts.length} OANDA)
               </p>
             </Card>
-            
+
             <Card title="Total Equity">
               <p className="text-2xl font-bold text-blue-400">{formatCurrency(totalEquity)}</p>
               <p className="text-sm text-gray-500 mt-1">
                 {totalDailyPnL >= 0 ? '+' : ''}{formatCurrency(totalDailyPnL)} today
               </p>
             </Card>
-            
+
             <Card title="Active Positions">
               <p className="text-2xl font-bold text-purple-400">{totalActivePositions}</p>
               <p className="text-sm text-gray-500 mt-1">Across all accounts</p>
             </Card>
-            
+
             <Card title="Account Health">
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1">
@@ -210,6 +211,11 @@ export default function Home() {
                 </div>
               )}
             </Card>
+
+            {/* Learning Status Card */}
+            <div className="md:col-span-2 xl:col-span-1">
+              <LearningStatusCard />
+            </div>
           </Grid>
 
           {/* Open Positions Grid */}

@@ -46,16 +46,20 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize orchestrator
         orchestrator = ContinuousImprovementOrchestrator()
-        
+
+        # Inject orchestrator into API routes
+        set_pipeline_orchestrator(orchestrator)
+
         # Start pipeline
         success = await orchestrator.start_pipeline()
         if not success:
             raise Exception("Failed to start improvement pipeline")
-        
+
         # Start background execution loop
         background_task = asyncio.create_task(pipeline_execution_loop())
-        
-        logger.info("Continuous Improvement Service started successfully")
+
+        logger.info("✅ Continuous Improvement Service started successfully")
+        logger.info("🔄 CI Pipeline activated with 6-hour cycle")
         yield
         
     finally:
@@ -80,6 +84,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Import and register API routes
+from .api_routes import router as api_router, set_pipeline_orchestrator
+app.include_router(api_router)
 
 
 # Pydantic models for API requests/responses
@@ -165,30 +173,42 @@ def get_orchestrator() -> ContinuousImprovementOrchestrator:
 
 # Background execution loop
 async def pipeline_execution_loop():
-    """Background loop for continuous improvement execution"""
+    """
+    Background loop for continuous improvement execution.
+
+    Runs every 6 hours (configurable via environment variable) to execute
+    the complete improvement cycle: process suggestions, update tests,
+    generate new suggestions, check rollbacks, and update metrics.
+    """
     global orchestrator
-    
-    cycle_interval = timedelta(minutes=30)  # Execute every 30 minutes
-    
+
+    # Get cycle interval from environment (default: 6 hours = 21600 seconds)
+    import os
+    cycle_interval_seconds = int(os.getenv('CI_PIPELINE_INTERVAL', '21600'))  # 6 hours
+    cycle_interval = timedelta(seconds=cycle_interval_seconds)
+
+    logger.info(f"CI Pipeline activated with {cycle_interval.total_seconds()/3600:.1f} hour cycle interval")
+
     while True:
         try:
             if orchestrator:
-                logger.info("Executing scheduled improvement cycle")
+                logger.info("🔄 Executing scheduled improvement cycle")
                 results = await orchestrator.execute_improvement_cycle()
-                
+
                 if not results.success:
-                    logger.error(f"Improvement cycle failed: {results.summary}")
+                    logger.error(f"❌ Improvement cycle failed: {results.summary}")
                 else:
-                    logger.info(f"Improvement cycle completed: {results.summary}")
-            
+                    logger.info(f"✅ Improvement cycle completed: {results.summary}")
+
             # Wait for next cycle
+            logger.info(f"⏳ Next improvement cycle in {cycle_interval.total_seconds()/3600:.1f} hours")
             await asyncio.sleep(cycle_interval.total_seconds())
-            
+
         except asyncio.CancelledError:
             logger.info("Pipeline execution loop cancelled")
             break
         except Exception as e:
-            logger.error(f"Error in pipeline execution loop: {e}")
+            logger.error(f"Error in pipeline execution loop: {e}", exc_info=True)
             await asyncio.sleep(60)  # Wait 1 minute on error
 
 

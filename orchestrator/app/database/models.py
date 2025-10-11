@@ -243,6 +243,20 @@ class ParameterHistory(Base):
         nullable=False
     )
 
+    # Deployment tracking fields (added in migration 003)
+    deployment_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deployment_stage: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        CheckConstraint("deployment_stage BETWEEN 1 AND 4"),
+        nullable=True
+    )
+    baseline_metrics: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON encoded
+    status: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        CheckConstraint("status IN ('PENDING', 'ACTIVE', 'COMPLETED', 'ROLLED_BACK')"),
+        nullable=True
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -334,3 +348,64 @@ class ShadowTest(Base):
 
     def __repr__(self) -> str:
         return f"<ShadowTest(test_id={self.test_id}, parameter={self.parameter_name}, status={self.status})>"
+
+
+class ApprovalRequest(Base):
+    """
+    Manual approval requests for high-risk parameter changes.
+
+    Stores approval workflow data for parameter changes exceeding 10% threshold,
+    requiring manual operator approval before deployment.
+    """
+
+    __tablename__ = "approval_requests"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Request identification
+    approval_request_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    suggestion_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+
+    # Parameter change details
+    parameter: Mapped[str] = mapped_column(String(100), nullable=False)
+    current_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    suggested_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    change_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+
+    # Statistical validation
+    improvement_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    p_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 4), nullable=True)
+
+    # Approval workflow
+    status: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("status IN ('PENDING', 'APPROVED', 'REJECTED')"),
+        nullable=False,
+        default='PENDING'
+    )
+
+    # Approval metadata
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+    approved_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_approval_requests_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ApprovalRequest(approval_request_id={self.approval_request_id}, status={self.status})>"
